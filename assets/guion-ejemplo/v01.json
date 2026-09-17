@@ -1,0 +1,66 @@
+{
+ "raw": "raw/v01-active-stack.mp4",
+ "segmentos": [
+  {
+   "tipo": "titulo",
+   "titulo": "1 · Qué es Active Stack",
+   "subtitulo": "Un harness que instala harnesses",
+   "min": 3,
+   "texto": "Bienvenidos. En esta serie vamos a resolver un trabajo práctico de Java de punta a punta con inteligencia artificial, pero con método. Y el método lo pone Active Stack. Empecemos por entender qué es."
+  },
+  {
+   "inicio": 0,
+   "fin": 9.5,
+   "decimar": false,
+   "texto": "Este es el repositorio de Active Stack en GitHub. Es un proyecto abierto, escrito en Go, que se distribuye como un único binario para Windows, Linux y Mac."
+  },
+  {
+   "inicio": 9.5,
+   "fin": 37,
+   "decimar": false,
+   "texto": "La idea central es simple. Active Stack no es un framework que corre dentro de tu aplicación. Es un configurador del entorno de tu agente de inteligencia artificial. Toma tu agente, que puede ser Claude Code, Codex u Open Code, y le inyecta todo lo que necesita para trabajar con una metodología: esquils, configuración y herramientas externas. Y fijate lo que aclara que no es: no es un revisor de código, no instala temas ni nada cosmético. Es una herramienta enfocada."
+  },
+  {
+   "inicio": 37,
+   "fin": 56,
+   "decimar": false,
+   "texto": "Por eso se define como un harness que instala harnesses. Un harness es cualquier módulo que prepara o guía al agente. Hay tres tipos. Las esquils, que son instrucciones que el agente carga cuando las necesita. Las configuraciones, que se inyectan en la config del agente. Y los externos, que son herramientas de terceros como Open Spec, Engram o Context seven."
+  },
+  {
+   "inicio": 56,
+   "fin": 96,
+   "decimar": false,
+   "texto": "Para usarlo necesitás Git y Node instalados, y obviamente un agente de inteligencia artificial. Se instala con un solo comando: active stack install. Si lo corrés así, abre una interfaz interactiva en la terminal. Y si le pasás el modo y el agente por parámetro, funciona sin preguntar nada, ideal para scripts."
+  },
+  {
+   "inicio": 96,
+   "fin": 122,
+   "decimar": false,
+   "texto": "Hay tres modos de instalación. Lite instala el sustrato mínimo: Open Spec, Engram, Context seven, el orquestador de desarrollo guiado por especificaciones y los permisos. Full suma toda la fase de fundación: el orquestador y las esquils que arman la base de conocimiento, el roadmap y las instrucciones del proyecto. Y Custom te deja elegir uno por uno. Un detalle importante: los permisos de seguridad no se pueden desactivar."
+  },
+  {
+   "inicio": 122,
+   "fin": 150,
+   "decimar": false,
+   "texto": "La instalación no copia archivos a lo bruto. Detecta tu sistema, resuelve dependencias, hace un backup de tu configuración, instala, inyecta con marcadores para no duplicar nada y al final verifica. Si algo falla, hace rollback. Y una vez instalado, el trabajo tiene dos etapas: una fundación, que se hace una vez por proyecto, y el ciclo Open Spec, que se repite por cada cambio: explorar, proponer, aplicar, verificar y archivar."
+  },
+  {
+   "inicio": 150,
+   "fin": 172,
+   "decimar": false,
+   "texto": "Hoy soporta Claude Code, Codex y Open Code, y la arquitectura está pensada para que sumar un agente nuevo sea barato."
+  },
+  {
+   "inicio": 211.5,
+   "fin": 215.5,
+   "decimar": false,
+   "texto": "Todo lo que puede instalar vive en un catálogo, este archivo harnesses punto yaml, que va embebido dentro del binario."
+  },
+  {
+   "inicio": 231,
+   "fin": 242,
+   "decimar": false,
+   "texto": "Y en releases están los binarios listos para descargar. En el próximo video vemos el trabajo práctico que vamos a resolver con todo esto."
+  }
+ ]
+}

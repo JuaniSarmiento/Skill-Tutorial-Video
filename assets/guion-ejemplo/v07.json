@@ -1,0 +1,37 @@
+{
+ "raw": "raw/v07-ej1.mp4",
+ "segmentos": [
+  {
+   "tipo": "titulo",
+   "titulo": "7 · Ejercicio uno",
+   "subtitulo": "Paquetes, excepciones y serialización",
+   "min": 3,
+   "texto": "Empieza el ciclo de Open Spec. Por cada ejercicio vamos a hacer cuatro pasos: proponer, aplicar, verificar y archivar. Arrancamos con el ejercicio uno."
+  },
+  {
+   "inicio": 100,
+   "fin": 437,
+   "texto": "Con opsx propose y el nombre del cambio, el agente crea cuatro artefactos: la propuesta con el por qué y el qué, las especificaciones con escenarios, el diseño y la lista de tareas. Todo sale de la base de conocimiento, y al final lo valida con Open Spec."
+  },
+  {
+   "inicio": 437,
+   "fin": 560,
+   "texto": "Antes de aplicar, revisamos la propuesta como lo haría un profesor. Y encontramos un error: en el UML los paquetes actividades y certificación están dibujados adentro de modelo, así que en Java son subpaquetes. Además, App no tiene paquete. Se lo marcamos: verifica mirando los diagramas, confirma, y corrige la base y el cambio. Revisar antes de aplicar es barato. Corregir después, no."
+  },
+  {
+   "inicio": 560,
+   "fin": 996,
+   "texto": "Con opsx apply implementa tarea por tarea: el pom de Maven, la excepción chequeada, la clase abstracta Actividad, Charla y Taller, el evento con su sala y la persistencia. Después de cada tarea compila, y al final corre la App. Cuando algo se rompe, lo detecta y lo arregla."
+  },
+  {
+   "inicio": 996,
+   "fin": 1170,
+   "texto": "Para verificar le pedimos algo concreto: correr la App y contrastar la salida, punto por punto, contra los resultados esperados de la consigna. Arma una tabla con la evidencia de consola, y hasta escribe una prueba descartable para los casos que la demo no ejercita. Trece de trece."
+  },
+  {
+   "inicio": 1170,
+   "fin": 1332,
+   "texto": "Y con opsx archive consolida las especificaciones del cambio en las especificaciones principales del proyecto y mueve el cambio al archivo. El ejercicio uno está terminado."
+  }
+ ]
+}
