@@ -23,7 +23,7 @@ metadata:
 
 | Fase | Qué se hace | Scripts |
 |---|---|---|
-| 0. Preparar | agente instalado y logueado, carpeta del proyecto con `git init`, terminal opaca y con letra grande | — |
+| 0. Preparar | agente instalado y logueado, carpeta del proyecto con `git init`, terminal opaca y con letra grande. **Bajo Wayland: `entorno.sh start` primero** | `entorno.sh` |
 | 1. Grabar | un `.mkv` por fase/capítulo + marcas de tiempo | `rec.sh` |
 | 2. Manejar el agente | tipear prompts, aprobar permisos seguros, responder preguntas | `ty.py`, `drive.sh`, `cmd.sh`, `answer.sh`, `lastq.py`, `oclog.py` |
 | 3. Guion | `guion/vNN.json`: segmentos `{inicio, fin, texto}` + tarjeta de título | ver `assets/guion-ejemplo/` |
@@ -32,6 +32,45 @@ metadata:
 | 6. Publicar | comprimir <10 MB, subir con Claude in Chrome, playlist/carpeta pública | ver Publicación |
 
 ## Critical Patterns
+
+**Bajo Wayland (COSMIC, GNOME moderno): la skill NO funciona directo**
+
+Esta skill es X11. En una sesión Wayland falla en silencio, produciendo archivos que parecen válidos:
+`x11grab` graba un rectángulo **negro** (brillo 0.0/255, 1 color) y `xdotool`/`wmctrl` sólo ven
+ventanas Xwayland, no las nativas. Comprobar con `echo $XDG_SESSION_TYPE`.
+
+- **La salida es `entorno.sh start`**: levanta un X11 real (Xephyr) dentro de una ventana, en `:2`.
+  Ahí adentro todo corre sin cambios. Render por software, pero probado a **30 fps sostenidos**
+  con GitHub scrolleando y opencode: alcanza de sobra.
+- **`kitty` y `alacritty` NO sirven adentro**: exigen OpenGL 3.3 y Xephyr no da GPU. El proceso
+  vive y nunca crea ventana, sin escribir un error. Usar **`xterm`**, que no toca la GPU.
+- **Chrome ignora `DISPLAY` bajo Wayland** y abre en Ozone/Wayland, o sea en el escritorio real
+  en vez de Xephyr. Hay que forzar `--ozone-platform=x11` **y** limpiar `WAYLAND_DISPLAY`
+  (`env -u WAYLAND_DISPLAY`). Sin las dos cosas la ventana aparece donde no se está grabando.
+- **El popup de Google Translate no se apaga con `--disable-features=Translate`** (cambió de
+  nombre): hay que poner `translate.enabled=false` en `<perfil>/Default/Preferences` antes de
+  lanzar. `entorno.sh chrome` ya lo hace.
+- **Nunca `pkill -f <patrón>` en un script que contiene ese patrón**: pkill compara contra la
+  cmdline completa y el script **se mata a sí mismo** (exit 144). Matar por `pkill -x <exe>` o
+  verificando `/proc/<pid>/exe`.
+- Los scripts de captura leen `$DISPLAY` (antes tenían `-i :1` hardcodeado).
+
+**Apps Electron: xdotool NO sirve, va por CDP**
+
+La app de escritorio de OpenCode (y cualquier Electron) **ignora los eventos sintéticos de
+XTEST**. X11 reporta que la ventana tiene el foco y `xdotool type` no entrega un solo carácter,
+sin error ninguno. Verificado con foco forzado (`windowactivate --sync` + `windowfocus --sync`)
+y a cuatro velocidades distintas.
+
+- **La salida es el Chrome DevTools Protocol**: lanzar la app con `--remote-debugging-port=9222`
+  y tipear con `ty-cdp.py`. Entra por dentro de la app, así que **no depende del foco** de
+  ninguna ventana: no hay que activar nada ni cuidar que nadie toque el teclado.
+- `click-cdp.py 'Permitir siempre'` aprieta botones por su texto, para los diálogos de permiso.
+- `ty-cdp.py` acepta `--limpiar` (vacía el input), `--enter` y `--delay MS` para que el tipeo se
+  vea natural en cámara.
+- **ydotool se descartó**: la versión de Ubuntu 24.04 (0.1.8) no trae daemon, y además inyecta al
+  foco del SISTEMA, así que si el foco se mueve le escribe a otra ventana.
+- En una terminal de verdad (xterm) `ty.py` sigue siendo lo correcto: ahí XTEST funciona bien.
 
 **Antes de grabar**
 - **Layout de teclado único**: con `us,latam,us` xdotool escribe `@` en vez de `"`. Forzar `setxkbmap -layout latam` y restaurar al final.
@@ -54,7 +93,9 @@ metadata:
 - Idea central: la **imagen** se arma por voz con slots = duración de esa voz + margen corto; así no hay silencios de relleno y cambiar de voz = regenerar audio.
 - Remuxear los `.mkv` a `.mp4` (`-c copy -movflags +faststart`) antes de cortar: `-ss` sobre mkv cortado por kill es impreciso.
 - `mpdecimate` en tramos de terminal (salta frames quietos); `decimar: false` en tramos de navegador (las pausas son intencionales).
-- Voz educativa: speed 0.8 y pausas internas hasta 0.8 s (≈135 palabras/min). Recortar pausas a 0.35 s suena apurado.
+- Voz educativa: speed **0.90** y pausas de 0.55 s (≈170 palabras/min). A 0.8 suena arrastrada:
+  quien mira pone el video a 1.25 y entonces la voz ya no es la que elegiste. Por debajo de
+  0.35 s de pausa suena apurado.
 - Términos en inglés: con Fish escribirlos tal cual; siglas fonéticas (`opsx` → "o pe ese equis", `.md` → "punto eme de"). Piper necesita fonética ("esquils").
 - Chequear el guion por repeticiones propias ("modelo, modelo actividades…") antes de culpar a la voz.
 
@@ -64,6 +105,94 @@ metadata:
 - YouTube tiene **límite diario de cargas** para canales sin verificar (~10): verificar teléfono en `youtube.com/verify` o esperar 24 h.
 - YouTube no reemplaza archivos: subir nuevos y pasar los viejos a **Privado** (nunca borrar: lo hace el usuario).
 - Drive: crear carpetas con el MCP de Drive (`create_file` con mimeType folder), subir con Chrome (Nuevo → Subir archivo → `find input type=file` → `file_upload`), compartir "Cualquier persona con el vínculo: Lector" desde la UI y verificar con `get_file_permissions`.
+
+**Privacidad: lo que se filma no se puede despublicar**
+
+Tres cosas se colaron en videos ya renderizados y sólo aparecieron al buscarlas con OCR.
+Ninguna se habría visto mirando el material por encima.
+
+- **El token no está donde lo buscás.** Aparece en el mensaje del chat donde se lo pegaste
+  al agente, que queda scrolleado y visible durante medio video, no sólo en el
+  `wrangler secret put`. En una tanda apareció en **75 frames de 4 videos**.
+- **Telegram Web muestra la lista de contactos** con nombres reales en la barra izquierda.
+  Abrilo **directo en la conversación del bot** (`web.telegram.org/a/#<chat_id>`) y con la
+  lista colapsada. Taparla después es un parche de 75 segundos de caja negra.
+- **Verificar con OCR, no a ojo.** Un barrido con `tesseract` cada 2 s sobre el video
+  terminado, buscando el token, el mail y el id de cuenta. Es la única forma de saberlo:
+  a ojo se pasan.
+- **Para tapar, una caja por tramo, nunca una sola.** El texto se mueve con el scroll: unir
+  todas las posiciones detectadas en un rectángulo terminó tapando el 60% de la pantalla.
+  Agrupar por cercanía temporal Y espacial, y emitir un `drawbox` con
+  `enable='between(t,..)'` por grupo. Cada caja debe quedar en 1-2% de pantalla.
+- **Caja negra sólida, no desenfoque**: un blur suave deja legible un número grande.
+- **Y volvé a barrer el video YA censurado.** Dar por buena la censura sin verificarla es
+  el mismo error que dar por buena la grabación sin mirarla.
+
+**Sincronía: escribir el guion mirando frames, no marcas**
+
+Las marcas de `rec.sh` dicen cuándo pasó algo, no qué se ve. Entre dos marcas puede haber
+diez minutos de pantalla congelada esperando un permiso. Un guion escrito desde las marcas
+narra cosas que en pantalla no ocurren.
+
+Antes de escribir cada segmento: `ffmpeg -ss <t> -i raw.mp4 -frames:v 1` y mirar el frame.
+Si tres frames distintos del mismo tramo son idénticos, ahí no pasa nada y no sirve.
+
+**VS Code: crear archivos, y las tres formas que NO sirven**
+
+`Ctrl+P` **no crea archivos**: si el archivo no existe, el foco se queda donde
+estaba y el código termina escrito en el archivo anterior, sin un solo error.
+De las cuatro formas de crear un archivo, sólo una funciona para automatizar:
+
+| Forma | Qué pasa |
+|---|---|
+| `Ctrl+N` / "File: New File" del Command Palette | escribe el texto **"New File" dentro del código** |
+| `code archivo.py` | abre un editor, pero el archivo **no existe hasta que guardás** |
+| click derecho en el explorador | necesita coordenadas, y el explorador está oculto |
+| **`touch archivo.py` en la terminal integrada** | **crea el archivo en disco, verificable** |
+
+`touch` además **es didáctico**: el alumno ve cómo se crea un archivo desde la
+terminal, que es lo que va a hacer siempre. Está en `codigo-vscode.py --crear`.
+
+**`Ctrl+grave` no abre la terminal con teclado latinoamericano.** El comando
+termina tipeado adentro del archivo de código. Todo lo que toque la terminal va
+por el Command Palette (`term-vscode.py`), que no depende del layout.
+
+**VS Code: el buffer sucio sobrevive a matar el proceso**
+
+Si la ventana muestra `●` en el título, hay cambios sin guardar. En ese estado
+el Command Palette **se come los comandos**: el diálogo de guardado se queda con
+el foco y lo que tipeás va al archivo. Se ve clarísimo después — quedan líneas
+como `KAll Terminals` en medio del código.
+
+Relanzar VS Code **no alcanza**: `hotExit` guarda el buffer en
+`<user-data-dir>/Backups` y lo resucita idéntico. Hay que borrar ese directorio
+y dejar `"files.hotExit": "off"` en los settings del perfil de grabación.
+
+Y `"The content of the file is newer"`: VS Code **se niega a guardar** si el
+archivo cambió por fuera mientras lo tenía abierto. Nunca restaures archivos
+desde bash con el editor abierto; `codigo-vscode.py` hace `File: Revert File`
+antes de escribir por exactamente esto.
+
+**Zoom: el recorte encaja, no fuerza el ancho**
+
+`scale=1920:-2` sobre un recorte apenas más alto que 16:9 (1150x650 da 1085 de
+alto) se pasa por un pixel y `pad` muere con *"Padded dimensions cannot be
+smaller than input dimensions"*. Va
+`scale=1920:1080:force_original_aspect_ratio=decrease` y listo, sea la región
+más ancha o más alta que la pantalla.
+
+Para tapar el ruido de automatización (el Command Palette abriéndose entre
+comando y comando) alcanza con **encuadrar la terminal**: la paleta vive arriba
+al centro y queda fuera del recorte.
+
+**Un render por vez**
+
+Dos `editar.py imagen` sobre el mismo video **se borran los `.tmp.mp4` entre
+ellos** y el segundo muere con un `FileNotFoundError` en `tmp.unlink()` que no
+dice nada del verdadero problema. Pasa fácil con `nohup ... &`: `$!` y el pid
+que devuelve `pgrep` **no son el mismo proceso**, así que esperás a uno que ya
+murió y arrancás el segundo encima. Esperá por **ausencia de proceso**, no por
+un pid.
 
 **Límites duros**
 - Nunca voces de famosos ni clones de personas reales sin consentimiento, aunque sea "en joda".
@@ -79,6 +208,11 @@ export OC_DIR=~/Proyectos/proyecto-X      # directorio donde corre opencode
 export OC_WIN=0x06a00005                  # id de ventana de la terminal (wmctrl -l)
 S=~/.claude/skills/tutorial-video-agente/assets/scripts
 
+# entorno (SOLO si estás en Wayland: echo $XDG_SESSION_TYPE)
+$S/entorno.sh start                  # Xephyr :2 + openbox + xterm; imprime DISPLAY y OC_WIN
+$S/entorno.sh chrome https://...     # Chrome adentro, forzado a X11 y sin popup de Translate
+$S/entorno.sh status ; $S/entorno.sh stop
+
 # grabar
 $S/rec.sh start v04-discovery ; $S/rec.sh mark v04-discovery "discovery confirmado" ; $S/rec.sh stop v04-discovery
 
@@ -90,17 +224,18 @@ $S/cmd.sh v07-ej1 /opsx-apply c-01-nombre "opsx-apply C-01"
 
 # remux + editar + verificar
 for f in raw/*.mkv; do ffmpeg -y -i "$f" -c copy -movflags +faststart "${f%.mkv}.mp4"; done
-$S/editar.py imagen v01 profe && $S/editar.py voz v01 profe
-uv run --with faster-whisper python $S/verificar_voz.py profe v01
-ffmpeg -i videos/v01/final-profe.mp4 -af silencedetect=noise=-40dB:d=0.9 -f null - 2>&1 | grep -c silence_end
+$S/editar.py imagen v01 joven && $S/editar.py voz v01 joven   # joven = voz principal (default)
+uv run --with faster-whisper python $S/verificar_voz.py joven v01
+ffmpeg -i videos/v01/final-joven.mp4 -af silencedetect=noise=-40dB:d=0.9 -f null - 2>&1 | grep -c silence_end
 
 # comprimir para subir
-ffmpeg -y -i videos/v01/final-profe.mp4 -c:v libx264 -preset slow -crf 30 -tune stillimage -c:a aac -b:a 128k "drive/1 - Titulo.mp4"
+ffmpeg -y -i videos/v01/final-joven.mp4 -c:v libx264 -preset slow -crf 30 -tune stillimage -c:a aac -b:a 128k "drive/1 - Titulo.mp4"
 ```
 
 ## Resources
 
 - **Scripts**: [assets/scripts/](assets/scripts/) — grabación, control de opencode, edición y verificación.
+- **Entorno bajo Wayland**: [assets/scripts/entorno.sh](assets/scripts/entorno.sh) — `start|chrome|status|stop`.
 - **Guiones de ejemplo**: [assets/guion-ejemplo/](assets/guion-ejemplo/) — video de navegador (v01) y ciclo OPSX (v07).
 - **Voces y proveedores**: [references/voces.md](references/voces.md) — IDs, costos, licencias y cómo agregar una voz a `editar.py`.
 - **Caso real completo**: `~/Proyectos/tutorial-active-stack/` (TP2 Java con Active Stack + opencode + Muse Spark).

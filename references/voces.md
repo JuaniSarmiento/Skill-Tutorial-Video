@@ -10,8 +10,8 @@ Las voces se definen en `assets/scripts/editar.py`. Cada voz tiene su carpeta de
 | `daniela` | Piper local, `es_AR-daniela-high` | Gratis, offline | Robótica. Necesita fonética en inglés ("esquils"). |
 | `elevenlabs` | ElevenLabs API, voz prediseñada "Chris", modelo `eleven_flash_v2_5` | Free: 10.000 créditos/mes (flash = 0,5/carácter) | Natural pero acento neutro. **Cuenta free no puede usar voces de biblioteca por API** (402 `paid_plan_required`); Starter USD 6 las habilita. Free = sin uso comercial, pide crédito. |
 | `fish` | Fish Audio, "Profesora Argentina", modelo `s2.1-pro-free`, speed 1.0 | Gratis por API (uso justo) | Buena; a velocidad normal suena apurada (~172 pal/min). |
-| `profe` | Fish, Profesora Argentina, speed 0.8, pausas 0.8 s | Gratis | Elegida para tutoriales (~135 pal/min). |
-| `joven` | Fish, "Narrador Joven argentino" | Gratis | Masculina, clara. |
+| `profe` | Fish, Profesora Argentina, speed 0.8, pausas 0.8 s | Gratis | Femenina. Fue la elegida hasta 2026-09-17 (~135 pal/min). |
+| `joven` | Fish, "Narrador Joven argentino", speed 0.8, pausas 0.8 s | Gratis | **PRINCIPAL desde 2026-09-17.** Masculina joven, tono claro y educativo (~118 pal/min). Es el default de `editar.py imagen`. |
 | `mendoza` | Fish, "Hombre Argentino (Mendoza)", acento cuyano | Gratis | Masculina, cuyana. |
 | — | Edge TTS `es-AR-TomasNeural` / `es-AR-ElenaNeural` (`uv run --with edge-tts edge-tts`) | Gratis, sin cuenta | Buena y rioplatense; uso no oficial del servicio de Edge (sin licencia comercial clara). |
 

@@ -1,2 +1,18 @@
+# salidas de grabación: pesan y se regeneran
+raw/
+videos/
+drive/
+*.mkv
+*.mp4
+*.wav
+
+# secretos: los patrones a censurar viven en ~/.config/tutorial-video/
+secretos.txt
+*.api_key
+
+# restos
+*.bak
+*.bak[0-9]
 __pycache__/
 *.pyc
+.DS_Store

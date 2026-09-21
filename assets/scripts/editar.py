@@ -1,15 +1,21 @@
 #!/usr/bin/env python3
 """Arma los videos del tutorial a partir de las grabaciones crudas y un guion por segmentos.
 
-Idea: la IMAGEN (video.mp4) se arma una sola vez con duraciones de slot fijas; la VOZ se genera
-por separado y se ubica al inicio de cada slot. Cambiar de voz = regenerar audio + remux, sin
-tocar la imagen.
+Idea: los slots se miden CON LA VOZ. Para cada tramo se genera primero el audio, se mide, y
+el video de ese tramo se estira o acelera para durar lo mismo. Así no hay silencios de relleno.
+
+OJO: eso significa que la imagen depende de la voz. Cambiar de voz NO es sólo regenerar el
+audio: hay que rehacer `imagen` también, porque los slots cambian. Por eso cada voz tiene su
+propio `video-<voz>.mp4` y su `slots-<voz>.json`. (El docstring original decía lo contrario
+y mandaba a la gente a un remux que falla con FileNotFoundError.)
+
+Cada segmento acepta "zoom": {"x","y","w","h"} para ampliar una región durante ese tramo.
 
 uso:
   editar.py imagen  <vNN> [voz]      arma videos/<vNN>/video-<voz>.mp4 con slots medidos con esa voz (sin silencios de relleno)
   editar.py voz     <vNN> <voz>      genera videos/<vNN>/voz-<voz>.wav y final-<voz>.mp4 (+ .srt)
   editar.py exportar <vNN>           exporta textos por segmento para generar voces fuera (Colab)
-voces: daniela (Piper local) | juani (wavs importados en videos/<vNN>/juani/NN.wav) | elevenlabs (API, key en ~/.config/elevenlabs/api_key) | fish (Fish Audio, Profesora Argentina, key en ~/.config/fish/api_key)
+voces: joven (PRINCIPAL: Fish, "Narrador Joven argentino", speed 0.8) | profe (Fish, Profesora Argentina) | daniela (Piper local) | juani (wavs importados en videos/<vNN>/juani/NN.wav) | elevenlabs (API, key en ~/.config/elevenlabs/api_key) | fish (Fish Audio, Profesora Argentina, key en ~/.config/fish/api_key)
 """
 import json
 import os
@@ -80,7 +86,13 @@ FISH_MODEL = "s2.1-pro-free"
 FISH_KEY = Path.home() / ".config/fish/api_key"
 
 
-# voces de la biblioteca de Fish Audio usadas en modo lento (speed 0.8, pausas naturales)
+# Velocidad por voz. 0.8 suena a dictado (~118 pal/min); 1.0 es el ritmo natural de la
+# voz (~148 pal/min) y es el que se escucha "de persona". Juani lo detectó reproduciendo
+# los videos a 1.25x: eso es exactamente 0.8 -> 1.0.
+FISH_SPEED = {"joven": 0.90}     # 170 pal/min: el ritmo natural. 0.8 daba 137 (dictado), 1.0 da 190 (apurado)
+FISH_PAUSA = {"joven": 0.55}    # a mas velocidad, pausas mas cortas o suena cortado
+
+# voces de la biblioteca de Fish Audio (la velocidad la define FISH_SPEED)
 FISH_LENTAS = {
     "profe": "55589185654d4d5abc1035280611fb65",    # Profesora Argentina
     "joven": "b23ed8db79dd49feac23dacfdf762a18",    # Narrador Joven argentino
@@ -154,8 +166,9 @@ def voice_wav(vid: str, voz: str, idx: int, text: str) -> Path:
     elif voz == "fish" or voz in FISH_LENTAS:
         stamp = out.with_suffix(".txt")
         if not out.exists() or not stamp.exists() or stamp.read_text() != text:
-            if voz in FISH_LENTAS:  # más lenta y educativa: speed 0.8, respeta pausas de hasta 0.8 s
-                tts_fish(text, out, speed=0.8, pausa=0.8, voice=FISH_LENTAS[voz])
+            if voz in FISH_LENTAS:
+                tts_fish(text, out, speed=FISH_SPEED.get(voz, 0.8),
+                         pausa=FISH_PAUSA.get(voz, 0.8), voice=FISH_LENTAS[voz])
             else:
                 tts_fish(text, out)
             stamp.write_text(text)
@@ -179,6 +192,25 @@ def build_segment(vid: str, raw: Path, seg: dict, slot: float, out: Path) -> Non
         return
     tmp = out.with_suffix(".tmp.mp4")
     pre = "mpdecimate=hi=64*24:lo=64*8:frac=0.2," if seg.get("decimar", True) else ""
+
+    # zoom: recorta una región y la amplía a pantalla completa. Sin esto, cuando la voz
+    # dice "mirá esta línea" el alumno no sabe dónde mirar, que es el defecto que hunde
+    # a los videos de código. Se declara en el guion como:
+    #   "zoom": {"x": 280, "y": 400, "w": 900, "h": 300}
+    z = seg.get("zoom")
+    if z:
+        # el recorte se hace ANTES de mpdecimate: al ampliar, los cambios chicos
+        # (un cursor, una letra) pasan a ser grandes y mpdecimate ya no los descarta.
+        #
+        # El escalado ENCAJA la región adentro del lienzo, no fuerza el ancho. Forzando
+        # el ancho, un recorte apenas más alto que 16:9 (1150x650 -> 1085 de alto) se
+        # pasa por un pixel y pad muere con "Padded dimensions cannot be smaller than
+        # input dimensions". Con force_original_aspect_ratio=decrease entra siempre,
+        # sea la región más ancha o más alta que la pantalla.
+        pre = (f"crop={z['w']}:{z['h']}:{z['x']}:{z['y']},"
+               f"scale=1920:1080:force_original_aspect_ratio=decrease:flags=lanczos,"
+               f"pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=0x16161D," + pre)
+
     run(["ffmpeg", "-y", "-loglevel", "error", "-ss", str(seg["inicio"]), "-to", str(seg["fin"]), "-i", str(raw),
          "-vf", f"{pre}setpts=N/{fps}/TB", "-r", str(fps), "-an", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "18", str(tmp)])
     d = duration(tmp)
@@ -195,7 +227,7 @@ def build_segment(vid: str, raw: Path, seg: dict, slot: float, out: Path) -> Non
     tmp.unlink()
 
 
-def imagen(vid: str, voz_name: str = "daniela") -> None:
+def imagen(vid: str, voz_name: str = "joven") -> None:
     g = load(vid)
     raw = ROOT / g["raw"] if g.get("raw") else None
     work = ROOT / "videos" / vid
@@ -204,7 +236,8 @@ def imagen(vid: str, voz_name: str = "daniela") -> None:
     for i, seg in enumerate(g["segmentos"]):
         wav = voice_wav(vid, voz_name, i, seg["texto"])
         voice = duration(wav)
-        slot = round(max(seg.get("min", 0), voice + LEAD + (1.0 if voz_name in FISH_LENTAS else TAIL)), 2)
+        cola = 0.6 if FISH_SPEED.get(voz_name, 0.8) >= 1.0 else (1.0 if voz_name in FISH_LENTAS else TAIL)
+        slot = round(max(seg.get("min", 0), voice + LEAD + cola), 2)
         slots.append(slot)
         build_segment(vid, raw, seg, slot, work / "seg" / f"{i:02d}.mp4")
         print(f"  seg {i:02d}: voz {voice:5.1f}s -> slot {slot:5.1f}s")
@@ -275,7 +308,7 @@ def exportar(vid: str) -> None:
 if __name__ == "__main__":
     accion, vid = sys.argv[1], sys.argv[2]
     if accion == "imagen":
-        imagen(vid, sys.argv[3] if len(sys.argv) > 3 else "daniela")
+        imagen(vid, sys.argv[3] if len(sys.argv) > 3 else "joven")
     elif accion == "voz":
         voz(vid, sys.argv[3])
     elif accion == "exportar":

@@ -8,9 +8,13 @@ case $cmd in
   start)
     date +%s.%N > "$ROOT/$name.t0"
     : > "$ROOT/$name.marks"
-    setsid ffmpeg -y -loglevel error -f x11grab -framerate 30 -video_size 1920x1080 -draw_mouse 0 -i :1 \
+    setsid ffmpeg -y -loglevel error -f x11grab -framerate 30 -video_size 1920x1080 -draw_mouse 0 -i "${DISPLAY:-:0}" \
       -c:v libx264 -preset ultrafast -crf 20 -pix_fmt yuv420p "$ROOT/$name.mkv" </dev/null >"$ROOT/$name.log" 2>&1 &
-    echo $! > "$ROOT/$name.pid"; echo "rec $name pid $(cat "$ROOT/$name.pid")";;
+    # OJO: $! es el pid de setsid, NO el de ffmpeg. Si setsid forkea, matar $! deja
+    # a ffmpeg huérfano grabando para siempre. Buscamos el ffmpeg real por su archivo.
+    sleep 1
+    real=$(pgrep -f "x11grab.*$name\\.mkv" | head -1)
+    echo "${real:-$!}" > "$ROOT/$name.pid"; echo "rec $name pid $(cat "$ROOT/$name.pid")";;
   mark)
     t0=$(cat "$ROOT/$name.t0"); now=$(date +%s.%N)
     printf '%.1f\t%s\n' "$(echo "$now - $t0" | bc)" "${*:3}" >> "$ROOT/$name.marks"; tail -1 "$ROOT/$name.marks";;

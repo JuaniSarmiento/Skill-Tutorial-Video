@@ -1,14 +1,23 @@
 #!/usr/bin/env python3
 """Vigila opencode hasta que haga falta intervenir.
 
-Sale cuando: (a) el log registra un pedido de permiso nuevo, (b) hay una tool `question` corriendo,
-(c) la sesión principal terminó su turno (último mensaje del asistente con time.completed) y pasó `idle` s,
-o (d) se cumple `max` s.
+Sale cuando: (a) el log registra un pedido de permiso nuevo, (b) hay una tool `question`
+corriendo, (c) la sesión principal terminó su turno, o (d) se cumple `max` s.
 
-uso: ocwatch.py [max_s=900] [idle_s=8]
+DOS ARREGLOS respecto de la versión original:
+
+1. El permiso se imprime COMPLETO. Antes se truncaba a 300 caracteres y `drive.sh`
+   decidía sobre ese texto recortado: un comando peligroso más allá del corte pasaba
+   el filtro y se aprobaba con "allow always". El guardrail fallaba ABIERTO.
+
+2. El offset del log se puede pasar y se devuelve (`OFFSET=n`). Antes cada arranque
+   se reposicionaba al final del archivo, así que todo lo que ocurría entre dos
+   invocaciones (los ~5 s que tarda allow.sh) se perdía: si opencode pedía un segundo
+   permiso ahí, nadie lo veía y se esperaba hasta el timeout.
+
+uso: ocwatch.py [max_s=900] [idle_s=8] [--offset N]
 """
 import json
-import os
 import os
 import sqlite3
 import sys
@@ -18,10 +27,25 @@ LOG = os.path.expanduser("~/.local/share/opencode/log/opencode.log")
 DB = f"file:{os.path.expanduser('~')}/.local/share/opencode/opencode.db?mode=ro"
 DIR = os.environ.get("OC_DIR", os.getcwd())
 
-maximum = int(sys.argv[1]) if len(sys.argv) > 1 else 900
-idle_need = int(sys.argv[2]) if len(sys.argv) > 2 else 8
+pos = [a for a in sys.argv if a.startswith("--")]
+args = [a for a in sys.argv[1:] if not a.startswith("--")]
+maximum = int(args[0]) if args else 900
+idle_need = int(args[1]) if len(args) > 1 else 8
+
+offset = None
+for i, a in enumerate(sys.argv):
+    if a == "--offset":
+        offset = int(sys.argv[i + 1])
+
+# el log puede haber rotado o truncado: si el offset quedó más allá del final,
+# empezamos de cero en vez de quedarnos ciegos para siempre.
+tam = os.path.getsize(LOG) if os.path.exists(LOG) else 0
+if offset is None:
+    offset = tam
+elif offset > tam:
+    offset = 0
+
 start = time.time()
-offset = os.path.getsize(LOG)
 
 
 def db_state() -> tuple[bool, bool]:
@@ -44,31 +68,42 @@ def db_state() -> tuple[bool, bool]:
     if row:
         data = json.loads(row[0])
         completed = data.get("time", {}).get("completed")
-        done = data.get("role") == "assistant" and completed is not None and time.time() - completed / 1000 >= idle_need
+        done = (data.get("role") == "assistant" and completed is not None
+                and time.time() - completed / 1000 >= idle_need)
     return question > 0, done
 
 
+def salir(msg: str) -> None:
+    print(msg)
+    print(f"OFFSET={offset}")
+    print(f"({int(time.time() - start)}s)")
+    sys.exit(0)
+
+
 while True:
-    with open(LOG, encoding="utf-8", errors="replace") as fh:
+    # leemos en BINARIO: con errors="replace" un byte inválido se vuelve 3 bytes de
+    # U+FFFD y el offset calculado sobre el texto se desalinea del archivo real.
+    with open(LOG, "rb") as fh:
         fh.seek(offset)
-        new = fh.read()
-    if any("message=asking" in l and "permission=" in l for l in new.splitlines()):
-        line = [l for l in new.splitlines() if "message=asking" in l and "permission=" in l][-1]
-        print("PERMISO:", line[line.find("permission="):][:300])
-        break
-    if "level=ERROR" in new:
-        line = [l for l in new.splitlines() if "level=ERROR" in l][-1]
-        print("ERROR:", line[:400])
-    offset += len(new.encode("utf-8"))
+        crudo = fh.read()
+    offset += len(crudo)
+    new = crudo.decode("utf-8", errors="replace")
+
+    pedidos = [l for l in new.splitlines() if "message=asking" in l and "permission=" in l]
+    if pedidos:
+        linea = pedidos[-1]
+        # COMPLETO, sin truncar: quien filtra necesita ver todo el comando.
+        salir("PERMISO: " + linea[linea.find("permission="):])
+
+    for l in new.splitlines():
+        if "level=ERROR" in l:
+            print("ERROR:", l[:400])
+
     question, done = db_state()
     if question:
-        print("PREGUNTA pendiente")
-        break
+        salir("PREGUNTA pendiente")
     if done:
-        print("TURNO TERMINADO")
-        break
+        salir("TURNO TERMINADO")
     if time.time() - start > maximum:
-        print("TIMEOUT, sigue trabajando")
-        break
+        salir("TIMEOUT, sigue trabajando")
     time.sleep(3)
-print(f"({int(time.time() - start)}s)")
