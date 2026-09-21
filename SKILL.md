@@ -194,6 +194,39 @@ que devuelve `pgrep` **no son el mismo proceso**, así que esperás a uno que ya
 murió y arrancás el segundo encima. Esperá por **ausencia de proceso**, no por
 un pid.
 
+**Windows: anda, y ahi el problema de Wayland no existe**
+
+La skill se apoya en tres verbos que dependen del sistema, y viven aislados en
+`plataforma.py`. Todo lo demas — `editar.py`, `censurar.py`, `verificar_voz.py`,
+los scripts de CDP — es ffmpeg y Python puro y corre igual en los dos lados.
+
+| verbo | Linux | Windows |
+|---|---|---|
+| capturar | `x11grab` | `gdigrab -i desktop` |
+| tipear | `xdotool type` | `SendInput` con `KEYEVENTF_UNICODE` |
+| enfocar | `wmctrl -a` | `SetForegroundWindow` |
+
+- **En Windows no hace falta instalar nada mas que ffmpeg.** La entrada va por
+  `ctypes` contra `user32`, que es libreria estandar: no hay pyautogui ni pywin32.
+- **`entorno.sh` no se usa en Windows**, y con el se va el gotcha mas caro de la
+  skill: `gdigrab` captura el escritorio real, no hay Wayland que lo rompa.
+- **Las tildes salen mejor que en Linux.** `KEYEVENTF_UNICODE` manda el codepoint
+  en vez de una tecla, asi que no depende del layout. En Linux hay que forzar
+  `setxkbmap -layout latam` o xdotool escribe `@` en vez de `"`.
+- **La terminal integrada de VS Code es PowerShell**: `touch` no existe, va `ni`.
+  `codigo-vscode.py` ya lo distingue.
+- **Los scripts `.sh` son solo de Linux.** El reemplazo multiplataforma de
+  `rec.sh` es `rec.py`, con los mismos tres verbos. Los que manejan opencode por
+  terminal (`allow.sh`, `answer.sh`, `cmd.sh`, `drive.sh`) no tienen equivalente:
+  en Windows se maneja por CDP, que ya es portable.
+- Diagnostico antes de grabar: `plataforma.py info` dice que detecto, que
+  herramientas faltan y con que comando va a capturar.
+
+**ASSUMPTION (no verificado):** la rama Windows esta escrita contra la API de
+Win32 pero **no se probo en una maquina Windows**. La rama Linux si esta probada
+de punta a punta. Antes de confiar en ella, correr `plataforma.py info` y despues
+una grabacion corta con `rec.py`.
+
 **Límites duros**
 - Nunca voces de famosos ni clones de personas reales sin consentimiento, aunque sea "en joda".
 - API keys en `~/.config/<proveedor>/api_key` con `chmod 600`; nunca en guiones ni scripts. Si el usuario las pega en el chat, recomendar rotarlas.

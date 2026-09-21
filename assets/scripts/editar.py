@@ -9,7 +9,8 @@ audio: hay que rehacer `imagen` también, porque los slots cambian. Por eso cada
 propio `video-<voz>.mp4` y su `slots-<voz>.json`. (El docstring original decía lo contrario
 y mandaba a la gente a un remux que falla con FileNotFoundError.)
 
-Cada segmento acepta "zoom": {"x","y","w","h"} para ampliar una región durante ese tramo.
+Cada segmento acepta "zoom": {"x","y","w","h"} para ampliar una región durante ese tramo,
+y "raw": otro archivo crudo, para armar un video largo con capítulos grabados por separado.
 
 uso:
   editar.py imagen  <vNN> [voz]      arma videos/<vNN>/video-<voz>.mp4 con slots medidos con esa voz (sin silencios de relleno)
@@ -181,7 +182,15 @@ def voice_wav(vid: str, voz: str, idx: int, text: str) -> Path:
 
 
 def build_segment(vid: str, raw: Path, seg: dict, slot: float, out: Path) -> None:
+    """Arma el tramo de video de un segmento y lo deja durando exactamente `slot`.
+
+    El segmento puede traer su propio "raw": un tutorial largo se graba por
+    capitulos, y con un solo crudo global regrabar un capitulo obliga a rehacer
+    la toma entera. Con `raw` por segmento se regraba solo ese archivo.
+    """
     fps = 30
+    if seg.get("raw"):
+        raw = ROOT / seg["raw"]
     if seg.get("tipo") == "titulo":
         vf = (
             f"drawtext=fontfile={FONT_BOLD}:text='{esc(seg['titulo'])}':fontcolor=white:fontsize=88:x=(w-tw)/2:y=(h/2)-110,"
@@ -230,6 +239,13 @@ def build_segment(vid: str, raw: Path, seg: dict, slot: float, out: Path) -> Non
 def imagen(vid: str, voz_name: str = "joven") -> None:
     g = load(vid)
     raw = ROOT / g["raw"] if g.get("raw") else None
+    # aviso temprano: un crudo que falta recien se nota a mitad del render
+    for i, s in enumerate(g["segmentos"]):
+        if s.get("tipo") == "titulo":
+            continue
+        r = ROOT / s["raw"] if s.get("raw") else raw
+        if r is None or not r.exists():
+            sys.exit(f"  ABORTADO: el segmento {i:02d} apunta a un crudo que no existe: {r}")
     work = ROOT / "videos" / vid
     (work / "seg").mkdir(parents=True, exist_ok=True)
     slots = []

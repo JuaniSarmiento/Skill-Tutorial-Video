@@ -23,6 +23,9 @@ import sys
 import time
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent))
+from plataforma import SISTEMA, enfocar, tecla, tipear, titulo_activo  # noqa: E402
+
 DISP = os.environ.get("DISPLAY", ":2")
 WIN = os.environ.get("VSCODE_WIN", "")
 PROY = Path(os.environ.get("PROYECTO", Path.home() / "Proyectos/Video-Tutoriales/biblioteca-vivo"))
@@ -30,13 +33,11 @@ E = {**os.environ, "DISPLAY": DISP}
 
 
 def k(*teclas, pausa=0.25):
-    subprocess.run(["xdotool", "key", "--clearmodifiers", *teclas], env=E)
-    time.sleep(pausa)
+    tecla(*teclas, pausa=pausa)
 
 
 def titulo() -> str:
-    return subprocess.run(["xdotool", "getactivewindow", "getwindowname"],
-                          capture_output=True, text=True, env=E).stdout.strip()
+    return titulo_activo()
 
 
 def crear_en_camara(archivo: str) -> None:
@@ -48,15 +49,26 @@ def crear_en_camara(archivo: str) -> None:
       - "File: New File" del Command Palette escribe "New File" dentro del código
       - `code archivo.py` abre un editor pero no crea nada hasta que guardás
       - `touch archivo.py` crea el archivo de verdad, y se puede verificar en disco
+
+    En Windows la terminal integrada es PowerShell y `touch` no existe: ahi va
+    `ni`, que es el alias de New-Item y hace lo mismo. Si no se distingue, el
+    comando falla con "no se reconoce" y el archivo nunca se crea, que es
+    exactamente el fallo silencioso que esta funcion existe para evitar.
     """
+    crear = f"ni {archivo}" if SISTEMA == "windows" else f"touch {archivo}"
+    # Enfocar ANTES de abrir la paleta. Sin esto la funcion asume que VS Code ya
+    # tiene el foco, que era cierto de casualidad porque lo dejaba el comando
+    # anterior: si el foco esta en otra ventana, el comando entero se tipea ahi.
+    if WIN:
+        enfocar(WIN)
     k("ctrl+shift+p", pausa=1.2)
-    subprocess.run(["xdotool", "type", "--delay", "40", "Terminal: Focus on Terminal View"], env=E)
+    tipear("Terminal: Focus on Terminal View", delay_ms=40)
     time.sleep(1.3); k("Return", pausa=2.5)
-    subprocess.run(["xdotool", "type", "--delay", "35", f"touch {archivo}"], env=E)
+    tipear(crear, delay_ms=35)
     time.sleep(1.0); k("Return", pausa=2.5)
     destino = PROY / archivo
     if not destino.exists():
-        sys.exit(f"  ABORTADO: el touch no creó {destino}.")
+        sys.exit(f"  ABORTADO: `{crear}` no creó {destino}.")
     print(f"  archivo creado en camara: {archivo}")
 
 
@@ -66,10 +78,9 @@ def abrir(archivo: str) -> None:
     if not destino.exists():
         sys.exit(f"  ABORTADO: {destino} no existe. Usá --crear o creálo antes.")
     if WIN:
-        subprocess.run(["wmctrl", "-i", "-a", WIN], env=E)
-        time.sleep(1.0)
+        enfocar(WIN)
     k("ctrl+p", pausa=1.2)
-    subprocess.run(["xdotool", "type", "--delay", "45", destino.name], env=E)
+    tipear(destino.name, delay_ms=45)
     time.sleep(1.5)
     k("Return", pausa=2.0)
     # 2) la ventana tiene que mostrar ese archivo (esto atrapa el foco en la terminal)
@@ -82,7 +93,7 @@ def abrir(archivo: str) -> None:
     # file is newer" y NO guarda: el código se ve en pantalla pero nunca llega al
     # disco. Revert descarta la copia en memoria y relee el archivo.
     k("ctrl+shift+p", pausa=1.2)
-    subprocess.run(["xdotool", "type", "--delay", "40", "File: Revert File"], env=E)
+    tipear("File: Revert File", delay_ms=40)
     time.sleep(1.3)
     k("Return", pausa=1.8)
 
@@ -93,7 +104,7 @@ def escribir(lineas: list[str], ms: int) -> None:
             k("Return", pausa=0.13)
         k("shift+Home", pausa=0.07)
         if linea.strip():
-            subprocess.run(["xdotool", "type", "--delay", str(ms), linea], env=E)
+            tipear(linea, delay_ms=ms)
         else:
             k("Delete", pausa=0.05)
         time.sleep(0.28)
@@ -131,7 +142,7 @@ def main() -> None:
 
     if linea_ins:
         k("ctrl+g", pausa=1.2)
-        subprocess.run(["xdotool", "type", "--delay", "60", str(linea_ins)], env=E)
+        tipear(str(linea_ins), delay_ms=60)
         time.sleep(1.0); k("Return", pausa=1.2); k("End", pausa=1.0); k("Return", pausa=0.2)
     else:
         k("ctrl+End", pausa=1.2)

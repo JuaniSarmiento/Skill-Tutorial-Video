@@ -46,18 +46,39 @@ videos/u6-p3/
 
 ## Requisitos
 
+**Los dos sistemas**
+
 | Qué | Para qué |
 |---|---|
 | `ffmpeg` · `ffprobe` | grabar, cortar, concatenar |
-| `xdotool` · `wmctrl` | tipear y mover ventanas |
 | `python3` | los scripts |
-| `Xephyr` · `openbox` · `xterm` | **sólo bajo Wayland**, ver abajo |
 | `tesseract` | el barrido OCR de privacidad |
 | una API de TTS | Fish Audio o ElevenLabs. También corre `piper` local |
 
+**Sólo Linux**
+
+| Qué | Para qué |
+|---|---|
+| `xdotool` · `wmctrl` | tipear y mover ventanas |
+| `Xephyr` · `openbox` · `xterm` | **sólo bajo Wayland**, ver abajo |
+
 ```bash
+# Linux
 sudo apt install ffmpeg xdotool wmctrl xserver-xephyr openbox xterm tesseract-ocr
+
+# Windows: nada más que esto. La entrada va por ctypes, que es librería estándar.
+winget install Gyan.FFmpeg
+winget install UB-Mannheim.TesseractOCR
 ```
+
+Antes de grabar, en cualquiera de los dos:
+
+```bash
+assets/scripts/plataforma.py info
+```
+
+Te dice qué sistema detectó, qué herramientas faltan, con qué comando va a
+capturar, y si estás en Wayland te avisa antes de que grabes una hora de negro.
 
 La key del proveedor va en `~/.config/<proveedor>/api_key` con `chmod 600`.
 **Nunca en un script ni en un guion.**
@@ -83,13 +104,16 @@ Claude Code la descubre sola por el frontmatter de `SKILL.md`. Se dispara con co
 export TUT_ROOT=~/Proyectos/mi-tutorial     # ahí viven raw/, guion/, videos/
 S=~/.claude/skills/tutorial-video-agente/assets/scripts
 
-# 0. sólo si estás en Wayland (echo $XDG_SESSION_TYPE)
+# 0. diagnóstico: qué sistema, qué falta, con qué va a capturar
+$S/plataforma.py info
+
+# 0b. SÓLO Linux con Wayland. En Windows saltealo: gdigrab captura el real
 $S/entorno.sh start                          # imprime el DISPLAY a usar
 
-# 1. grabar, marcando lo que pasa
-$S/rec.sh start v01
-$S/rec.sh mark v01 "escribe el modelo"
-$S/rec.sh stop v01
+# 1. grabar, marcando lo que pasa  (rec.py anda en los dos sistemas)
+$S/rec.py start v01
+$S/rec.py mark v01 "escribe el modelo"
+$S/rec.py stop v01
 
 # 2. escribir guion/v01.json mirando FRAMES, no las marcas (ver abajo)
 
@@ -140,13 +164,15 @@ El guion es lo único que vale la pena versionar: `raw/` y `videos/` pesan y se 
 
 ## Los scripts
 
-**Entorno y captura**
+**Plataforma, entorno y captura**
 
 | | |
 |---|---|
-| `entorno.sh` | `start\|chrome\|status\|stop`. Xephyr + openbox + xterm para grabar bajo Wayland |
-| `rec.sh` | `start\|mark\|stop`. Graba y anota marcas de tiempo con su texto |
-| `shot.sh` · `bot.sh` | capturas sueltas |
+| `plataforma.py` | **los tres verbos que dependen del sistema**: capturar, tipear, enfocar. `info` diagnostica antes de grabar |
+| `rec.py` | `start\|mark\|stop`. Multiplataforma. Graba y anota marcas de tiempo |
+| `rec.sh` | lo mismo en bash, sólo Linux |
+| `entorno.sh` | `start\|chrome\|status\|stop`. Xephyr para grabar bajo Wayland. **Sólo Linux, y en Windows no hace falta** |
+| `shot.sh` · `bot.sh` | capturas sueltas (Linux). En cualquier sistema: `plataforma.py captura` |
 
 **Manejar un agente (opencode / Claude Code)**
 
@@ -302,12 +328,52 @@ mismo error que dar por buena la grabación sin mirarla.
 
 ---
 
+---
+
+## Windows
+
+Anda, y con una ventaja: **todo el problema de Wayland desaparece.** `gdigrab`
+captura el escritorio real, así que no hace falta Xephyr ni nada anidado.
+
+La skill se apoya en tres verbos que dependen del sistema, y viven aislados en
+[`plataforma.py`](assets/scripts/plataforma.py). El resto — `editar.py`,
+`censurar.py`, `verificar_voz.py`, los scripts de CDP — es ffmpeg y Python puro
+y corre igual en los dos lados sin una línea de diferencia.
+
+| verbo | Linux | Windows |
+|---|---|---|
+| capturar | `x11grab` | `gdigrab -i desktop` |
+| tipear | `xdotool type` | `SendInput` con `KEYEVENTF_UNICODE` |
+| enfocar | `wmctrl -a` | `SetForegroundWindow` |
+
+**No hace falta instalar ninguna librería de Python.** La entrada va por `ctypes`
+contra `user32`, que viene con Python: nada de pyautogui ni pywin32.
+
+**Las tildes salen mejor que en Linux.** `KEYEVENTF_UNICODE` manda el codepoint
+en vez de una tecla, así que no depende del layout del teclado. En Linux hay que
+forzar `setxkbmap -layout latam` o xdotool escribe `@` donde va `"`.
+
+Dos diferencias que la skill ya contempla:
+
+- La terminal integrada de VS Code es PowerShell, donde `touch` no existe: va
+  `ni`, el alias de `New-Item`. `codigo-vscode.py` lo distingue solo.
+- Los `.sh` son de Linux. El reemplazo multiplataforma de `rec.sh` es
+  [`rec.py`](assets/scripts/rec.py), con los mismos tres verbos. Los que manejan
+  opencode por terminal no tienen equivalente: en Windows se maneja por CDP, que
+  ya es portable.
+
+> **Sin probar en Windows todavía.** La rama Linux está probada de punta a punta;
+> la de Windows está escrita contra la API de Win32 pero **nadie la corrió en una
+> máquina Windows**. Empezá por `plataforma.py info` y una grabación corta con
+> `rec.py` antes de confiarle una serie entera. Si algo falla, es un issue y se
+> arregla: el diseño ya está separado.
+
 ## Límites
 
-- **Es X11.** Bajo Wayland funciona sólo adentro de Xephyr.
+- **En Linux es X11.** Bajo Wayland funciona sólo adentro de Xephyr. En Windows no aplica.
 - **Nadie toca la máquina mientras `xdotool` escribe**: las teclas van a la ventana con foco.
   Con Xephyr pesa menos, pero adentro el foco sigue siendo uno solo.
-- **Un layout de teclado único.** Con `us,latam,us` xdotool escribe `@` en vez de `"`.
+- **En Linux, un layout de teclado único.** Con `us,latam,us` xdotool escribe `@` en vez de `"`. En Windows no pasa: se tipea por codepoint.
 - **Publicar requiere OK explícito.** La skill nunca sube nada por su cuenta.
 - El TTS alucina: repite palabras, alarga frases. Por eso existe `verificar_voz.py`.
 
