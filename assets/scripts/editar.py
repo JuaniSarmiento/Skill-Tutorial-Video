@@ -150,7 +150,23 @@ def trim_silence(src: Path, out: Path, pausa: float = 0.35) -> None:
 PRONUNCIACION = {
     "fish": [("esquils", "skills"), ("Open Code", "OpenCode"), ("Open Spec", "OpenSpec"),
              ("Context seven", "Context7"), ("opsx ", "o pe ese equis "), ("punto md", "punto eme de"),
-             ("kb creator", "ka be creator")],
+             ("kb creator", "ka be creator"),
+             # Backend/SQLModel. El par es (lo que dice el GUION, lo que se manda al
+             # TTS). Cada regla se eligio generando y transcribiendo con Whisper, y el
+             # .srt no se ve afectado: usa seg["texto"], no esto. 2026-09-23, voz argentina.
+             ("database", "deitabeis"),   # escrito tal cual se oye "la tabez" / "DadaVez"
+             ("schemas", "esquemas"),     # escrito tal cual se oye "escamas"
+             ("ORM", "O-R-M"),            # "sin ORM" se oye "si no ERM"; con guiones sale limpio
+             ("back populates", "back populeits"),  # se oye "back populettes"
+             ("JSON", "yeison"),          # se oye "Jason"
+             ("FastAPI", "fast a pi ai"), # se oye "FASTP" / "fast a pie"
+             ("SQLite", "esecuelait"),    # se oye "esquilite" / "esqueletes"
+             ("sqlite", "esecuelait")],
+             # NO hay regla para "table". Aislada en una frase inventada se oia
+             # "tabla" y "teibol" la arreglaba, pero en el texto REAL del guion las
+             # dos versiones dicen "table" bien: la regla no aportaba y sumaba riesgo
+             # (replace() no respeta limites de palabra, y "table" vive dentro de
+             # "establecido"). Probar las reglas con el texto real, no con ejemplos.
 }
 
 
