@@ -90,14 +90,26 @@ FISH_KEY = Path.home() / ".config/fish/api_key"
 # Velocidad por voz. 0.8 suena a dictado (~118 pal/min); 1.0 es el ritmo natural de la
 # voz (~148 pal/min) y es el que se escucha "de persona". Juani lo detectó reproduciendo
 # los videos a 1.25x: eso es exactamente 0.8 -> 1.0.
-FISH_SPEED = {"joven": 0.90}     # 170 pal/min: el ritmo natural. 0.8 daba 137 (dictado), 1.0 da 190 (apurado)
-FISH_PAUSA = {"joven": 0.55}    # a mas velocidad, pausas mas cortas o suena cortado
+FISH_SPEED = {"joven": 0.90, "argentina": 0.80}     # 170 pal/min: el ritmo natural. 0.8 daba 137 (dictado), 1.0 da 190 (apurado)
+# A mas velocidad, pausas mas cortas o suena cortado. OJO: este parametro solo
+# recorta silencios que YA existen, asi que en una voz que habla de corrido es
+# inerte. En "argentina", los valores 0.35/0.45/0.55/0.70 dan la MISMA duracion
+# al milisegundo: no tiene un solo silencio de mas de 0.2 s (medido hasta -28 dB).
+# El 0.45 queda por coherencia, no porque cambie algo. Antes de tocarlo en una voz
+# nueva, comprobar con silencedetect que hay silencios que recortar.
+FISH_PAUSA = {"joven": 0.55, "argentina": 0.45}
 
 # voces de la biblioteca de Fish Audio (la velocidad la define FISH_SPEED)
 FISH_LENTAS = {
     "profe": "55589185654d4d5abc1035280611fb65",    # Profesora Argentina
     "joven": "b23ed8db79dd49feac23dacfdf762a18",    # Narrador Joven argentino
     "mendoza": "dcda4aaeb81c4a95bb9ac659b6753e41",  # Hombre Argentino (Mendoza), acento cuyano
+    # Femenina argentina, tags educational/energetic/enthusiastic. Elegida el
+    # 2026-09-22 midiendo expresividad (rango de pitch) sobre el MISMO texto en
+    # 9 voces: 116 Hz contra los 51 Hz de "profe", que era la mas plana de todas.
+    # speed 0.80 no es solo "mas lento que 0.84": tambien mide MAS expresivo
+    # (116 Hz contra 100). Acelerarla la aplana, no solo la apura.
+    "argentina": "8430c634564043c4a97e3828f5079baa",
 }
 
 
