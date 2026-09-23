@@ -11,9 +11,9 @@ Las voces se definen en `assets/scripts/editar.py`. Cada voz tiene su carpeta de
 | `elevenlabs` | ElevenLabs API, voz prediseñada "Chris", modelo `eleven_flash_v2_5` | Free: 10.000 créditos/mes (flash = 0,5/carácter) | Natural pero acento neutro. **Cuenta free no puede usar voces de biblioteca por API** (402 `paid_plan_required`); Starter USD 6 las habilita. Free = sin uso comercial, pide crédito. |
 | `fish` | Fish Audio, "Profesora Argentina", modelo `s2.1-pro-free`, speed 1.0 | Gratis por API (uso justo) | Buena; a velocidad normal suena apurada (~172 pal/min). |
 | `profe` | Fish, Profesora Argentina, speed 0.8, pausas 0.8 s | Gratis | Femenina. Fue la elegida hasta 2026-09-17. **~155 pal/min medidos** (2026-09-22, 1363 palabras en 526 s de slots): el ~135 que decía antes subestimaba en un 15% y hacía estimar de más la duración. |
-| `joven` | Fish, "Narrador Joven argentino", speed 0.8, pausas 0.8 s | Gratis | **PRINCIPAL desde 2026-09-17.** Masculina joven, tono claro y educativo (~118 pal/min). Es el default de `editar.py imagen`. |
+| `joven` | Fish, "Narrador Joven argentino", speed 0.90, pausas 0.55 s | Gratis | Masculina joven, tono claro y educativo. Fue la principal entre el 2026-09-17 y el 2026-09-22. |
 | `mendoza` | Fish, "Hombre Argentino (Mendoza)", acento cuyano | Gratis | Masculina, cuyana. |
-| `argentina` | Fish, "argentina", speed 0.80, pausas 0.45 | Gratis | **Femenina argentina, la más expresiva probada.** Tags `educational` / `energetic` / `enthusiastic`. 163-185 pal/min según el texto. Elegida el 2026-09-22 midiendo el rango de pitch sobre el MISMO texto en 9 voces. |
+| `argentina` | Fish, "argentina", speed 0.80, pausas 0.45 | Gratis | **PRINCIPAL desde 2026-09-22** y default de `editar.py imagen`. Femenina argentina, la más expresiva medida. Tags `educational` / `energetic` / `enthusiastic`. 163-185 pal/min según el texto. Elegida el 2026-09-22 midiendo el rango de pitch sobre el MISMO texto en 9 voces. |
 | — | Edge TTS `es-AR-TomasNeural` / `es-AR-ElenaNeural` (`uv run --with edge-tts edge-tts`) | Gratis, sin cuenta | Buena y rioplatense; uso no oficial del servicio de Edge (sin licencia comercial clara). |
 
 IDs Fish (`reference_id`):

@@ -16,7 +16,7 @@ uso:
   editar.py imagen  <vNN> [voz]      arma videos/<vNN>/video-<voz>.mp4 con slots medidos con esa voz (sin silencios de relleno)
   editar.py voz     <vNN> <voz>      genera videos/<vNN>/voz-<voz>.wav y final-<voz>.mp4 (+ .srt)
   editar.py exportar <vNN>           exporta textos por segmento para generar voces fuera (Colab)
-voces: joven (PRINCIPAL: Fish, "Narrador Joven argentino", speed 0.8) | profe (Fish, Profesora Argentina) | daniela (Piper local) | juani (wavs importados en videos/<vNN>/juani/NN.wav) | elevenlabs (API, key en ~/.config/elevenlabs/api_key) | fish (Fish Audio, Profesora Argentina, key en ~/.config/fish/api_key)
+voces: argentina (PRINCIPAL: Fish, femenina argentina, speed 0.80, la mas expresiva medida) | joven (Fish, "Narrador Joven argentino") | profe (Fish, Profesora Argentina, la mas plana) | daniela (Piper local) | juani (wavs importados en videos/<vNN>/juani/NN.wav) | elevenlabs (API, key en ~/.config/elevenlabs/api_key) | fish (Fish Audio, Profesora Argentina, key en ~/.config/fish/api_key)
 """
 import json
 import os
@@ -248,7 +248,7 @@ def build_segment(vid: str, raw: Path, seg: dict, slot: float, out: Path) -> Non
     tmp.unlink()
 
 
-def imagen(vid: str, voz_name: str = "joven") -> None:
+def imagen(vid: str, voz_name: str = "argentina") -> None:
     g = load(vid)
     raw = ROOT / g["raw"] if g.get("raw") else None
     # aviso temprano: un crudo que falta recien se nota a mitad del render
@@ -336,7 +336,7 @@ def exportar(vid: str) -> None:
 if __name__ == "__main__":
     accion, vid = sys.argv[1], sys.argv[2]
     if accion == "imagen":
-        imagen(vid, sys.argv[3] if len(sys.argv) > 3 else "joven")
+        imagen(vid, sys.argv[3] if len(sys.argv) > 3 else "argentina")
     elif accion == "voz":
         voz(vid, sys.argv[3])
     elif accion == "exportar":

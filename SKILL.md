@@ -92,11 +92,39 @@ y a cuatro velocidades distintas.
 **Editar**
 - Idea central: la **imagen** se arma por voz con slots = duración de esa voz + margen corto; así no hay silencios de relleno y cambiar de voz = regenerar audio.
 - Remuxear los `.mkv` a `.mp4` (`-c copy -movflags +faststart`) antes de cortar: `-ss` sobre mkv cortado por kill es impreciso.
-- `mpdecimate` en tramos de terminal (salta frames quietos); `decimar: false` en tramos de navegador (las pausas son intencionales).
+- `mpdecimate` (`decimar: true`) sirve para saltar tiempo muerto: un agente pensando, una compilación. Pero **sólo si al tramo le sobra material**. Si el slot de voz supera al tramo, decimar lo vacía — ver el gotcha de abajo, que costó un render entero. `decimar: false` en tramos de navegador (las pausas son intencionales) y en terminales donde lo que se ve es texto quieto y no una espera.
 - Voz educativa: speed **0.90** y pausas de 0.55 s (≈170 palabras/min). A 0.8 suena arrastrada:
   quien mira pone el video a 1.25 y entonces la voz ya no es la que elegiste. Por debajo de
   0.35 s de pausa suena apurado.
 - Términos en inglés: con Fish escribirlos tal cual; siglas fonéticas (`opsx` → "o pe ese equis", `.md` → "punto eme de"). Piper necesita fonética ("esquils").
+**Cuando el slot es más largo que el tramo, se congela EL ÚLTIMO FRAME**
+
+Y por eso ese frame tiene que ser el que la voz está describiendo, no uno cualquiera
+del tramo. Un segmento con 56 s de voz y 24 s de crudo pasa 32 s quieto en el frame
+final: si ahí la página ya scrolleó a otra cosa, el video narra los tres pasos mientras
+muestra otra sección, y no hay error que lo delate. Antes de fijar `fin`, sacar el frame
+de ese segundo exacto y mirarlo.
+
+**`decimar: true` en un tramo de terminal lo puede vaciar**
+
+`mpdecimate` salta frames quietos, y una terminal está quieta casi todo el tiempo. Un
+tramo de 47 s quedó reducido a unos pocos segundos de material y el segmento terminó
+siendo **60 s de prompt vacío** mientras la voz explicaba el entregable. Se detecta
+midiendo el brillo: `signalstats` clavado en el mismo valor durante seis muestras
+seguidas es imagen congelada, no una pantalla oscura.
+
+- Para un tramo de terminal: `decimar: false`.
+- Y la toma **no termina con `clear` ni con un comando de salida corta** (`wc -l`), o
+  el frame que se congela es la pantalla vacía. Que termine con contenido a la vista.
+
+**Reproducir un video de YouTube en cámara mete anuncios**
+
+Un corte de Amazon Prime, con subtítulos en alemán, en medio de un video institucional.
+Y las recomendaciones de la barra lateral traen lo que traigan — en una toma apareció
+contenido político. Saltar el anuncio, cerrar el popup de Premium, y encuadrar con
+`zoom` para dejar fuera la franja de recomendaciones. Después revisar los frames: el
+anuncio puede entrar a mitad de la toma, no sólo al principio.
+
 - Chequear el guion por repeticiones propias ("modelo, modelo actividades…") antes de culpar a la voz.
 
 **Publicar**
@@ -257,12 +285,12 @@ $S/cmd.sh v07-ej1 /opsx-apply c-01-nombre "opsx-apply C-01"
 
 # remux + editar + verificar
 for f in raw/*.mkv; do ffmpeg -y -i "$f" -c copy -movflags +faststart "${f%.mkv}.mp4"; done
-$S/editar.py imagen v01 joven && $S/editar.py voz v01 joven   # joven = voz principal (default)
-uv run --with faster-whisper python $S/verificar_voz.py joven v01
-ffmpeg -i videos/v01/final-joven.mp4 -af silencedetect=noise=-40dB:d=0.9 -f null - 2>&1 | grep -c silence_end
+$S/editar.py imagen v01 argentina && $S/editar.py voz v01 argentina   # argentina = voz principal (default)
+uv run --with faster-whisper python $S/verificar_voz.py argentina v01
+ffmpeg -i videos/v01/final-argentina.mp4 -af silencedetect=noise=-40dB:d=0.9 -f null - 2>&1 | grep -c silence_end
 
 # comprimir para subir
-ffmpeg -y -i videos/v01/final-joven.mp4 -c:v libx264 -preset slow -crf 30 -tune stillimage -c:a aac -b:a 128k "drive/1 - Titulo.mp4"
+ffmpeg -y -i videos/v01/final-argentina.mp4 -c:v libx264 -preset slow -crf 30 -tune stillimage -c:a aac -b:a 128k "drive/1 - Titulo.mp4"
 ```
 
 ## Resources

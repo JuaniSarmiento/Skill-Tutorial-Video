@@ -75,7 +75,10 @@ def agrupar(hits):
 
 def main():
     v = pathlib.Path(sys.argv[1])
-    dst = v.parent / 'final-joven-limpio.mp4'
+    # El nombre sale del archivo que entra: estaba fijo en 'final-joven-limpio.mp4'
+    # y con cualquier otra voz mentia, habia que renombrar a mano despues de cada
+    # barrido. Con --voz argentina quedaba un final-joven-limpio que no tenia esa voz.
+    dst = v.parent / f'{v.stem}-limpio{v.suffix}'
     hits = detectar(v)
     if not hits:
         print(f"  {v.parent.name}: limpio, se copia tal cual")
