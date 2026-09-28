@@ -12,6 +12,7 @@ import os
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from plataforma import enfocar, tecla, tipear, titulo_activo  # noqa: E402
