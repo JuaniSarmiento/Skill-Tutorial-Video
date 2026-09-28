@@ -101,6 +101,12 @@ def abrir(archivo: str) -> None:
 def escribir(lineas: list[str], ms: int) -> None:
     for i, linea in enumerate(lineas):
         if i:
+            # Escape ANTES del Return: si el popup de autocompletado
+            # (IntelliSense) está abierto, se come el Return siguiente y
+            # pega dos líneas de código sin separador entre ellas. No es
+            # exclusivo de Windows -el popup existe en Linux tambien- pero
+            # se encontró y corrigió durante las pruebas de Windows.
+            k("Escape", pausa=0.05)
             k("Return", pausa=0.13)
         k("shift+Home", pausa=0.07)
         if linea.strip():
