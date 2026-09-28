@@ -27,8 +27,26 @@ from pathlib import Path
 
 ROOT = Path(os.environ.get("TUT_ROOT", os.getcwd()))
 PIPER_MODEL = Path.home() / ".local/share/piper-voices/es_AR-daniela-high.onnx"
-FONT_BOLD = "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf"
-FONT = "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf"
+_ES_WINDOWS = sys.platform.startswith("win")
+
+
+def _ruta_fuente(path: str, es_windows: bool = _ES_WINDOWS) -> str:
+    """Ruta de fuente lista para el fontfile= de un filtro drawtext de ffmpeg.
+
+    En ese filtro, ':' separa opciones (fontfile=RUTA:text=...:...). Una ruta
+    de Windows tipo C:/Windows/Fonts/arialbd.ttf choca con eso: hay que
+    envolverla entre comillas simples con el ':' escapado. En Linux la ruta
+    no tiene ':' y se usa tal cual, sin tocarla.
+    """
+    if es_windows:
+        return "'" + path.replace(":", r"\:") + "'"
+    return path
+
+
+FONT_BOLD = _ruta_fuente("C:/Windows/Fonts/arialbd.ttf" if _ES_WINDOWS
+                         else "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf")
+FONT = _ruta_fuente("C:/Windows/Fonts/arial.ttf" if _ES_WINDOWS
+                    else "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf")
 RATE = 22050
 LEAD = 0.3  # silencio antes de que arranque la voz en cada slot
 TAIL = 0.5  # margen después de la voz
