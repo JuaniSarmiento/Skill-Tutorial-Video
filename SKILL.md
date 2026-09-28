@@ -234,8 +234,11 @@ los scripts de CDP — es ffmpeg y Python puro y corre igual en los dos lados.
 | tipear | `xdotool type` | `SendInput` con `KEYEVENTF_UNICODE` |
 | enfocar | `wmctrl -a` | `SetForegroundWindow` |
 
-- **En Windows no hace falta instalar nada mas que ffmpeg.** La entrada va por
-  `ctypes` contra `user32`, que es libreria estandar: no hay pyautogui ni pywin32.
+- **En Windows hace falta instalar ffmpeg y tesseract con winget**, antes de
+  usar la skill (`winget install Gyan.FFmpeg` y `winget install
+  UB-Mannheim.TesseractOCR` — ver Requisitos en README.md). La entrada va por
+  `ctypes` contra `user32`, que es libreria estandar: no hace falta pyautogui
+  ni pywin32 ni ninguna libreria de Python.
 - **`entorno.sh` no se usa en Windows**, y con el se va el gotcha mas caro de la
   skill: `gdigrab` captura el escritorio real, no hay Wayland que lo rompa.
 - **Las tildes salen mejor que en Linux.** `KEYEVENTF_UNICODE` manda el codepoint
