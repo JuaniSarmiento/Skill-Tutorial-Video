@@ -181,6 +181,24 @@ De las cuatro formas de crear un archivo, sólo una funciona para automatizar:
 `touch` además **es didáctico**: el alumno ve cómo se crea un archivo desde la
 terminal, que es lo que va a hacer siempre. Está en `codigo-vscode.py --crear`.
 
+**Las dos asistencias de VS Code que corrompen el código tipeado, sin error**
+
+Las dos se apagan por configuración ANTES de tipear una letra —`codigo-vscode.py`
+mergea diez claves en `<proyecto>/.vscode/settings.json`—, no peleando con teclas.
+
+- **`acceptSuggestionOnCommitCharacter`**: tipear un espacio mientras IntelliSense
+  tiene una sugerencia resaltada la **acepta** en lugar de escribir el espacio.
+  `FROM pedidos p` salió como **`FROM clientes CASCADE`** en una grabación real.
+  Mandar `Escape` antes de cada `Return` **no alcanza**, y es el arreglo que sale
+  primero: el commit character se come el espacio de la palabra que se está
+  escribiendo, no el separador entre líneas.
+- **`autoClosingBrackets`**: al tipear `(` inserta el `)` solo. El `Return` cae
+  **dentro** del par, y el `)` que viene después en el código fuente se suma al
+  que ya estaba. Una subconsulta con los paréntesis en líneas separadas termina
+  con un `)` de más, sin un error durante el tipeo.
+
+Se mergea y no se pisa: el proyecto puede tener su propia configuración ahí.
+
 **`Ctrl+grave` no abre la terminal con teclado latinoamericano.** El comando
 termina tipeado adentro del archivo de código. Todo lo que toque la terminal va
 por el Command Palette (`term-vscode.py`), que no depende del layout.

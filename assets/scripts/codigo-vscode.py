@@ -40,6 +40,63 @@ def titulo() -> str:
     return titulo_activo()
 
 
+# Las dos asistencias de VS Code que corrompen el codigo tipeado, en silencio.
+# Se apagan por CONFIGURACION antes de tipear una sola letra, no peleando con
+# teclas: el informe de bugs de Windows (25/09/2026) documenta que mandar
+# Escape antes de cada Return NO alcanza, porque el commit character se come el
+# ESPACIO de la palabra que se esta escribiendo, no el separador entre lineas.
+#
+#   acceptSuggestionOnCommitCharacter: tipear un espacio mientras IntelliSense
+#   tiene una sugerencia resaltada la ACEPTA en vez de escribir el espacio.
+#   "FROM pedidos p" salio como "FROM clientes CASCADE" en una grabacion real.
+#
+#   autoClosingBrackets: al tipear "(" inserta ")" sola. El Return cae DENTRO
+#   del par, y el ")" que viene despues en el codigo fuente se SUMA al que ya
+#   estaba. Una subconsulta con los parentesis en lineas separadas queda con
+#   un ")" de mas, sin ningun error durante el tipeo.
+ASISTENCIAS_OFF = {
+    "editor.quickSuggestions": False,
+    "editor.acceptSuggestionOnEnter": "off",
+    "editor.acceptSuggestionOnCommitCharacter": False,
+    "editor.suggestOnTriggerCharacters": False,
+    "editor.parameterHints.enabled": False,
+    "editor.wordBasedSuggestions": "off",
+    "editor.autoClosingBrackets": "never",
+    "editor.autoClosingQuotes": "never",
+    "editor.autoClosingOvertype": "never",
+    "editor.autoSurround": "never",
+}
+
+
+def apagar_asistencias() -> None:
+    """Mergea ASISTENCIAS_OFF en <PROYECTO>/.vscode/settings.json.
+
+    Mergea y no pisa: el proyecto puede tener ahi su propia configuracion, y
+    perderla en silencio seria el mismo tipo de dano que esto viene a evitar.
+    """
+    import json
+    ruta = PROY / ".vscode" / "settings.json"
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    previo = {}
+    if ruta.exists():
+        try:
+            previo = json.loads(ruta.read_text(encoding="utf8"))
+        except json.JSONDecodeError:
+            # settings.json admite comentarios (jsonc) y json.loads no. No se
+            # descarta lo que haya: se respalda y se avisa, porque escribir
+            # encima sin mirar es como tipear sin verificar.
+            resp = ruta.with_suffix(".json.bak")
+            resp.write_text(ruta.read_text(encoding="utf8"), encoding="utf8")
+            print(f"  ! {ruta} no es JSON plano (comentarios?). Respaldado en {resp.name}")
+    faltan = {k: v for k, v in ASISTENCIAS_OFF.items() if previo.get(k) != v}
+    if not faltan:
+        return
+    previo.update(ASISTENCIAS_OFF)
+    ruta.write_text(json.dumps(previo, indent=2, ensure_ascii=False) + "\n", encoding="utf8")
+    print(f"  asistencias de VS Code apagadas ({len(faltan)} claves) -> {ruta}")
+    time.sleep(1.2)  # VS Code recarga settings.json en caliente; darle el tiempo
+
+
 def crear_en_camara(archivo: str) -> None:
     """Crea el archivo con `touch` en la terminal integrada.
 
@@ -141,6 +198,8 @@ def main() -> None:
     if not destino.exists() and "--crear" not in sys.argv:
         sys.exit(f"  ABORTADO: {destino} no existe. Usá --crear para crearlo en cámara.")
     antes = destino.read_text() if destino.exists() else ""
+
+    apagar_asistencias()
 
     if "--crear" in sys.argv:
         crear_en_camara(archivo)
