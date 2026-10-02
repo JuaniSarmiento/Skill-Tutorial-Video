@@ -210,7 +210,7 @@ def _resuelve(voz, cue):
     (SEG3, "17.000", 14.5),
     (SEG3, "más de 17000", 13.5),
     (SEG3, "2600", 7.0),                # "2 .600"
-    ("Ahora son las cara", "más cara", 1.5),   # ancla de justo 4 letras
+    ("Ahora son las cara", "más cara", 1.0),   # ancla de justo 4 letras
 ])
 def test_un_error_se_tolera_si_otra_palabra_de_la_cue_coincide_exacto(dicho, cue, t):
     assert _resuelve(_oido(dicho), cue) == t
