@@ -34,6 +34,7 @@ SPECS = {
         "barras": [{"etiqueta": "Año 0", "valor": 1000, "cue": 0.4},
                    {"etiqueta": "Año 10", "valor": 2594, "cue": 2.0},
                    {"etiqueta": "Año 30", "valor": 17449, "cue": 3.0, "destacar": True}],
+        "nota": "Interés compuesto anual, sin aportes extra",
         "duracion": 4.5,
     },
 }
@@ -81,8 +82,11 @@ def test_nada_entra_antes_de_su_cue_y_entra_en_su_cue(chrome, tipo):
     assert despues != justo_antes, "el elemento no entró en su cue"
 
 
+AIRE = 16  # px mínimos entre dos cajas: pegadas se leen como una sola
+
+
 @pytest.mark.parametrize("tipo", SPECS)
-def test_al_final_ningun_elemento_se_superpone_con_otro(chrome, tipo):
+def test_al_final_ningun_elemento_se_superpone_ni_queda_pegado_a_otro(chrome, tipo):
     with escena.pagina_de_escena(chrome, escena.ruta_plantilla(tipo), SPECS[tipo],
                                  escena.cargar_brand(None)) as (page, d):
         page.evaluate("t => window.seek(t)", d - 0.05)
@@ -94,6 +98,21 @@ def test_al_final_ningun_elemento_se_superpone_con_otro(chrome, tipo):
     for i, a in enumerate(cajas):
         assert a["x"] >= 0 and a["y"] >= 0 and a["x"] + a["w"] <= 1920 and a["y"] + a["h"] <= 1080, a
         for b in cajas[i + 1:]:
-            solapan = (a["x"] < b["x"] + b["w"] and b["x"] < a["x"] + a["w"]
-                       and a["y"] < b["y"] + b["h"] and b["y"] < a["y"] + a["h"])
-            assert not solapan, f"{a['n']} se pisa con {b['n']}"
+            solapan = (a["x"] < b["x"] + b["w"] + AIRE and b["x"] < a["x"] + a["w"] + AIRE
+                       and a["y"] < b["y"] + b["h"] + AIRE and b["y"] < a["y"] + a["h"] + AIRE)
+            assert not solapan, f"{a['n']} se pisa o queda pegado a {b['n']}"
+
+
+@pytest.mark.parametrize("n", [2, 5])
+def test_los_puntos_quedan_centrados_bajo_el_titulo_y_no_amontonados_arriba(chrome, n):
+    # con 2 puntos arriba quedaba media pantalla vacía abajo (visto en la hoja de contacto)
+    spec = {"titulo": {"texto": "Para llevarte"}, "duracion": 3.0,
+            "puntos": [{"texto": f"Punto número {i + 1}", "cue": 0.2 * i} for i in range(n)]}
+    with escena.pagina_de_escena(chrome, escena.ruta_plantilla("presentacion"), spec,
+                                 escena.cargar_brand(None)) as (page, d):
+        page.evaluate("t => window.seek(t)", d - 0.05)
+        arriba, abajo = page.evaluate("""() => {
+            const r = [...document.querySelectorAll('.punto')].map(e => e.getBoundingClientRect());
+            return [Math.min(...r.map(x => x.top)), Math.max(...r.map(x => x.bottom))];
+        }""")
+    assert abs((arriba + abajo) / 2 - 670) <= 40, (arriba, abajo)

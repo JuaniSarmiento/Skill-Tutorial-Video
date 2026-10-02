@@ -25,7 +25,7 @@ en un gráfico, pasarse del valor aunque sea un instante es mentir.
            font-size: 54px; font-weight: 700; letter-spacing: -.02em; }
   .cat { position: absolute; transform: translateX(-50%); white-space: nowrap;
          font-size: 36px; font-weight: 500; color: var(--tenue); }
-  .nota { position: absolute; right: 140px; bottom: 52px; font-size: 22px; color: var(--tenue); }
+  .nota { position: absolute; right: 140px; bottom: 44px; font-size: 22px; color: var(--tenue); }
 </style>
 <script src="base.js"></script>
 <script>
@@ -33,7 +33,7 @@ en un gráfico, pasarse del valor aunque sea un instante es mentir.
   const barras = (S.barras || []).map((b, i) => ({ ...b, t0: tiempo(b, 0.5 + i * 0.7) }));
   const maximo = Math.max(1, ...barras.map(b => b.valor));
   const formato = v => (S.prefijo || '') + Math.round(v).toLocaleString('es-AR') + (S.sufijo || '');
-  const G = { x0: 220, x1: 1700, base: 930, alto: 500 };
+  const G = { x0: 220, x1: 1700, base: 890, alto: 480 };
   let dibujarCab;
 
   contrato([tiempo(S.titulo, 0), ...barras.map(b => b.t0)], () => {
