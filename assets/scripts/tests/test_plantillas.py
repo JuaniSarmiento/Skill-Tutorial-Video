@@ -286,3 +286,41 @@ def test_presentacion_con_demasiados_puntos_falla_claro(chrome):
             "puntos": [{"texto": f"Punto número {i + 1}", "cue": 0.05 * i} for i in range(30)]}
     with pytest.raises(Exception, match="no entran"):
         _al_final(chrome, "presentacion", spec, CAJAS)
+
+
+# --- determinismo en TODOS los cuadros, no sólo en cuatro tiempos -------------
+
+CORTAS = {
+    "portada": ("presentacion", {"kicker": "Finanzas", "titulo": {"texto": "El interés compuesto", "cue": 0.1},
+                                 "subtitulo": {"texto": "Por qué la plata crece sola", "cue": 0.6},
+                                 "duracion": 1.8}),
+    "presentacion": ("presentacion", {**SPECS["presentacion"], "duracion": 1.8,
+                                      "puntos": [{"texto": "Ganás intereses", "cue": 0.3},
+                                                 {"texto": "sobre intereses", "cue": 0.9}]}),
+    "diagrama": ("diagrama", {**SPECS["diagrama"], "duracion": 1.8,
+                              "nodos": [{"id": "c", "texto": "Capital", "cue": 0.1},
+                                        {"id": "i", "texto": "Interés", "cue": 0.5},
+                                        {"id": "n", "texto": "Capital nuevo", "cue": 0.9}],
+                              "flechas": [{"de": "c", "a": "i", "texto": "rinde", "cue": 0.3},
+                                          {"de": "i", "a": "n", "cue": 0.7}]}),
+    "datos": ("datos", {**SPECS["datos"], "duracion": 1.8,
+                        "barras": [{"etiqueta": "Año 0", "valor": 1000, "cue": 0.1},
+                                   {"etiqueta": "Año 10", "valor": 2594, "cue": 0.4},
+                                   {"etiqueta": "Año 30", "valor": 17449.5, "cue": 0.7, "destacar": True}]}),
+}
+
+
+@pytest.mark.parametrize("nombre", CORTAS)
+def test_todos_los_cuadros_salen_iguales_en_orden_y_mezclados(chrome, nombre):
+    import random
+    tipo, spec = CORTAS[nombre]
+    ts = escena.tiempos_de_cuadros(spec["duracion"], 15)
+    mezclados = list(ts)
+    random.Random(7).shuffle(mezclados)
+    brand = escena.cargar_brand(None)
+    hashes = []
+    for orden in (ts, mezclados):
+        with escena.pagina_de_escena(chrome, escena.ruta_plantilla(tipo), spec, brand) as (page, _):
+            hashes.append({t: _hash(page, t) for t in orden})
+    distintos = [t for t in ts if hashes[0][t] != hashes[1][t]]
+    assert distintos == [], f"{len(distintos)} de {len(ts)} cuadros dependen del orden"
