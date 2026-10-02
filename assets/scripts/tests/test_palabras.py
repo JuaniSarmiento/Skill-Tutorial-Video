@@ -229,6 +229,28 @@ def test_sin_ancla_exacta_o_con_demasiados_errores_la_cue_falla(dicho, cue):
         palabras.resolver_cue(_oido(dicho), cue)
 
 
+@pytest.mark.parametrize("dicho, cue, t", [
+    ("más de 17 .000", "diecisiete mil", 1.0),
+    ("tenés 2 .600", "dos mil seiscientos", 0.5),
+    ("tiene 35 años", "treinta y cinco", 0.5),
+    ("ponés 1000 pesos", "mil pesos", 0.5),
+    ("pasaron veintiún años", "21 años", 0.5),
+    ("más de diecisiete mil", "17000", 1.0),        # al revés: Whisper lo escribió en letras
+])
+def test_un_numero_compuesto_en_palabras_es_el_mismo_que_en_digitos(dicho, cue, t):
+    assert _resuelve(_oido(dicho), cue) == t
+
+
+@pytest.mark.parametrize("dicho, cue", [
+    ("tenés 2 .700", "dos mil seiscientos"),
+    ("tiene 36 años", "treinta y cinco"),
+    ("ponés 100 pesos", "mil pesos"),
+])
+def test_un_numero_en_palabras_distinto_del_oido_falla(dicho, cue):
+    with pytest.raises(ValueError, match="no se dice"):
+        palabras.resolver_cue(_oido(dicho), cue)
+
+
 def test_una_frase_repetida_mas_veces_de_las_que_se_dice_falla():
     with pytest.raises(ValueError, match="no se dice"):
         palabras.resolver_cues(_oido("la base crece"), ["la base", "la base"])
