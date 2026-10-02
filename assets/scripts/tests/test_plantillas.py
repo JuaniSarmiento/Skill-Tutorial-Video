@@ -356,7 +356,9 @@ def test_un_titulo_de_cuatro_renglones_no_queda_tapado_por_el_contenido(chrome, 
     ("datos", _datos([{"etiqueta": "A", "valor": 1, "cue": 0.1}, {"etiqueta": "B", "valor": 2, "cue": 0.2}])),
 ], ids=["diagrama", "presentacion", "datos"])
 def test_un_titulo_que_no_deja_lugar_al_contenido_falla_nombrando_el_titulo(chrome, tipo, spec):
-    spec = {**spec, "kicker": "K", "titulo": {"texto": TITULO_4 + " " + TITULO_4}}   # 8 renglones
+    # 3 veces el de QA3: la cabecera sola llega al pie de la pantalla. Con 2 veces (8
+    # renglones, hasta y=830) el contenido todavía entra achicado sin pisar: eso no es error.
+    spec = {**spec, "kicker": "K", "titulo": {"texto": " ".join([TITULO_4] * 3)}}
     with pytest.raises(escena.ContratoError, match="título"):
         _al_final(chrome, tipo, spec, CAJAS)
 
