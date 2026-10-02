@@ -117,3 +117,37 @@ def test_las_cues_no_tienen_que_venir_en_el_orden_en_que_se_dicen():
 
 def test_la_misma_frase_repetida_toma_la_aparicion_siguiente_aunque_haya_otras_en_medio():
     assert palabras.resolver_cues(TRANSCRIPCION, ["base", "crecer", "base"]) == [1.80, 1.30, 3.00]
+
+
+# --- tolerancia a lo que Whisper oye mal --------------------------------------
+# Casos reales del ejemplo de interés compuesto, transcripto con el modelo base.
+
+def _oido(texto, paso=0.5):
+    return [_p(w, i * paso, i * paso + 0.4) for i, w in enumerate(texto.split())]
+
+
+def test_una_letra_mal_oida_no_impide_encontrar_la_cue():
+    voz = _oido("Para llevarte, empezar tembrano pesan las que poner mucho")
+    assert palabras.resolver_cue(voz, "empezar temprano") == 1.0
+
+
+def test_dos_palabras_que_whisper_pego_en_una_se_encuentran():
+    voz = _oido("tu capital rinde un interés, es interés esuma y el capital nuevo")
+    assert palabras.resolver_cue(voz, "se suma") == 3.5   # "esuma", palabra 7
+
+
+def test_un_numero_dicho_en_palabras_matchea_el_que_whisper_escribio_en_digitos():
+    voz = _oido("A las 2 décadas, 6 .700 y a las 3 décadas, más")
+    assert palabras.resolver_cue(voz, "dos décadas") == 1.0
+    assert palabras.resolver_cue(voz, "tres décadas") == 4.5   # "3", palabra 9
+
+
+def test_si_la_frase_aparece_exacta_gana_aunque_antes_haya_una_parecida():
+    voz = _oido("la casa grande y la cosa chica")
+    assert palabras.resolver_cue(voz, "la cosa") == 2.0
+
+
+def test_una_palabra_corta_parecida_no_alcanza():
+    # "hoy" y "voy" se parecen en 2 de 3 letras: eso no es la misma palabra
+    with pytest.raises(ValueError):
+        palabras.resolver_cue(_oido("mañana voy al banco"), "hoy")

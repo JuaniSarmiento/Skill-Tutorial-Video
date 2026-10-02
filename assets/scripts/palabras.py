@@ -17,7 +17,16 @@ uso: uv run --with faster-whisper python palabras.py <audio> [salida.json] [--mo
 import json
 import re
 import unicodedata
+from difflib import SequenceMatcher
 from pathlib import Path
+
+# Whisper escribe en dígitos lo que la voz dice en palabras ("2 décadas"). Se
+# normalizan los dos lados igual, así que "una" pasa a "1" también como artículo.
+NUMEROS = dict(zip(
+    "cero uno una un dos tres cuatro cinco seis siete ocho nueve diez once doce trece catorce "
+    "quince veinte treinta cuarenta cincuenta sesenta setenta ochenta noventa cien".split(),
+    "0 1 1 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 20 30 40 50 60 70 80 90 100".split()))
+PARECIDO = 0.8  # umbral para aceptar una frase mal oída ("tembrano" por "temprano")
 
 MODELO = "base"  # "small" es mejor pero no entra en 1 GB de RAM libre junto a Chrome
 
@@ -35,7 +44,8 @@ def transcribir(audio, modelo=None) -> list[dict]:
 def _norm(texto: str) -> str:
     sin_tildes = unicodedata.normalize("NFD", texto.lower())
     sin_tildes = "".join(c for c in sin_tildes if unicodedata.category(c) != "Mn")
-    return re.sub(r"[^a-z0-9ñ]+", " ", sin_tildes).strip()
+    palabras = re.sub(r"[^a-z0-9ñ]+", " ", sin_tildes).split()
+    return " ".join(NUMEROS.get(w, w) for w in palabras)
 
 
 def _frase(cue: str) -> list[str]:
@@ -44,14 +54,26 @@ def _frase(cue: str) -> list[str]:
 
 
 def _buscar(palabras: list[dict], cue: str, desde_idx: int) -> int:
-    """Índice de la primera palabra de `cue` a partir de desde_idx; ValueError si no está."""
+    """Índice de la primera palabra de `cue` a partir de desde_idx; ValueError si no está.
+
+    Se queda con el tramo más parecido (con 1 palabra de más o de menos, porque
+    Whisper a veces pega dos: "se suma" -> "esuma"), si se parece al menos PARECIDO.
+    La frase exacta da 1.0, así que siempre le gana a una parecida.
+    """
     frase = _frase(cue)
     if not frase:
         raise ValueError(f"la cue {cue!r} está vacía: no nombra ninguna palabra")
     oidas = [_norm(p["palabra"]) for p in palabras]
-    for i in range(desde_idx, len(oidas) - len(frase) + 1):
-        if oidas[i:i + len(frase)] == frase:
-            return i
+    n = len(frase)
+    objetivo, mejor, idx = "".join(frase), 0.0, None
+    for i in range(desde_idx, len(oidas)):
+        for k in (n - 1, n, n + 1):
+            if k >= 1 and i + k <= len(oidas):
+                r = SequenceMatcher(None, objetivo, "".join(oidas[i:i + k])).ratio()
+                if r > mejor:
+                    mejor, idx = r, i
+    if mejor >= PARECIDO:
+        return idx
     dicho = " ".join(p["palabra"] for p in palabras)
     raise ValueError(f"la cue {cue!r} no se dice en la voz. Se oyó: {dicho[:300]!r}")
 
