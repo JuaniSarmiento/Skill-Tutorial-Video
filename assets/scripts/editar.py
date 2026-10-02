@@ -313,13 +313,20 @@ def crudo_faltante(g: dict):
 
 
 def palabras_de_voz(wav: Path) -> list[dict]:
-    """Tiempos por palabra del wav, cacheados en NN.palabras.json (se rehacen si la voz cambió)."""
+    """Tiempos por palabra del wav, cacheados en NN.palabras.json (se rehacen si la voz cambió).
+
+    Se valida por el CONTENIDO del wav (sha256 en NN.palabras.sha256), no por la fecha:
+    un `cp -p` o el unzip del export de Colab traen un wav nuevo con fecha vieja.
+    """
+    import hashlib
     import palabras
-    cache = wav.with_suffix(".palabras.json")
-    if cache.exists() and cache.stat().st_mtime >= wav.stat().st_mtime:
+    cache, firma = wav.with_suffix(".palabras.json"), wav.with_suffix(".palabras.sha256")
+    actual = hashlib.sha256(wav.read_bytes()).hexdigest()
+    if cache.exists() and firma.exists() and firma.read_text() == actual:
         return json.loads(cache.read_text())
     out = palabras.transcribir(wav)
     cache.write_text(json.dumps(out, ensure_ascii=False))
+    firma.write_text(actual)
     return out
 
 
