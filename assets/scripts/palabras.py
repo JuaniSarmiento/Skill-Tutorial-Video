@@ -19,12 +19,20 @@ import re
 import unicodedata
 from pathlib import Path
 
-# Whisper escribe en dígitos lo que la voz dice en palabras ("2 décadas"). Se
-# normalizan los dos lados igual, así que "una" pasa a "1" también como artículo.
-NUMEROS = dict(zip(
+# Whisper escribe en dígitos lo que la voz dice en palabras ("2 décadas", "17 .000").
+# Se normalizan los dos lados igual: un número en palabras pasa a dígitos ("diecisiete
+# mil" -> "17000"), así que "una" pasa a "1" también como artículo.
+_UNIDADES = dict(zip(
     "cero uno una un dos tres cuatro cinco seis siete ocho nueve diez once doce trece catorce "
-    "quince veinte treinta cuarenta cincuenta sesenta setenta ochenta noventa cien".split(),
-    "0 1 1 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 20 30 40 50 60 70 80 90 100".split()))
+    "quince dieciseis diecisiete dieciocho diecinueve veinte veintiuno veintiuna veintiun "
+    "veintidos veintitres veinticuatro veinticinco veintiseis veintisiete veintiocho veintinueve".split(),
+    [0, 1, 1, 1, *range(2, 21), 21, 21, 21, *range(22, 30)]))
+_DECENAS = dict(zip("treinta cuarenta cincuenta sesenta setenta ochenta noventa".split(), range(30, 100, 10)))
+_CENTENAS = {"cien": 100, "ciento": 100}
+for _c, _nombre in zip(range(200, 1000, 100), "doscientos trescientos cuatrocientos quinientos "
+                       "seiscientos setecientos ochocientos novecientos".split()):
+    _CENTENAS[_nombre] = _CENTENAS[_nombre[:-2] + "as"] = _c
+
 # Whisper oye mal alguna letra ("tembrano" por "temprano", "Hablamos" por "Hagamos").
 # Cuánto se tolera depende de si la cue tiene un ANCLA: otra palabra suya de ANCLA
 # letras o más que se oyó exacta. "la"/"el" no anclan: "la tasa" no es "la casa".
@@ -55,10 +63,51 @@ def _sin_tilde(c: str) -> str:
     return "".join(x for x in unicodedata.normalize("NFD", c) if unicodedata.category(x) != "Mn")
 
 
-def _norm(texto: str) -> str:
+def _limpiar(texto: str) -> list[str]:
     sin_tildes = "".join(_sin_tilde(c) for c in unicodedata.normalize("NFC", texto.lower()))
-    palabras = re.sub(r"[^a-z0-9ñ]+", " ", sin_tildes).split()
-    return " ".join(w for w, _ in _juntar_miles((NUMEROS.get(w, w), None) for w in palabras))
+    return re.sub(r"[^a-z0-9ñ]+", " ", sin_tildes).split()
+
+
+def _numerar(pares) -> list[tuple]:
+    """[(palabra, origen)] con los números en dígitos y los miles unidos."""
+    return _juntar_miles(_numeros(list(pares)))
+
+
+def _norm(texto: str) -> str:
+    return " ".join(w for w, _ in _numerar((w, None) for w in _limpiar(texto)))
+
+
+def _numeros(pares: list[tuple]) -> list[tuple]:
+    """Pasa a dígitos cada número escrito en palabras, hasta 999.999 ("treinta y cinco"
+    -> "35"). Dentro de cada grupo de mil, centena, decena y unidad van en ese orden.
+    Recibe (palabra, origen); el número conserva el origen de su primera palabra."""
+    palabras = [w for w, _ in pares]
+    salida, i = [], 0
+    while i < len(palabras):
+        total, grupo, rango, j = 0, 0, 4, i
+        while j < len(palabras):
+            w = palabras[j]
+            if w == "mil" and not total:
+                total, grupo, rango = (grupo or 1) * 1000, 0, 4
+            elif w in _CENTENAS and rango > 3:
+                grupo, rango = grupo + _CENTENAS[w], 3
+            elif w in _DECENAS and rango > 2:
+                grupo, rango = grupo + _DECENAS[w], 1
+                y, unidad = palabras[j + 1:j + 2], palabras[j + 2] if j + 2 < len(palabras) else ""
+                if y == ["y"] and 1 <= _UNIDADES.get(unidad, 0) <= 9:   # "treinta y cinco"
+                    grupo, j = grupo + _UNIDADES[unidad], j + 2
+            elif w in _UNIDADES and rango > 2:
+                grupo, rango = grupo + _UNIDADES[w], 1
+            else:
+                break
+            j += 1
+        if j == i:
+            salida.append(pares[i])
+            i += 1
+        else:
+            salida.append((str(total + grupo), pares[i][1]))
+            i = j
+    return salida
 
 
 def _juntar_miles(pares) -> list[tuple]:
@@ -155,7 +204,7 @@ def _buscar(palabras: list[dict], cue: str, desde_idx: int) -> int:
         raise ValueError(f"la cue {cue!r} está vacía: no nombra ninguna palabra")
     # lo oído, normalizado palabra por palabra, recordando de qué palabra salió cada
     # una: "17" y ".000" son dos palabras de Whisper y un solo número
-    pares = _juntar_miles((w, i) for i, p in enumerate(palabras) for w in _norm(p["palabra"]).split())
+    pares = _numerar((w, i) for i, p in enumerate(palabras) for w in _limpiar(p["palabra"]))
     oidas, origen = [w for w, _ in pares], [i for _, i in pares]
     n = len(frase)
     mejor, idx = None, None
