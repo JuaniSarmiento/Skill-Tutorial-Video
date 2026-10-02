@@ -151,3 +151,39 @@ def test_una_palabra_corta_parecida_no_alcanza():
     # "hoy" y "voy" se parecen en 2 de 3 letras: eso no es la misma palabra
     with pytest.raises(ValueError):
         palabras.resolver_cue(_oido("mañana voy al banco"), "hoy")
+
+
+# --- falsos positivos: una cue que no se dijo tiene que fallar ---------------
+# La lista de QA (02/10): todas se ataban a otra palabra parecida sin avisar.
+
+@pytest.mark.parametrize("dicho, cue", [
+    ("Esto pasa sin aviso", "sí"),
+    ("Ellos nos avisaron", "no"),
+    ("Pasaron muchos años", "año"),
+    ("Tenés 100 pesos", "diez"),
+    ("Tenés 1000 pesos", "cien"),
+    ("Un auto blanco", "banco"),
+    ("Compró la casa", "la tasa"),
+    ("Fue el solo de guitarra", "el sol"),
+    ("Los capitales extranjeros", "capital"),
+    ("Un paño viejo", "pan"),
+    ("El ano pasado", "año"),
+])
+def test_una_cue_que_no_se_dijo_falla_aunque_haya_una_palabra_parecida(dicho, cue):
+    with pytest.raises(ValueError, match="no se dice"):
+        palabras.resolver_cue(_oido(dicho), cue)
+
+
+@pytest.mark.parametrize("dicho, cue, t", [
+    ("Pasó un año entero", "año", 1.0),
+    ("Hay mas plata", "más", 0.5),
+    ("Tenés 10 pesos", "diez", 0.5),
+    ("El 1 de enero llega una carta", "una carta", 2.5),
+])
+def test_la_palabra_dicha_de_verdad_se_sigue_encontrando(dicho, cue, t):
+    assert palabras.resolver_cue(_oido(dicho), cue) == t
+
+
+def test_una_frase_repetida_mas_veces_de_las_que_se_dice_falla():
+    with pytest.raises(ValueError, match="no se dice"):
+        palabras.resolver_cues(_oido("la base crece"), ["la base", "la base"])
