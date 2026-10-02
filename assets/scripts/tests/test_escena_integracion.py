@@ -5,6 +5,7 @@ se verifica es lo que un test puro no puede: que la página cumpla el contrato,
 que el mp4 dure lo que tiene que durar y que los cuadros cambien con t.
 """
 import json
+import re
 import subprocess
 
 import pytest
@@ -98,3 +99,17 @@ def test_si_el_script_revienta_antes_del_contrato_se_ve_el_error_de_js_y_no_falt
 
     with pytest.raises(escena.ContratoError, match="error de JavaScript al cargar.*map"):
         escena.render(html, {}, tmp_path / "out.mp4", fps=12, ancho=960)
+
+
+def test_un_error_de_js_a_mitad_del_render_falla_claro_y_no_deja_un_mp4_truncado(tmp_path):
+    # antes quedaba un out.mp4 de 0,53 s que se reproducía bien: parecía un render válido
+    html = tmp_path / "rota-a-mitad.html"
+    html.write_text(VALIDA.replace("window.seek = async t => {",
+                                   "window.seek = async t => { if (t > 0.5) throw new Error('se rompió a mitad');"))
+    mp4 = tmp_path / "out.mp4"
+
+    with pytest.raises(Exception) as e:
+        escena.render(html, {"duracion": 1.0}, mp4, fps=12, ancho=960)
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["rota-a-mitad.html"]
+    assert isinstance(e.value, escena.ContratoError), repr(e.value)[:200]
+    assert re.search(r"seek\(0\.5\d*\).*se rompió a mitad", str(e.value)), str(e.value)
