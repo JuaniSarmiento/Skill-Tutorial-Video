@@ -5,6 +5,7 @@ nombra. Se escribe como la frase ("base de datos"), como la forma larga del
 plan ("cuando dice 'base de datos'") o directamente en segundos (1.5). Se
 resuelve contra la transcripción por palabra que da faster-whisper.
 """
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -187,3 +188,28 @@ def test_la_palabra_dicha_de_verdad_se_sigue_encontrando(dicho, cue, t):
 def test_una_frase_repetida_mas_veces_de_las_que_se_dice_falla():
     with pytest.raises(ValueError, match="no se dice"):
         palabras.resolver_cues(_oido("la base crece"), ["la base", "la base"])
+
+
+# --- palabras.py por línea de comandos ---------------------------------------
+
+def _cli(monkeypatch, capsys, *args):
+    import runpy
+    import sys
+    modelo = _ModeloFalso([SimpleNamespace(words=[_w(" Hola", 0.0, 0.4), _w(" mundo.", 0.4, 0.9)])])
+    monkeypatch.setitem(sys.modules, "faster_whisper", SimpleNamespace(WhisperModel=lambda *a, **k: modelo))
+    monkeypatch.setattr(sys, "argv", ["palabras.py", *args])
+    runpy.run_path(palabras.__file__, run_name="__main__")
+    return capsys.readouterr().out
+
+
+def test_el_cli_escribe_el_json_de_palabras_en_la_salida(tmp_path, monkeypatch, capsys):
+    salida = tmp_path / "p.json"
+    _cli(monkeypatch, capsys, "voz.wav", str(salida))
+    assert salida.exists(), "no escribió la salida"
+    assert json.loads(salida.read_text()) == [_p("Hola", 0.0, 0.4), _p("mundo.", 0.4, 0.9)]
+
+
+def test_el_cli_sin_salida_imprime_el_json(monkeypatch, capsys):
+    out = _cli(monkeypatch, capsys, "voz.wav")
+    assert out.strip(), "no imprimió nada"
+    assert json.loads(out) == [_p("Hola", 0.0, 0.4), _p("mundo.", 0.4, 0.9)]

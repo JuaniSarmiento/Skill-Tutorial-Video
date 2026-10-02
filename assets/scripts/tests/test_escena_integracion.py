@@ -132,3 +132,34 @@ def test_con_la_fuente_instalada_no_avisa(capsys):
                                                           escena.cargar_brand(None)):
         pass
     assert "AVISO" not in capsys.readouterr().err
+
+
+# --- CLI de punta a punta ------------------------------------------------------
+
+def test_el_cli_render_arma_el_mp4_con_el_fps_el_ancho_y_la_duracion_pedidos(tmp_path, capsys):
+    spec = tmp_path / "s.json"
+    spec.write_text(json.dumps({"tipo": "datos", "barras": [{"etiqueta": "A", "valor": 1, "cue": 0.1}], "duracion": 3}))
+    mp4 = tmp_path / "o.mp4"
+
+    escena._cli(["render", "datos", str(spec), "-o", str(mp4), "--fps", "12", "--ancho", "960", "--duracion", "1"])
+
+    assert f"{mp4}: 1.00 s" in capsys.readouterr().out
+    ancho, cuadros = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v", "-count_packets",
+                                     "-show_entries", "stream=width,nb_read_packets", "-of", "csv=p=0", str(mp4)],
+                                    capture_output=True, text=True, check=True).stdout.strip().split(",")
+    assert (ancho, cuadros) == ("960", "12")
+
+
+def test_el_cli_contacto_arma_la_hoja_con_los_specs_que_deja_editar(tmp_path):
+    specs = []
+    for i, tipo in enumerate(["presentacion", "datos"]):
+        p = tmp_path / f"{i:02d}.json"
+        p.write_text(json.dumps({"tipo": tipo, "titulo": {"texto": "Hola"}, "duracion": 1.0}))
+        specs.append(str(p))
+    hoja = tmp_path / "hoja.png"
+
+    escena._cli(["contacto", *specs, "-o", str(hoja), "--columnas", "3"])
+
+    alto = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=height", "-of", "csv=p=0", str(hoja)],
+                          capture_output=True, text=True, check=True).stdout
+    assert int(alto) > 2 * 360, "dos escenas = dos filas"
