@@ -157,6 +157,7 @@ Un JSON por video. Cada segmento toma un tramo del crudo y le pone un texto:
 | `zoom` | recorta esa región y la agranda a pantalla completa. Sin esto, cuando la voz dice "mirá esta línea" nadie sabe dónde mirar |
 | `decimar` | `mpdecimate` salta frames quietos. Ponelo en `false` en tramos de tipeo o las pausas intencionales desaparecen |
 | `tipo: "titulo"` | placa generada, sin video |
+| `escena` | en vez de `inicio`/`fin`: una escena animada (`presentacion`, `diagrama`, `datos`) cuyos elementos entran en la palabra que los nombra. Ver `SKILL.md` → Escenas |
 
 El guion es lo único que vale la pena versionar: `raw/` y `videos/` pesan y se regeneran.
 
@@ -195,7 +196,9 @@ El guion es lo único que vale la pena versionar: `raw/` y `videos/` pesan y se 
 
 | | |
 |---|---|
-| `editar.py` | `imagen` y `voz`. El corazón de todo |
+| `editar.py` | `imagen` y `voz`. El corazón de todo. `escenas` prepara las escenas para revisarlas antes del render |
+| `escena.py` | motor de escenas: plantilla HTML + spec → `.mp4` de duración exacta. `contacto` arma la hoja de revisión |
+| `palabras.py` | tiempos por palabra de una voz (faster-whisper) y resolución de cues |
 | `verificar_voz.py` | transcribe con Whisper y marca las alucinaciones del TTS |
 | `censurar.py` | busca credenciales con OCR y las tapa con una caja por tramo |
 

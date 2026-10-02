@@ -18,6 +18,7 @@ metadata:
 - Convertir grabaciones largas (horas) en videos cortos (≤5 min) con voz de profe.
 - Cambiar la voz de videos ya editados sin regrabar.
 - Publicar la serie en YouTube (playlist) o en una carpeta pública de Drive.
+- Explicar un tema que no es de pantalla (finanzas, biología, historia) con escenas animadas: ver Escenas.
 
 ## Flujo (en orden)
 
@@ -30,6 +31,39 @@ metadata:
 | 4. Editar | `editar.py imagen vNN VOZ` → `editar.py voz vNN VOZ` | `editar.py` |
 | 5. Verificar | Whisper sobre cada tramo (repeticiones) + `silencedetect` | `verificar_voz.py` |
 | 6. Publicar | comprimir <10 MB, subir con Claude in Chrome, playlist/carpeta pública | ver Publicación |
+
+## Escenas: segmentos que no son pantalla grabada
+
+Un segmento con `"escena"` en vez de `inicio`/`fin` no se corta del crudo: se renderiza desde
+una plantilla HTML (`assets/escenas/`) y dura su slot de voz, igual que cualquier tramo. Se
+pueden mezclar con segmentos de pantalla en el mismo guion. Ejemplo completo, sin crudo:
+`assets/guion-ejemplo/explicador-interes-compuesto.json`.
+
+| `tipo` | Qué muestra | Elementos con `cue` |
+|---|---|---|
+| `presentacion` | título cinético + puntos (sin puntos: portada con `subtitulo`) | `puntos[]`, `subtitulo` |
+| `diagrama` | nodos en fila y flechas que se dibujan | `nodos[]` (`id`, `texto`, `detalle`), `flechas[]` (`de`, `a`, `texto`) |
+| `datos` | barras que crecen hasta su valor, con el número contando | `barras[]` (`etiqueta`, `valor`, `destacar`), `prefijo`, `nota` |
+
+- **`cue` es la frase que nombra al elemento**, tal cual la dice el `texto` del segmento
+  (`"cue": "tres décadas"`), o un número de segundos. El elemento entra en esa palabra.
+  Se resuelve transcribiendo la voz con faster-whisper; tolera lo que Whisper oye mal
+  ("tembrano") y los números que escribe en dígitos ("3 décadas"). Si una cue no se
+  encuentra, el error muestra qué se oyó: corregí la cue, no el guion.
+- **Hoja de contacto antes del render**: `editar.py escenas vNN VOZ` genera las voces y deja
+  cada spec resuelto en `videos/vNN/escenas/`; imprime el comando de `escena.py contacto`.
+  Mirá el PNG (10/50/90 % de cada escena) y recién ahí `editar.py imagen`.
+- **Estilo**: `brand.json` en `TUT_ROOT` pisa lo que declare de `assets/escenas/brand.json`
+  (colores, `fuente`, movimiento). Un solo color de acento, una sans-serif.
+- **Plantilla propia**: un HTML con `window.DURATION` y `async window.seek(t)` donde todo es
+  función pura de `t` (sin `Date.now`, timers, `requestAnimationFrame` ni transiciones CSS).
+  `escena.py render` falla claro si falta el contrato o si el JS tira un error.
+- **Nada de `transform: scale` sobre esquinas redondeadas** en una plantilla: deja estado de
+  raster entre cuadros y el mismo `t` sale con pixeles distintos. Mover con `top`/`height`.
+  Y Chrome a escala fraccionaria tampoco es determinista: el motor captura siempre a
+  1920x1080 y achica con ffmpeg.
+- **`av<19`**: la faster-whisper actual rompe con `av` 19 (`metadata_errors`). Va pineado en
+  los comandos de abajo.
 
 ## Critical Patterns
 
@@ -310,6 +344,13 @@ $S/editar.py imagen v01 argentina && $S/editar.py voz v01 argentina   # argentin
 uv run --with faster-whisper python $S/verificar_voz.py argentina v01
 ffmpeg -i videos/v01/final-argentina.mp4 -af silencedetect=noise=-40dB:d=0.9 -f null - 2>&1 | grep -c silence_end
 
+# escenas (Chrome instalado, no baja navegadores)
+E="uv run --with playwright --with faster-whisper --with av<19 python"
+$E $S/editar.py escenas v01 argentina          # voces + specs resueltos, sin renderizar
+uv run --with playwright python $S/escena.py contacto videos/v01/escenas/*.json -o videos/v01/contacto.png
+$E $S/editar.py imagen v01 argentina && $S/editar.py voz v01 argentina
+uv run --with playwright python $S/escena.py render datos spec.json -o prueba.mp4 --ancho 960 --fps 12   # prueba suelta
+
 # comprimir para subir
 ffmpeg -y -i videos/v01/final-argentina.mp4 -c:v libx264 -preset slow -crf 30 -tune stillimage -c:a aac -b:a 128k "drive/1 - Titulo.mp4"
 ```
@@ -318,6 +359,7 @@ ffmpeg -y -i videos/v01/final-argentina.mp4 -c:v libx264 -preset slow -crf 30 -t
 
 - **Scripts**: [assets/scripts/](assets/scripts/) — grabación, control de opencode, edición y verificación.
 - **Entorno bajo Wayland**: [assets/scripts/entorno.sh](assets/scripts/entorno.sh) — `start|chrome|status|stop`.
-- **Guiones de ejemplo**: [assets/guion-ejemplo/](assets/guion-ejemplo/) — video de navegador (v01) y ciclo OPSX (v07).
+- **Guiones de ejemplo**: [assets/guion-ejemplo/](assets/guion-ejemplo/) — video de navegador (v01), ciclo OPSX (v07) y explicador con escenas (interés compuesto).
+- **Escenas**: [assets/escenas/](assets/escenas/) — plantillas, `base.js` (contrato y resortes) y `brand.json`. Motor: `escena.py`, tiempos por palabra: `palabras.py`.
 - **Voces y proveedores**: [references/voces.md](references/voces.md) — IDs, costos, licencias y cómo agregar una voz a `editar.py`.
 - **Caso real completo**: `~/Proyectos/tutorial-active-stack/` (TP2 Java con Active Stack + opencode + Muse Spark).
