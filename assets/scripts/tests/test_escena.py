@@ -130,6 +130,18 @@ def test_una_cue_de_texto_sin_voz_falla_explicando_que_falta():
         escena.resolver_spec({"puntos": [{"cue": "sol"}]}, None)
 
 
+def test_un_spec_ya_resuelto_no_necesita_voz_y_conserva_sus_tiempos():
+    # es lo que deja `editar.py escenas` para la hoja de contacto: cue de texto + t ya calculado
+    spec = {"puntos": [{"cue": "sol", "t": 1.1}, {"cue": "hoja", "t": 2.0}]}
+    out = escena.resolver_spec(spec, None)
+    assert [p["t"] for p in out["puntos"]] == [1.1, 2.0]
+
+
+def test_con_voz_un_t_ya_resuelto_tampoco_se_recalcula():
+    out = escena.resolver_spec({"puntos": [{"cue": "sol", "t": 9.9}, {"cue": "sol"}]}, VOZ)
+    assert [p["t"] for p in out["puntos"]] == [9.9, 0.8]
+
+
 def test_resolver_no_toca_el_spec_original():
     spec = {"puntos": [{"cue": "sol"}]}
     escena.resolver_spec(spec, VOZ)

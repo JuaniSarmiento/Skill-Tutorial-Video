@@ -85,9 +85,12 @@ def _con_cue(nodo, encontrados):
 
 
 def resolver_spec(spec: dict, palabras) -> dict:
-    """Copia del spec donde cada elemento con "cue" gana "t" (segundos)."""
+    """Copia del spec donde cada elemento con "cue" gana "t" (segundos).
+
+    Un elemento que ya trae "t" (el spec que deja `editar.py escenas`) se respeta.
+    """
     out = copy.deepcopy(spec)
-    elementos = _con_cue(out, [])
+    elementos = [e for e in _con_cue(out, []) if "t" not in e]
     cues = [e["cue"] for e in elementos]
     if palabras is None and any(isinstance(c, str) for c in cues):
         raise ValueError("el spec tiene cues de texto y no hay palabras (tiempos de la voz) "
