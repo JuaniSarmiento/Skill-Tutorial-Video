@@ -184,35 +184,48 @@ def pagina_de_escena(browser, plantilla, spec: dict, brand: dict):
 # conserva los pixeles del primer cuadro en que se dibujó: el mismo t salía distinto
 # según el orden (medido: la portada, 14 de 27 cuadros; datos, 11 de 27).
 SEEK = """async t => {
-  await window.seek(t);
+  try { await window.seek(t); } catch (e) { return String((e && e.message) || e); }
   const b = document.body;
   b.style.display = 'none'; void b.offsetHeight; b.style.display = '';
+  return null;
 }"""
 
 
 def _cuadro(page, t: float) -> bytes:
-    page.evaluate(SEEK, t)
+    error = page.evaluate(SEEK, t)
+    if error:
+        raise ContratoError(f"window.seek({t:.3f}) tiró un error de JavaScript: {error}")
     return page.screenshot(type="png")
 
 
 def render(plantilla, spec: dict, salida, brand: dict | None = None, palabras=None,
            fps: int = 30, ancho: int = ANCHO_BASE) -> float:
-    """Renderiza la escena a `salida` y devuelve su duración (cuadros / fps)."""
+    """Renderiza la escena a `salida` y devuelve su duración (cuadros / fps).
+
+    Se escribe a un .parcial.mp4 y se renombra al final: si algo falla a mitad, no
+    queda un mp4 corto que se reproduce bien y parece un render válido.
+    """
     spec = resolver_spec(spec, palabras)
     brand = brand or cargar_brand(None)
-    Path(salida).parent.mkdir(parents=True, exist_ok=True)
-    with navegador() as b, pagina_de_escena(b, plantilla, spec, brand) as (page, duracion):
-        tiempos = tiempos_de_cuadros(duracion, fps)
-        ff = subprocess.Popen(comando_ffmpeg(salida, fps, ancho), stdin=subprocess.PIPE, stderr=subprocess.PIPE)
-        try:
-            for t in tiempos:
-                ff.stdin.write(_cuadro(page, t))
-        finally:
-            ff.stdin.close()
-            err = ff.stderr.read().decode()
-            ff.wait()
-        if ff.returncode != 0:
-            raise RuntimeError(f"ffmpeg falló armando {salida}: {err[-1500:]}")
+    salida = Path(salida)
+    salida.parent.mkdir(parents=True, exist_ok=True)
+    parcial = salida.with_name(salida.stem + ".parcial" + salida.suffix)
+    try:
+        with navegador() as b, pagina_de_escena(b, plantilla, spec, brand) as (page, duracion):
+            tiempos = tiempos_de_cuadros(duracion, fps)
+            ff = subprocess.Popen(comando_ffmpeg(parcial, fps, ancho), stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+            try:
+                for t in tiempos:
+                    ff.stdin.write(_cuadro(page, t))
+            finally:
+                ff.stdin.close()
+                err = ff.stderr.read().decode()
+                ff.wait()
+            if ff.returncode != 0:
+                raise RuntimeError(f"ffmpeg falló armando {salida}: {err[-1500:]}")
+        parcial.replace(salida)
+    finally:
+        parcial.unlink(missing_ok=True)
     return len(tiempos) / fps
 
 
