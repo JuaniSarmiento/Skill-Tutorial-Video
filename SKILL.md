@@ -67,6 +67,11 @@ pueden mezclar con segmentos de pantalla en el mismo guion. Ejemplo completo, si
 - **Hoja de contacto antes del render**: `editar.py escenas vNN VOZ` genera las voces y deja
   cada spec resuelto en `videos/vNN/escenas/`; imprime el comando de `escena.py contacto`.
   Mirá el PNG (10/50/90 % de cada escena) y recién ahí `editar.py imagen`.
+- **Título largo**: el contenido de las tres plantillas arranca debajo de la cabecera
+  medida (kicker + título, con 40 px de aire), así que un título de 4 renglones baja
+  los nodos, los puntos o las barras en vez de quedar tapado. Si desde ahí no queda
+  lugar (un nodo o un renglón al piso de 24 px, o 240 px de gráfico), la escena falla
+  nombrando el título.
 - **Estilo**: `brand.json` en `TUT_ROOT` pisa lo que declare de `assets/escenas/brand.json`
   (colores, `fuente`, movimiento). Un solo color de acento, una sans-serif.
 - **Plantilla propia**: un HTML con `window.DURATION` y `async window.seek(t)` donde todo es
