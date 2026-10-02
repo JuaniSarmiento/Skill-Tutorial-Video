@@ -113,3 +113,22 @@ def test_un_error_de_js_a_mitad_del_render_falla_claro_y_no_deja_un_mp4_truncado
     assert sorted(p.name for p in tmp_path.iterdir()) == ["rota-a-mitad.html"]
     assert isinstance(e.value, escena.ContratoError), repr(e.value)[:200]
     assert re.search(r"seek\(0\.5\d*\).*se rompió a mitad", str(e.value)), str(e.value)
+
+
+SIMPLE = {"titulo": {"texto": "Interés compuesto"}, "duracion": 1.0}
+
+
+def test_si_la_fuente_del_brand_no_esta_instalada_avisa_nombrandola(capsys):
+    # sin esto Chrome usa otra fuente en silencio y nadie se entera hasta ver el video
+    brand = {**escena.cargar_brand(None), "fuente": "Fuente Que No Existe"}
+    with escena.navegador() as b, escena.pagina_de_escena(b, escena.ruta_plantilla("presentacion"), SIMPLE, brand):
+        pass
+    err = capsys.readouterr().err
+    assert "AVISO" in err and "Fuente Que No Existe" in err
+
+
+def test_con_la_fuente_instalada_no_avisa(capsys):
+    with escena.navegador() as b, escena.pagina_de_escena(b, escena.ruta_plantilla("presentacion"), SIMPLE,
+                                                          escena.cargar_brand(None)):
+        pass
+    assert "AVISO" not in capsys.readouterr().err
