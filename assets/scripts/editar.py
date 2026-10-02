@@ -441,8 +441,13 @@ def voz(vid: str, name: str) -> None:
         w.writeframes(bytes(pcm))
     (work / f"final-{name}.srt").write_text("\n".join(srt))
     final = work / f"final-{name}.mp4"
-    run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(work / f"video-{name}.mp4"), "-i", str(wav_out), "-map", "0:v", "-map", "1:a",
-         "-c:v", "copy", "-c:a", "aac", "-b:a", "160k", "-af", "loudnorm=I=-16:TP=-1.5", "-shortest", str(final)])
+    # Manda el video, no la voz: cada tramo puede durar hasta un cuadro más que su slot,
+    # y con -shortest el final perdía cuadros (685 -> 681, medido por QA). La voz se
+    # completa con silencio (apad) hasta el largo del video.
+    video = work / f"video-{name}.mp4"
+    run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(video), "-i", str(wav_out), "-map", "0:v", "-map", "1:a",
+         "-c:v", "copy", "-c:a", "aac", "-b:a", "160k", "-af", "loudnorm=I=-16:TP=-1.5,apad",
+         "-t", f"{duration(video):.6f}", str(final)])
     print(f"{vid}: {final.name} {duration(final):.1f}s")
 
 
