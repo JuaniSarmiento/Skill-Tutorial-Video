@@ -116,3 +116,120 @@ def test_los_puntos_quedan_centrados_bajo_el_titulo_y_no_amontonados_arriba(chro
             return [Math.min(...r.map(x => x.top)), Math.max(...r.map(x => x.bottom))];
         }""")
     assert abs((arriba + abajo) / 2 - 670) <= 40, (arriba, abajo)
+
+
+# --- casos de borde: lo que muestra la escena tiene que ser el dato ----------
+
+def _al_final(chrome, tipo, spec, js):
+    """Lleva la escena a su último cuadro y devuelve lo que calcule `js`."""
+    with escena.pagina_de_escena(chrome, escena.ruta_plantilla(tipo), {"duracion": 2.0, **spec},
+                                 escena.cargar_brand(None)) as (page, d):
+        page.evaluate("t => window.seek(t)", d - 0.05)
+        return page.evaluate(js)
+
+
+CAJAS = """() => [...document.querySelectorAll('[data-caja]')].map(e => {
+    const r = e.getBoundingClientRect();
+    return {n: e.dataset.caja, x: r.left, y: r.top, w: r.width, h: r.height,
+            px: parseFloat(getComputedStyle(e).fontSize), txt: e.textContent};
+})"""
+
+BARRAS = """() => [...document.querySelectorAll('.barra')].map(e => {
+    const r = e.getBoundingClientRect();
+    return {top: r.top, bottom: r.bottom, h: r.height};
+})"""
+
+PISO_PX = 24  # menos que esto no se lee a 1080p
+
+
+def _choques(cajas):
+    """Cajas fuera de pantalla o a menos de AIRE de otra."""
+    malos = []
+    for i, a in enumerate(cajas):
+        if a["x"] < 0 or a["y"] < 0 or a["x"] + a["w"] > 1920 or a["y"] + a["h"] > 1080:
+            malos.append(f"FUERA {a['n']}")
+        for b in cajas[i + 1:]:
+            if (a["x"] < b["x"] + b["w"] + AIRE and b["x"] < a["x"] + a["w"] + AIRE
+                    and a["y"] < b["y"] + b["h"] + AIRE and b["y"] < a["y"] + a["h"] + AIRE):
+                malos.append(f"PISA {a['n']} / {b['n']}")
+    return malos
+
+
+def _datos(barras, **extra):
+    return {"titulo": {"texto": "Datos"}, "barras": barras, **extra}
+
+
+def _valores(chrome, spec):
+    return [c["txt"] for c in _al_final(chrome, "datos", spec, CAJAS) if c["n"].startswith("valor")]
+
+
+def test_datos_muestra_los_decimales_del_dato_con_coma(chrome):
+    spec = _datos([{"etiqueta": "Plazo fijo", "valor": 3.5, "cue": 0.1},
+                   {"etiqueta": "Inflación", "valor": 0.4, "cue": 0.2},
+                   {"etiqueta": "Dólar", "valor": 1234.56, "cue": 0.3}], sufijo=" %")
+    assert _valores(chrome, spec) == ["3,5 %", "0,4 %", "1.234,56 %"]
+
+
+def test_datos_un_entero_sigue_sin_decimales_y_con_punto_de_miles(chrome):
+    spec = _datos([{"etiqueta": "A", "valor": 1000, "cue": 0.1},
+                   {"etiqueta": "B", "valor": 17449, "cue": 0.2}], prefijo="$")
+    assert _valores(chrome, spec) == ["$1.000", "$17.449"]
+
+
+def test_datos_un_negativo_cuelga_debajo_de_la_linea_de_cero_y_el_cero_no_tiene_barra(chrome):
+    spec = _datos([{"etiqueta": "Cero", "valor": 0, "cue": 0.1},
+                   {"etiqueta": "Neg", "valor": -500, "cue": 0.2},
+                   {"etiqueta": "Pos", "valor": 1000, "cue": 0.3}])
+    cero, neg, pos = _al_final(chrome, "datos", spec, BARRAS)
+    linea = _al_final(chrome, "datos", spec,
+                      "() => document.querySelector('.base').getBoundingClientRect().top")
+    assert cero["h"] == 0
+    assert pos["bottom"] == pytest.approx(linea, abs=2), "la positiva se apoya en el cero"
+    assert neg["top"] == pytest.approx(linea, abs=2), "la negativa sale del cero"
+    assert neg["bottom"] > linea + 50, "y crece hacia abajo"
+    assert neg["h"] == pytest.approx(pos["h"] / 2, rel=0.02), "-500 mide la mitad que 1000"
+    assert "-500" in _valores(chrome, spec)
+
+
+def test_datos_valores_menores_que_uno_usan_toda_la_altura(chrome):
+    spec = _datos([{"etiqueta": "A", "valor": 0.4, "cue": 0.1},
+                   {"etiqueta": "B", "valor": 0.2, "cue": 0.2}])
+    a, b = _al_final(chrome, "datos", spec, BARRAS)
+    assert a["h"] > 400, "la barra más alta no puede quedar aplastada por un piso de 1"
+    assert b["h"] == pytest.approx(a["h"] / 2, rel=0.02)
+
+
+@pytest.mark.parametrize("barra", [{"etiqueta": "Sin valor", "cue": 0.1},
+                                   {"etiqueta": "Sin valor", "valor": "10", "cue": 0.1}])
+def test_datos_una_barra_sin_valor_numerico_falla_nombrandola(chrome, barra):
+    spec = _datos([barra, {"etiqueta": "B", "valor": 10, "cue": 0.2}])
+    with pytest.raises(escena.ContratoError, match="Sin valor.*valor"):
+        _al_final(chrome, "datos", spec, CAJAS)
+
+
+@pytest.mark.parametrize("barras", [
+    [{"etiqueta": f"{2000 + i}", "valor": 1000 * (i + 1), "cue": 0.05 * i} for i in range(12)],
+    [{"etiqueta": c, "valor": v, "cue": 0.1 * i} for i, (c, v) in
+     enumerate(zip("ABCDE", [123456789012, 987654321098, 555555555555, 999999999999, 999999999999]))],
+], ids=["doce-barras", "doce-cifras"])
+def test_datos_muchas_barras_o_numeros_largos_no_se_pisan_y_se_leen(chrome, barras):
+    cajas = _al_final(chrome, "datos", _datos(barras, prefijo="$"), CAJAS)
+    assert _choques(cajas) == []
+    assert min(c["px"] for c in cajas) >= PISO_PX
+
+
+def test_datos_si_los_numeros_no_entran_ni_al_piso_falla_claro(chrome):
+    barras = [{"etiqueta": str(i), "valor": 999999999999, "cue": 0.01 * i} for i in range(30)]
+    with pytest.raises(Exception, match="no entran"):
+        _al_final(chrome, "datos", _datos(barras), CAJAS)
+
+
+def test_datos_un_rotulo_largo_no_achica_todo_por_debajo_del_piso(chrome):
+    largo = "Administración Federal de Ingresos Públicos de la Nación"
+    spec = _datos([{"etiqueta": largo, "valor": 10, "cue": 0.1},
+                   {"etiqueta": "Señal añeja", "valor": 20, "cue": 0.2},
+                   {"etiqueta": "Corto", "valor": 30, "cue": 0.3}])
+    cajas = _al_final(chrome, "datos", spec, CAJAS)
+    cats = [c for c in cajas if c["n"].startswith("categoria")]
+    assert min(c["px"] for c in cats) >= PISO_PX
+    assert _choques(cajas) == []
