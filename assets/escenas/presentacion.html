@@ -19,7 +19,7 @@ entran, la escena falla en vez de dejar puntos fuera de pantalla.
   .portada { position: absolute; left: 140px; right: 240px; top: 50%; transform: translateY(-50%); }
   .portada .titulo { font-size: 124px; letter-spacing: -.035em; line-height: 1.02; }
   .portada .kicker { margin-bottom: 34px; font-size: 30px; }
-  .barra { width: 96px; height: 8px; border-radius: 4px; background: var(--acento); margin: 44px 0 34px; transform-origin: left; }
+  .barra { width: 96px; height: 8px; border-radius: 4px; background: var(--acento); margin: 44px 0 34px; }
   .sub { display: table; font-size: 48px; font-weight: 500; color: var(--tenue); letter-spacing: -.01em; }
   .puntos { position: absolute; left: 140px; right: 140px; top: 340px; bottom: 80px;
             display: flex; flex-direction: column; justify-content: center; gap: 48px; }
@@ -68,7 +68,8 @@ entran, la escena falla en vez de dejar puntos fuera de pantalla.
     dibujarCab(t);
     if (barra) {
       const tb = tTitulo + 0.35;
-      barra.style.transform = `scaleX(${resorte(t - tb).toFixed(4)})`;
+      // ancho real, no scaleX (regla de SKILL.md: sin transform: scale)
+      barra.style.width = (96 * resorte(t - tb)).toFixed(2) + 'px';
     }
     if (sub) {
       sub.style.opacity = aparecer(t, tSub);

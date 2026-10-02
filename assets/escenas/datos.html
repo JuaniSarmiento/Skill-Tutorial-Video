@@ -86,8 +86,7 @@ Si los números no entran ni a 24 px, la escena falla en vez de pisarlos.
     dibujarCab(t);
     for (const b of barras) {
       const p = resorte(t - b.t0, 1, 1.5);
-      // alto y top reales, no scaleY: un transform sobre la esquina redondeada deja
-      // estado de raster entre cuadros y el mismo t salía con un pixel distinto
+      // alto y top reales, no scaleY (regla de SKILL.md: sin transform: scale)
       const h = b.h * p;
       const top = b.valor < 0 ? cero : cero - h;
       Object.assign(b.el.style, { height: h.toFixed(2) + 'px', top: top.toFixed(2) + 'px', opacity: t >= b.t0 ? 1 : 0 });

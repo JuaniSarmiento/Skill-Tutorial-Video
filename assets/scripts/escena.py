@@ -179,8 +179,19 @@ def pagina_de_escena(browser, plantilla, spec: dict, brand: dict):
         page.close()
 
 
+# Después de seek, el body sale y vuelve a entrar al layout: Chrome lo repinta ENTERO.
+# Sin esto repinta sólo lo que cambió, y una esquina redondeada que no se movió
+# conserva los pixeles del primer cuadro en que se dibujó: el mismo t salía distinto
+# según el orden (medido: la portada, 14 de 27 cuadros; datos, 11 de 27).
+SEEK = """async t => {
+  await window.seek(t);
+  const b = document.body;
+  b.style.display = 'none'; void b.offsetHeight; b.style.display = '';
+}"""
+
+
 def _cuadro(page, t: float) -> bytes:
-    page.evaluate("t => window.seek(t)", t)
+    page.evaluate(SEEK, t)
     return page.screenshot(type="png")
 
 
