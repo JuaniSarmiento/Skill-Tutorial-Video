@@ -229,6 +229,24 @@ def test_sin_ancla_exacta_o_con_demasiados_errores_la_cue_falla(dicho, cue):
         palabras.resolver_cue(_oido(dicho), cue)
 
 
+@pytest.mark.parametrize("dicho, cue", [
+    ("compró unas casas", "unas tasas"),   # QA3: "unas" tiene 4 letras y anclaba
+    ("hace unos mesas", "unos meses"),
+    ("vi aquella casa", "aquella tasa"),
+])
+def test_un_articulo_o_demostrativo_no_ancla_aunque_sea_largo(dicho, cue):
+    with pytest.raises(ValueError, match="no se dice"):
+        palabras.resolver_cue(_oido(dicho), cue)
+
+
+@pytest.mark.parametrize("dicho, cue, t", [
+    ("compró unas tasas", "unas tasas", 0.5),   # dicha exacta, se sigue encontrando
+    ("compró unas casas altas", "unas tasas altas", 0.5),   # el ancla es "altas", no "unas"
+])
+def test_un_articulo_largo_no_ancla_pero_otra_palabra_si(dicho, cue, t):
+    assert _resuelve(_oido(dicho), cue) == t
+
+
 @pytest.mark.parametrize("dicho, cue, t", [
     ("más de 17 .000", "diecisiete mil", 1.0),
     ("tenés 2 .600", "dos mil seiscientos", 0.5),
