@@ -280,6 +280,22 @@ def test_diagrama_con_muchos_nodos_o_texto_largo_entra_sin_pisar_flechas(chrome,
     assert min(_al_final(chrome, "diagrama", spec, PX_NODOS)) >= PISO_PX
 
 
+LINEAS = """() => [...document.querySelectorAll('svg line')].map(l =>
+    ['x1', 'y1', 'x2', 'y2'].map(k => +l.getAttribute(k)))"""
+
+
+@pytest.mark.parametrize("textos", [
+    # la fila de abajo arranca con un nodo más ancho que el último de arriba (QA2, D_S6)
+    ["Ahorro", "Plazo fijo", "Intereses", "Capital nuevo", "Reinversión", "Patrimonio"],
+    ["Sueldo", "Gastos fijos", "Ahorro", "Plazo fijo", "Intereses", "Capital nuevo", "Patrimonio"],
+], ids=["S-6", "S-7"])
+def test_diagrama_en_s_toda_flecha_es_horizontal_o_baja_derecho(chrome, textos):
+    lineas = _al_final(chrome, "diagrama", _cadena(textos), LINEAS)
+    torcidas = [l for l in lineas if abs(l[0] - l[2]) > 0.5 and abs(l[1] - l[3]) > 0.5]
+    assert any(abs(l[1] - l[3]) > 0.5 for l in lineas), "no salió en dos filas"
+    assert torcidas == []
+
+
 def test_diagrama_que_no_entra_ni_en_dos_filas_falla_claro(chrome):
     with pytest.raises(Exception, match="no entra"):
         _al_final(chrome, "diagrama", _cadena([f"Etapa número {i}" for i in range(14)]), CAJAS)
