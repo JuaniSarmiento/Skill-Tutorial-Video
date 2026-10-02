@@ -59,14 +59,14 @@ Si los números no entran ni a 24 px, la escena falla en vez de pisarlos.
     return (v < 0 && /[1-9]/.test(n) ? '-' : '') + (S.prefijo || '') + n + (S.sufijo || '');
   }
   const G = { x0: 220, x1: 1700, arriba: 410, abajo: 890 };
+  const ALTO_MIN = 240;   // px de gráfico: la mitad del alto normal; con menos, las barras no se comparan
   const positivo = Math.max(0, ...barras.map(b => b.valor));
   const negativo = Math.min(0, ...barras.map(b => b.valor));
-  const escala = (G.abajo - G.arriba) / ((positivo - negativo) || 1);
-  const cero = G.arriba + positivo * escala;   // la línea de base es el cero, no el borde de abajo
-  let dibujarCab, pxVal;
+  let dibujarCab, pxVal, escala, cero;
 
   contrato([tiempo(S.titulo, 0), ...barras.map(b => b.t0)], () => {
-    dibujarCab = cabecera(S.titulo, S.kicker).dibujar;
+    const cab = cabecera(S.titulo, S.kicker);
+    dibujarCab = cab.dibujar;
     const slot = (G.x1 - G.x0) / Math.max(1, barras.length);
     const ancho = Math.min(240, slot * 0.56);
     const cabe = slot - 24;
@@ -75,6 +75,12 @@ Si los números no entran ni a 24 px, la escena falla en vez de pisarlos.
     if (pxVal < PISO)
       throw new Error(`los números de las ${barras.length} barras no entran ni a ${PISO} px: ` +
                       'usá menos barras o una unidad más grande (miles, millones)');
+    // el número de la barra más alta va pxVal*1.4 por encima de ella: también tiene que
+    // quedar debajo de la cabecera medida
+    const encima = pxVal * 1.4;
+    G.arriba = cab.techo(G.arriba - encima, encima + ALTO_MIN, G.abajo) + encima;
+    escala = (G.abajo - G.arriba) / ((positivo - negativo) || 1);
+    cero = G.arriba + positivo * escala;   // la línea de base es el cero, no el borde de abajo
     // los rótulos de categoría van a un solo tamaño; el que no entra a PISO se parte en renglones
     const pxCat = Math.max(PISO, Math.min(36, ...barras.map(b => 36 * cabe / Math.max(1, medir(b.etiqueta, 36, 500)))));
     const linea = crear('div', 'base');

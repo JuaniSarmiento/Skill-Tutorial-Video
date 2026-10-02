@@ -47,6 +47,10 @@ entran, la escena falla en vez de dejar puntos fuera de pantalla.
       if (S.subtitulo) { sub = crear('div', 'sub', header, S.subtitulo.texto || S.subtitulo); sub.dataset.caja = 'subtitulo'; }
     }
     const lista = crear('section', 'puntos');
+    // la lista arranca debajo de la cabecera medida (al menos un renglón al piso)
+    const top = portada ? 340 : cab.techo(340, PISO * 1.18, 1080 - 80);
+    lista.style.top = top + 'px';
+    const culpa = top > 340 ? ` (o acortá el título, que baja la lista hasta y=${Math.round(top)})` : '';
     filas = puntos.map((p, i) => {
       const fila = crear('div', 'punto', lista);
       const num = crear('div', 'num', fila, String(i + 1).padStart(2, '0'));
@@ -57,7 +61,7 @@ entran, la escena falla en vez de dejar puntos fuera de pantalla.
     // achicar hasta que la lista entre en su caja, sin bajar del piso legible
     const alto = () => filas.length ? filas.at(-1).fila.getBoundingClientRect().bottom - filas[0].fila.getBoundingClientRect().top : 0;
     for (let px = 62; alto() > lista.clientHeight; px -= 2) {
-      if (px < PISO) throw new Error(`los ${filas.length} puntos no entran en pantalla ni a ${PISO} px: partilos en dos escenas`);
+      if (px < PISO) throw new Error(`los ${filas.length} puntos no entran en pantalla ni a ${PISO} px: partilos en dos escenas${culpa}`);
       lista.style.gap = (px * 0.77).toFixed(1) + 'px';
       filas.forEach(x => {
         x.txt.style.fontSize = px + 'px';

@@ -53,8 +53,12 @@
   };
 
   // Cabecera: kicker opcional + título que entra palabra por palabra.
+  // techo(minimo, alto, hasta): dónde puede empezar el contenido. Debajo de la cabecera
+  // MEDIDA (un título largo ocupa varios renglones), con aire, y nunca más arriba que
+  // `minimo`. Si desde ahí no quedan `alto` px antes de `hasta`, falla nombrando el título.
+  const AIRE_CAB = 40;
   function cabecera(titulo, kicker) {
-    if (!titulo) return { tiempos: [], dibujar() {} };
+    if (!titulo) return { tiempos: [], dibujar() {}, techo: minimo => minimo };
     const t0 = tiempo(titulo, 0);
     const caja = crear('header', 'cabecera');
     const k = kicker ? crear('div', 'kicker', caja, kicker.texto || kicker) : null;
@@ -64,6 +68,14 @@
     const palabras = String(titulo.texto || titulo).split(/\s+/).map(p => crear('span', 'palabra', h, p));
     return {
       tiempos: [t0],
+      techo(minimo, alto = 0, hasta = 1080) {
+        const abajo = caja.getBoundingClientRect().bottom;
+        const y = Math.max(minimo, abajo + AIRE_CAB);
+        if (y + alto > hasta)
+          throw new Error(`el título ocupa hasta y=${Math.round(abajo)} y no deja lugar para el contenido ` +
+                          `(hacen falta ${Math.round(alto)} px y quedan ${Math.round(hasta - y)}): acortá el título`);
+        return y;
+      },
       dibujar(t) {
         if (k) k.style.opacity = aparecer(t, t0);
         palabras.forEach((p, i) => {

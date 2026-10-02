@@ -143,7 +143,10 @@ El último elemento que entró es el foco y lleva el color de acento; el resto, 
   }
 
   contrato([tiempo(S.titulo, 0), ...nodos.map(n => n.t0), ...flechas.map(f => f.t0)], () => {
-    dibujarCab = cabecera(S.titulo, S.kicker).dibujar;
+    const cab = cabecera(S.titulo, S.kicker);
+    dibujarCab = cab.dibujar;
+    // el área arranca debajo de la cabecera medida; tiene que entrar al menos un nodo al piso
+    AREA.y0 = cab.techo(AREA.y0, PISO * 1.15 + 88, AREA.y1);
     const px = layout();
     const svg = document.createElementNS(NS, 'svg');
     document.body.appendChild(svg);
