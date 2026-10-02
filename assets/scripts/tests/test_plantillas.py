@@ -191,6 +191,27 @@ def test_datos_un_negativo_cuelga_debajo_de_la_linea_de_cero_y_el_cero_no_tiene_
     assert "-500" in _valores(chrome, spec)
 
 
+def test_datos_el_ruido_de_coma_flotante_no_se_muestra_como_decimales(chrome):
+    spec = _datos([{"etiqueta": "A", "valor": 0.1 + 0.2, "cue": 0.1},       # 0.30000000000000004
+                   {"etiqueta": "B", "valor": 1.1 + 2.2, "cue": 0.2},       # 3.3000000000000003
+                   {"etiqueta": "C", "valor": 0.000001, "cue": 0.3}])
+    assert _valores(chrome, spec) == ["0,3", "3,3", "0,000001"]
+
+
+def test_datos_un_valor_que_se_veria_como_cero_falla_en_vez_de_mostrar_cero(chrome):
+    spec = _datos([{"etiqueta": "Chico", "valor": 1e-7, "cue": 0.1},
+                   {"etiqueta": "B", "valor": 0.3, "cue": 0.2}])
+    with pytest.raises(escena.ContratoError, match="Chico.*se vería como 0"):
+        _al_final(chrome, "datos", spec, CAJAS)
+
+
+@pytest.mark.parametrize("prefijo, esperado", [("$", "-$500,5"), ("$ ", "-$ 500,5")])
+def test_datos_el_signo_de_un_negativo_va_antes_del_prefijo(chrome, prefijo, esperado):
+    spec = _datos([{"etiqueta": "Pérdida", "valor": -500.5, "cue": 0.1},
+                   {"etiqueta": "Ganancia", "valor": 1200, "cue": 0.2}], prefijo=prefijo)
+    assert _valores(chrome, spec)[0] == esperado
+
+
 def test_datos_valores_menores_que_uno_usan_toda_la_altura(chrome):
     spec = _datos([{"etiqueta": "A", "valor": 0.4, "cue": 0.1},
                    {"etiqueta": "B", "valor": 0.2, "cue": 0.2}])
