@@ -311,6 +311,17 @@ def test_diagrama_con_coordenadas_en_el_borde_queda_dentro_de_la_pantalla(chrome
     assert [c for c in _choques(nodos) if c.startswith("FUERA")] == []
 
 
+@pytest.mark.parametrize("x, y", [(0.1, 0.0), (0.3, 0.12), (0.5, 0.2)],
+                         ids=["arriba-izquierda", "sobre-el-titulo", "pegado-abajo-del-titulo"])
+def test_diagrama_con_coordenadas_arriba_no_tapa_el_titulo(chrome, x, y):
+    spec = {"kicker": "Finanzas", "titulo": {"texto": "Cómo circula la plata"},
+            "nodos": [{"id": "a", "texto": "Ahorro", "x": x, "y": y, "cue": 0.1},
+                      {"id": "b", "texto": "Plazo fijo", "x": 0.7, "y": 0.7, "cue": 0.2}]}
+    cajas = _al_final(chrome, "diagrama", spec, CAJAS)
+    assert {c["n"] for c in cajas} >= {"titulo", "kicker", "nodo a"}
+    assert [c for c in _choques(cajas) if "nodo a" in c] == []
+
+
 @pytest.mark.parametrize("n", [8, 12])
 def test_presentacion_con_muchos_puntos_entra_entera_y_se_lee(chrome, n):
     spec = {"titulo": {"texto": "Para llevarte"},
