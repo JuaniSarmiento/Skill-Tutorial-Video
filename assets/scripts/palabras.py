@@ -35,13 +35,23 @@ for _c, _nombre in zip(range(200, 1000, 100), "doscientos trescientos cuatrocien
 
 # Whisper oye mal alguna letra ("tembrano" por "temprano", "Hablamos" por "Hagamos").
 # Cuánto se tolera depende de si la cue tiene un ANCLA: otra palabra suya de ANCLA
-# letras o más que se oyó exacta. "la"/"el" no anclan: "la tasa" no es "la casa".
+# letras o más que se oyó exacta y que no sea un artículo: "la tasa" no es "la casa",
+# y por lo mismo "unas tasas" no es "unas casas".
 #   sin ancla: palabra larga (LARGA+ letras) 1 error, palabra corta ninguno
 #   con ancla: palabra larga hasta 2 errores, palabra corta 1
 # Un número tiene que estar tal cual ("10"/"100" son otro número), y una cue de una
 # sola palabra corta también ("sí"/"sin", "banco"/"blanco"): no tiene con qué anclar.
 LARGA = 6
 ANCLA = 4
+# Nunca anclan: van delante de cualquier sustantivo, así que oírlos exactos no dice
+# nada de la palabra que sigue. Artículos, sus contracciones y los demostrativos, que
+# cumplen el mismo papel ("esta tasa"/"esta casa"). Sin tilde, como quedan al normalizar:
+# "esta" es también "está", que pierde el ancla (más estricto, no más laxo). "un",
+# "una" y "uno" no hacen falta: se normalizan a "1" y un número no ancla.
+NO_ANCLAN = frozenset(
+    "el la los las lo un una unos unas al del "
+    "este esta esto estos estas ese esa eso esos esas "
+    "aquel aquella aquello aquellos aquellas".split())
 
 MODELO = "base"  # "small" es mejor pero no entra en 1 GB de RAM libre junto a Chrome
 
@@ -146,7 +156,8 @@ def _tolera(palabra: str, ancla: bool) -> int:
 
 
 def _ancla(palabra: str, errores: int) -> bool:
-    return errores == 0 and len(palabra) >= ANCLA and not _es_numero(palabra)
+    return (errores == 0 and len(palabra) >= ANCLA and not _es_numero(palabra)
+            and palabra not in NO_ANCLAN)
 
 
 def _errores(frase: list[str], oidas: list[str]):
