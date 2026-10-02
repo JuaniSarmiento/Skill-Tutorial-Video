@@ -124,6 +124,20 @@ El último elemento que entró es el foco y lleva el color de acento; el resto, 
     return [n.cx + dx * s, n.cy + dy * s];
   }
 
+  // los dos extremos de la flecha de a a b. Si un nodo está encima del otro y se
+  // solapan en horizontal (la punta de la S), baja derecho por una x que comparten,
+  // aunque sus centros no estén alineados; si no, va de centro a centro.
+  function tramo(a, b) {
+    const izq = Math.max(a.cx - a.w / 2, b.cx - b.w / 2) + 30, der = Math.min(a.cx + a.w / 2, b.cx + b.w / 2) - 30;
+    const separados = Math.abs(b.cy - a.cy) > (a.h + b.h) / 2;
+    if (separados && izq <= der) {
+      const x = Math.min(der, Math.max(izq, a.cx)), s = Math.sign(b.cy - a.cy);
+      return [x, a.cy + s * (a.h / 2 + 16), x, b.cy - s * (b.h / 2 + 22)];
+    }
+    const dx = b.cx - a.cx, dy = b.cy - a.cy, d = Math.hypot(dx, dy);
+    return [...borde(a, dx / d, dy / d, 16), ...borde(b, -dx / d, -dy / d, 22)];
+  }
+
   contrato([tiempo(S.titulo, 0), ...nodos.map(n => n.t0), ...flechas.map(f => f.t0)], () => {
     dibujarCab = cabecera(S.titulo, S.kicker).dibujar;
     const px = layout();
@@ -131,8 +145,8 @@ El último elemento que entró es el foco y lleva el color de acento; el resto, 
     document.body.appendChild(svg);
     for (const f of flechas) {
       const a = porId[f.de], b = porId[f.a];
-      const dx = b.cx - a.cx, dy = b.cy - a.cy, d = Math.hypot(dx, dy);
-      const [x1, y1] = borde(a, dx / d, dy / d, 16), [x2, y2] = borde(b, -dx / d, -dy / d, 22);
+      const [x1, y1, x2, y2] = tramo(a, b);
+      const dx = x2 - x1, dy = y2 - y1, d = Math.hypot(dx, dy);
       f.largo = Math.hypot(x2 - x1, y2 - y1);
       f.linea = document.createElementNS(NS, 'line');
       Object.entries({ x1, y1, x2, y2, 'stroke-width': 6, 'stroke-linecap': 'round' })
