@@ -10,6 +10,8 @@ spec:
    "puntos": [{"texto": "Ganás intereses", "cue": "intereses"}, ...]}
 
 Sin puntos es una portada: el título grande, centrado en vertical.
+Con muchos puntos la letra se achica hasta que entran (piso: 24 px); si ni así
+entran, la escena falla en vez de dejar puntos fuera de pantalla.
 -->
 <meta charset="utf-8">
 <link rel="stylesheet" href="base.css">
@@ -28,6 +30,7 @@ Sin puntos es una portada: el título grande, centrado en vertical.
 <script src="base.js"></script>
 <script>
   const { S, crear, tiempo, resorte, aparecer, contrato, cabecera, M } = E;
+  const PISO = 24;   // px: menos que esto no se lee a 1080p
   const puntos = (S.puntos || []).map((p, i) => ({ ...p, t0: tiempo(p, 0.8 + i * 0.9) }));
   const portada = !puntos.length;
   const tTitulo = tiempo(S.titulo, 0);
@@ -49,8 +52,18 @@ Sin puntos es una portada: el título grande, centrado en vertical.
       const num = crear('div', 'num', fila, String(i + 1).padStart(2, '0'));
       const txt = crear('div', 'txt', fila, p.texto);
       txt.dataset.caja = 'punto ' + (i + 1);
-      return { fila, num, t0: p.t0 };
+      return { fila, num, txt, t0: p.t0 };
     });
+    // achicar hasta que la lista entre en su caja, sin bajar del piso legible
+    const alto = () => filas.length ? filas.at(-1).fila.getBoundingClientRect().bottom - filas[0].fila.getBoundingClientRect().top : 0;
+    for (let px = 62; alto() > lista.clientHeight; px -= 2) {
+      if (px < PISO) throw new Error(`los ${filas.length} puntos no entran en pantalla ni a ${PISO} px: partilos en dos escenas`);
+      lista.style.gap = (px * 0.77).toFixed(1) + 'px';
+      filas.forEach(x => {
+        x.txt.style.fontSize = px + 'px';
+        x.num.style.fontSize = Math.max(PISO, px * 0.61).toFixed(1) + 'px';
+      });
+    }
   }, t => {
     dibujarCab(t);
     if (barra) {

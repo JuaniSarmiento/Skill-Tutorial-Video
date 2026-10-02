@@ -9,8 +9,11 @@ spec:
    "flechas": [{"de": "c", "a": "i", "texto": "rinde", "cue": "rinde"}, ...]}
 
 Por defecto los nodos van en una fila, con el espacio entre ellos calculado para que
-la etiqueta de cada flecha entre sin tocar a nadie. Para otra forma, cada nodo acepta
-"x" e "y" (centro, en fracción de pantalla: 0.5 = medio).
+la etiqueta de cada flecha entre sin tocar a nadie. Si no entran en una fila a 36 px,
+van en dos filas en "S" (la segunda de derecha a izquierda, así la flecha que las une
+baja derecho); si tampoco entran a 24 px, la escena falla en vez de pisar textos. Un
+texto de nodo largo se parte en renglones. Para otra forma, cada nodo acepta "x" e "y"
+(centro, en fracción de pantalla: 0.5 = medio), acotados para que el nodo no se salga.
 El último elemento que entró es el foco y lleva el color de acento; el resto, neutro.
 -->
 <meta charset="utf-8">
@@ -22,7 +25,7 @@ El último elemento que entró es el foco y lleva el color de acento; el resto, 
     border-radius: 22px; background: var(--superficie); border: 3px solid var(--borde);
     box-shadow: 0 24px 60px -30px rgba(0, 0, 0, .7);
   }
-  .nodo .txt { font-weight: 650; letter-spacing: -.015em; white-space: nowrap; }
+  .nodo .txt { font-weight: 650; letter-spacing: -.015em; white-space: pre; text-align: center; line-height: 1.15; }
   .nodo .det { margin-top: 10px; font-size: 32px; font-weight: 500; color: var(--tenue); white-space: nowrap; }
   .etq {
     position: absolute; transform: translate(-50%, -50%); padding: 4px 14px; white-space: nowrap;
@@ -39,44 +42,79 @@ El último elemento que entró es el foco y lleva el color de acento; el resto, 
     if (!porId[f.de] || !porId[f.a]) throw new Error(`flecha ${f.de} -> ${f.a}: nodo inexistente`);
   }
   const AREA = { x0: 140, x1: 1780, y0: 340, y1: 1000 };
+  const PISO = 24, UNA_FILA = 36;   // px: piso legible, y el mínimo antes de pasar a dos filas
+  const MAX_TXT = 560, ENTRE_FILAS = 150;
   const NS = 'http://www.w3.org/2000/svg';
   let dibujarCab;
 
+  // renglones de un texto que no pasan de MAX_TXT px
+  function renglones(texto, px) {
+    const out = [];
+    for (const w of String(texto).split(/\s+/)) {
+      const prueba = out.length ? out[out.length - 1] + ' ' + w : w;
+      if (out.length && medir(prueba, px, 650) <= MAX_TXT) out[out.length - 1] = prueba;
+      else out.push(w);
+    }
+    return out;
+  }
+
+  const medida = (n, px) => {
+    n.lineas = renglones(n.texto, px);
+    const w = Math.max(...n.lineas.map(l => medir(l, px, 650)), n.detalle ? medir(n.detalle, 32, 500) : 0);
+    return { w: Math.max(px * 5.5, w + 120), h: n.lineas.length * px * 1.15 + 88 + (n.detalle ? 46 : 0) };
+  };
+  const flechaEntre = (a, b) => flechas.find(f => [f.de, f.a].sort().join() === [a.id, b.id].sort().join());
+  // el hueco entre dos nodos vecinos tiene que alojar la etiqueta de su flecha
+  const hueco = (a, b) => { const f = flechaEntre(a, b); return Math.max(170, f && f.texto ? medir(f.texto, 36, 600) + 28 + 80 : 0); };
+  const anchoFila = R => R.reduce((s, n) => s + n.w, 0) + R.slice(1).reduce((s, n, i) => s + hueco(R[i], n), 0);
+  const altoFila = R => Math.max(...R.map(n => n.h));
+
+  function colocarFila(R, cy) {
+    const huecos = R.slice(1).map((n, i) => hueco(R[i], n));
+    const libre = (AREA.x1 - AREA.x0 - anchoFila(R)) / Math.max(1, R.length - 1);
+    let x = 0;
+    R.forEach((n, i) => { n.cx = x + n.w / 2; n.cy = cy; x += n.w + (huecos[i] ?? 0) + Math.min(libre, 120); });
+    // si sobró lugar (el tope de 120 por hueco), se centra la fila entera
+    const izq = R[0].cx - R[0].w / 2, der = R.at(-1).cx + R.at(-1).w / 2;
+    const dx = (AREA.x0 + AREA.x1) / 2 - (izq + der) / 2;
+    R.forEach(n => { n.cx += dx; });
+  }
+
   // Tamaños y posiciones: una sola vez, con las fuentes ya cargadas.
   function layout() {
-    let px = 54;
-    const medida = n => {
-      const w = Math.max(medir(n.texto, px, 650), n.detalle ? medir(n.detalle, 32, 500) : 0);
-      return { w: Math.max(300, w + 120), h: n.detalle ? 196 : 150 };
-    };
-    const conCoords = nodos.every(n => n.x != null && n.y != null);
-    if (conCoords) {
-      nodos.forEach(n => Object.assign(n, medida(n), { cx: n.x * 1920, cy: n.y * 1080 }));
+    if (!nodos.length) return 54;
+    if (nodos.every(n => n.x != null && n.y != null)) {
+      const px = 54;
+      nodos.forEach(n => {
+        Object.assign(n, medida(n, px));
+        n.cx = Math.min(1920 - n.w / 2 - 40, Math.max(n.w / 2 + 40, n.x * 1920));
+        n.cy = Math.min(1080 - n.h / 2 - 40, Math.max(n.h / 2 + 40, n.y * 1080));
+      });
       return px;
     }
-    // fila: el hueco entre dos nodos tiene que alojar la etiqueta de su flecha
-    const hueco = i => {
-      const f = flechas.find(f => [f.de, f.a].sort().join() === [nodos[i].id, nodos[i + 1].id].sort().join());
-      return Math.max(170, f && f.texto ? medir(f.texto, 36, 600) + 28 + 80 : 0);
-    };
-    for (; px >= 24; px -= 2) {
-      nodos.forEach(n => Object.assign(n, medida(n)));
-      const total = nodos.reduce((s, n) => s + n.w, 0) + nodos.slice(1).reduce((s, _, i) => s + hueco(i), 0);
-      if (total <= AREA.x1 - AREA.x0) break;
+    const mitad = Math.ceil(nodos.length / 2);
+    const intentos = [];
+    for (let px = 54; px >= UNA_FILA; px -= 2) intentos.push([px, [nodos]]);
+    if (nodos.length > 1)   // la segunda fila va de derecha a izquierda: se guarda en el orden en que se ve
+      for (let px = 54; px >= PISO; px -= 2) intentos.push([px, [nodos.slice(0, mitad), nodos.slice(mitad).reverse()]]);
+    for (const [px, filas] of intentos) {
+      nodos.forEach(n => Object.assign(n, medida(n, px)));
+      const alto = filas.reduce((s, R) => s + altoFila(R), 0) + (filas.length - 1) * ENTRE_FILAS;
+      if (filas.some(R => anchoFila(R) > AREA.x1 - AREA.x0) || alto > AREA.y1 - AREA.y0) continue;
+      let y = (AREA.y0 + AREA.y1) / 2 - alto / 2;
+      for (const R of filas) { colocarFila(R, y + altoFila(R) / 2); y += altoFila(R) + ENTRE_FILAS; }
+      if (filas.length === 2) {
+        // la punta de la S: el primero de la fila de abajo, debajo del último de la de arriba
+        const [A, B] = filas;
+        let dx = A.at(-1).cx - B.at(-1).cx;
+        dx = Math.min(dx, AREA.x1 - (B.at(-1).cx + B.at(-1).w / 2));
+        dx = Math.max(dx, AREA.x0 - (B[0].cx - B[0].w / 2));
+        B.forEach(n => { n.cx += dx; });
+      }
+      return px;
     }
-    const huecos = nodos.slice(1).map((_, i) => hueco(i));
-    const total = nodos.reduce((s, n) => s + n.w, 0) + huecos.reduce((a, b) => a + b, 0);
-    const libre = (AREA.x1 - AREA.x0 - total) / Math.max(1, nodos.length - 1);
-    let x = AREA.x0 + (nodos.length === 1 ? (AREA.x1 - AREA.x0 - total) / 2 : 0);
-    nodos.forEach((n, i) => {
-      n.cx = x + n.w / 2; n.cy = (AREA.y0 + AREA.y1) / 2;
-      x += n.w + (huecos[i] ?? 0) + Math.min(libre, 120);
-    });
-    // si sobró lugar (el tope de 120 por hueco), se centra la fila entera
-    const derecha = nodos.at(-1).cx + nodos.at(-1).w / 2, izquierda = nodos[0].cx - nodos[0].w / 2;
-    const dx = (AREA.x0 + AREA.x1) / 2 - (izquierda + derecha) / 2;
-    nodos.forEach(n => { n.cx += dx; });
-    return px;
+    throw new Error(`el diagrama no entra en pantalla ni en dos filas a ${PISO} px (${nodos.length} nodos): ` +
+                    'usá menos nodos, textos más cortos o "x"/"y" por nodo');
   }
 
   // punto del borde del rectángulo de n en dirección (dx, dy) desde su centro
@@ -107,15 +145,18 @@ El último elemento que entró es el foco y lleva el color de acento; el resto, 
         f.etq = crear('div', 'etq', document.body, f.texto);
         f.etq.dataset.caja = 'flecha ' + f.texto;
         const nx = -dy / d, ny = dx / d, lado = ny > 0 ? -1 : 1;   // la etiqueta va del lado de arriba
-        f.etq.style.left = ((x1 + x2) / 2 + nx * 40 * lado) + 'px';
-        f.etq.style.top = ((y1 + y2) / 2 + ny * 40 * lado) + 'px';
+        // a un costado de la línea: media etiqueta en la dirección de la normal, y aire
+        const r = f.etq.getBoundingClientRect();
+        const lejos = Math.abs(nx) * r.width / 2 + Math.abs(ny) * r.height / 2 + 14;
+        f.etq.style.left = ((x1 + x2) / 2 + nx * lejos * lado) + 'px';
+        f.etq.style.top = ((y1 + y2) / 2 + ny * lejos * lado) + 'px';
       }
     }
     for (const n of nodos) {
       n.el = crear('div', 'nodo');
       n.el.dataset.caja = 'nodo ' + n.id;
       Object.assign(n.el.style, { width: n.w + 'px', height: n.h + 'px', left: (n.cx - n.w / 2) + 'px', top: (n.cy - n.h / 2) + 'px' });
-      crear('div', 'txt', n.el, n.texto).style.fontSize = px + 'px';
+      crear('div', 'txt', n.el, n.lineas.join('\n')).style.fontSize = px + 'px';
       if (n.detalle) crear('div', 'det', n.el, n.detalle);
     }
   }, t => {
