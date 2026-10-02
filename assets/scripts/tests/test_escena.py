@@ -51,6 +51,19 @@ def test_el_comando_usa_el_mismo_codec_que_los_segmentos_de_editar():
     assert cmd[cmd.index("-r") + 1] == "30"
 
 
+def test_a_ancho_completo_no_se_escala():
+    assert "-vf" not in escena.comando_ffmpeg("x.mp4", fps=30)
+
+
+def test_una_prueba_chica_la_achica_ffmpeg_y_no_chrome():
+    # Chrome con device_scale_factor fraccionario NO rasteriza igual entre cargas
+    # (medido: a 960 de ancho, 1 de 4 cargas daba otro PNG). Se captura siempre a
+    # 1920x1080 y se escala en el encode.
+    cmd = escena.comando_ffmpeg("x.mp4", fps=12, ancho=960)
+    assert cmd[cmd.index("-vf") + 1] == "scale=960:-2:flags=lanczos"
+    assert cmd.index("-vf") > cmd.index("-i")
+
+
 # --- contrato ----------------------------------------------------------------
 
 def test_un_contrato_completo_no_levanta():
@@ -159,3 +172,19 @@ def test_la_hoja_de_contacto_muestra_cada_cuadro_con_su_etiqueta():
     assert "00 diagrama · 1.0 s" in html
     assert "<script>x</script>" not in html          # las etiquetas se escapan
     assert "repeat(3" in html
+
+
+# --- plantillas --------------------------------------------------------------
+
+@pytest.mark.parametrize("tipo", ["diagrama", "presentacion", "datos"])
+def test_cada_tipo_tiene_su_plantilla(tipo):
+    p = escena.ruta_plantilla(tipo)
+    assert p.name == f"{tipo}.html"
+    assert "window.seek" in p.read_text() or "contrato(" in p.read_text()
+
+
+def test_un_tipo_desconocido_falla_listando_los_que_hay():
+    with pytest.raises(ValueError) as e:
+        escena.ruta_plantilla("pizarron")
+    for tipo in ("diagrama", "presentacion", "datos"):
+        assert tipo in str(e.value)

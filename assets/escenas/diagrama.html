@@ -1,0 +1,146 @@
+<!doctype html>
+<!--
+Escena "diagrama": nodos y flechas que se dibujan de a uno, cada uno en su cue.
+
+spec:
+  {"tipo": "diagrama",
+   "kicker": "...", "titulo": {"texto": "Cómo crece la plata"},
+   "nodos":   [{"id": "c", "texto": "Capital", "detalle": "1.000 $", "cue": "capital"}, ...],
+   "flechas": [{"de": "c", "a": "i", "texto": "rinde", "cue": "rinde"}, ...]}
+
+Por defecto los nodos van en una fila, con el espacio entre ellos calculado para que
+la etiqueta de cada flecha entre sin tocar a nadie. Para otra forma, cada nodo acepta
+"x" e "y" (centro, en fracción de pantalla: 0.5 = medio).
+El último elemento que entró es el foco y lleva el color de acento; el resto, neutro.
+-->
+<meta charset="utf-8">
+<link rel="stylesheet" href="base.css">
+<style>
+  svg { position: absolute; inset: 0; width: 1920px; height: 1080px; overflow: visible; }
+  .nodo {
+    position: absolute; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    border-radius: 22px; background: var(--superficie); border: 3px solid var(--borde);
+    box-shadow: 0 24px 60px -30px rgba(0, 0, 0, .7);
+  }
+  .nodo .txt { font-weight: 650; letter-spacing: -.015em; white-space: nowrap; }
+  .nodo .det { margin-top: 10px; font-size: 32px; font-weight: 500; color: var(--tenue); white-space: nowrap; }
+  .etq {
+    position: absolute; transform: translate(-50%, -50%); padding: 4px 14px; white-space: nowrap;
+    font-size: 36px; font-weight: 600; color: var(--tenue); background: var(--fondo); border-radius: 8px;
+  }
+</style>
+<script src="base.js"></script>
+<script>
+  const { S, crear, tiempo, resorte, salida, aparecer, contrato, cabecera, medir, clamp } = E;
+  const nodos = (S.nodos || []).map((n, i) => ({ ...n, t0: tiempo(n, 0.4 + i * 0.8) }));
+  const flechas = (S.flechas || []).map((f, i) => ({ ...f, t0: tiempo(f, (nodos[i + 1]?.t0 ?? 1) - 0.3) }));
+  const porId = Object.fromEntries(nodos.map(n => [n.id, n]));
+  for (const f of flechas) {
+    if (!porId[f.de] || !porId[f.a]) throw new Error(`flecha ${f.de} -> ${f.a}: nodo inexistente`);
+  }
+  const AREA = { x0: 140, x1: 1780, y0: 340, y1: 1000 };
+  const NS = 'http://www.w3.org/2000/svg';
+  let dibujarCab;
+
+  // Tamaños y posiciones: una sola vez, con las fuentes ya cargadas.
+  function layout() {
+    let px = 54;
+    const medida = n => {
+      const w = Math.max(medir(n.texto, px, 650), n.detalle ? medir(n.detalle, 32, 500) : 0);
+      return { w: Math.max(300, w + 120), h: n.detalle ? 196 : 150 };
+    };
+    const conCoords = nodos.every(n => n.x != null && n.y != null);
+    if (conCoords) {
+      nodos.forEach(n => Object.assign(n, medida(n), { cx: n.x * 1920, cy: n.y * 1080 }));
+      return px;
+    }
+    // fila: el hueco entre dos nodos tiene que alojar la etiqueta de su flecha
+    const hueco = i => {
+      const f = flechas.find(f => [f.de, f.a].sort().join() === [nodos[i].id, nodos[i + 1].id].sort().join());
+      return Math.max(170, f && f.texto ? medir(f.texto, 36, 600) + 28 + 80 : 0);
+    };
+    for (; px >= 24; px -= 2) {
+      nodos.forEach(n => Object.assign(n, medida(n)));
+      const total = nodos.reduce((s, n) => s + n.w, 0) + nodos.slice(1).reduce((s, _, i) => s + hueco(i), 0);
+      if (total <= AREA.x1 - AREA.x0) break;
+    }
+    const huecos = nodos.slice(1).map((_, i) => hueco(i));
+    const total = nodos.reduce((s, n) => s + n.w, 0) + huecos.reduce((a, b) => a + b, 0);
+    const libre = (AREA.x1 - AREA.x0 - total) / Math.max(1, nodos.length - 1);
+    let x = AREA.x0 + (nodos.length === 1 ? (AREA.x1 - AREA.x0 - total) / 2 : 0);
+    nodos.forEach((n, i) => {
+      n.cx = x + n.w / 2; n.cy = (AREA.y0 + AREA.y1) / 2;
+      x += n.w + (huecos[i] ?? 0) + Math.min(libre, 120);
+    });
+    // si sobró lugar (el tope de 120 por hueco), se centra la fila entera
+    const derecha = nodos.at(-1).cx + nodos.at(-1).w / 2, izquierda = nodos[0].cx - nodos[0].w / 2;
+    const dx = (AREA.x0 + AREA.x1) / 2 - (izquierda + derecha) / 2;
+    nodos.forEach(n => { n.cx += dx; });
+    return px;
+  }
+
+  // punto del borde del rectángulo de n en dirección (dx, dy) desde su centro
+  function borde(n, dx, dy, margen) {
+    const sx = (n.w / 2 + margen) / Math.abs(dx || 1e-9), sy = (n.h / 2 + margen) / Math.abs(dy || 1e-9);
+    const s = Math.min(sx, sy);
+    return [n.cx + dx * s, n.cy + dy * s];
+  }
+
+  contrato([tiempo(S.titulo, 0), ...nodos.map(n => n.t0), ...flechas.map(f => f.t0)], () => {
+    dibujarCab = cabecera(S.titulo, S.kicker).dibujar;
+    const px = layout();
+    const svg = document.createElementNS(NS, 'svg');
+    document.body.appendChild(svg);
+    for (const f of flechas) {
+      const a = porId[f.de], b = porId[f.a];
+      const dx = b.cx - a.cx, dy = b.cy - a.cy, d = Math.hypot(dx, dy);
+      const [x1, y1] = borde(a, dx / d, dy / d, 16), [x2, y2] = borde(b, -dx / d, -dy / d, 22);
+      f.largo = Math.hypot(x2 - x1, y2 - y1);
+      f.linea = document.createElementNS(NS, 'line');
+      Object.entries({ x1, y1, x2, y2, 'stroke-width': 6, 'stroke-linecap': 'round' })
+        .forEach(([k, v]) => f.linea.setAttribute(k, v));
+      f.punta = document.createElementNS(NS, 'path');
+      f.punta.setAttribute('d', 'M -24 -14 L 2 0 L -24 14 Z');
+      f.punta.setAttribute('transform', `translate(${x2} ${y2}) rotate(${Math.atan2(dy, dx) * 180 / Math.PI})`);
+      svg.append(f.linea, f.punta);
+      if (f.texto) {
+        f.etq = crear('div', 'etq', document.body, f.texto);
+        f.etq.dataset.caja = 'flecha ' + f.texto;
+        const nx = -dy / d, ny = dx / d, lado = ny > 0 ? -1 : 1;   // la etiqueta va del lado de arriba
+        f.etq.style.left = ((x1 + x2) / 2 + nx * 40 * lado) + 'px';
+        f.etq.style.top = ((y1 + y2) / 2 + ny * 40 * lado) + 'px';
+      }
+    }
+    for (const n of nodos) {
+      n.el = crear('div', 'nodo');
+      n.el.dataset.caja = 'nodo ' + n.id;
+      Object.assign(n.el.style, { width: n.w + 'px', height: n.h + 'px', left: (n.cx - n.w / 2) + 'px', top: (n.cy - n.h / 2) + 'px' });
+      crear('div', 'txt', n.el, n.texto).style.fontSize = px + 'px';
+      if (n.detalle) crear('div', 'det', n.el, n.detalle);
+    }
+  }, t => {
+    dibujarCab(t);
+    // foco: el elemento (nodo o flecha) que entró más recientemente
+    const entrados = [...nodos, ...flechas].filter(x => t >= x.t0);
+    const foco = entrados.reduce((f, x) => (!f || x.t0 >= f.t0 ? x : f), null);
+    for (const n of nodos) {
+      const v = resorte(t - n.t0);
+      n.el.style.opacity = aparecer(t, n.t0);
+      // sube a su lugar en vez de escalar: scale() sobre la esquina redondeada deja
+      // estado de raster entre cuadros y el mismo t salía con pixeles distintos
+      n.el.style.top = (n.cy - n.h / 2 + (1 - v) * (E.M.subida ?? 28)).toFixed(2) + 'px';
+      n.el.style.borderColor = n === foco ? 'var(--acento)' : 'var(--borde)';
+    }
+    for (const f of flechas) {
+      const p = salida((t - f.t0) / 0.55);
+      const color = f === foco ? 'var(--acento)' : 'var(--tenue)';
+      f.linea.setAttribute('stroke', color);
+      f.linea.setAttribute('stroke-dasharray', `${f.largo} ${f.largo}`);
+      f.linea.setAttribute('stroke-dashoffset', (f.largo * (1 - p)).toFixed(2));
+      f.linea.style.opacity = t >= f.t0 ? 1 : 0;
+      f.punta.setAttribute('fill', color);
+      f.punta.style.opacity = clamp((p - 0.82) / 0.18);
+      if (f.etq) f.etq.style.opacity = aparecer(t, f.t0 + 0.25);
+    }
+  });
+</script>

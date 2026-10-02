@@ -1,0 +1,71 @@
+<!doctype html>
+<!--
+Escena "presentacion": título cinético + puntos que entran de a uno, cada uno en su cue.
+
+spec:
+  {"tipo": "presentacion",
+   "kicker": "Finanzas personales",                    (opcional)
+   "titulo": {"texto": "El interés compuesto", "cue": 0},
+   "subtitulo": {"texto": "...", "cue": "..."},        (opcional; sólo sin puntos)
+   "puntos": [{"texto": "Ganás intereses", "cue": "intereses"}, ...]}
+
+Sin puntos es una portada: el título grande, centrado en vertical.
+-->
+<meta charset="utf-8">
+<link rel="stylesheet" href="base.css">
+<style>
+  .portada { position: absolute; left: 140px; right: 240px; top: 50%; transform: translateY(-50%); }
+  .portada .titulo { font-size: 124px; letter-spacing: -.035em; line-height: 1.02; }
+  .portada .kicker { margin-bottom: 34px; }
+  .barra { width: 96px; height: 8px; border-radius: 4px; background: var(--acento); margin: 44px 0 34px; transform-origin: left; }
+  .sub { display: table; font-size: 44px; font-weight: 500; color: var(--tenue); letter-spacing: -.01em; }
+  .puntos { position: absolute; left: 140px; right: 140px; top: 420px; display: flex; flex-direction: column; gap: 48px; }
+  .punto { display: flex; align-items: baseline; gap: 36px; }
+  .num { width: 72px; flex: none; font-size: 38px; font-weight: 700; color: var(--tenue); }
+  .txt { display: table; font-size: 62px; font-weight: 500; letter-spacing: -.015em; line-height: 1.18; }
+</style>
+<script src="base.js"></script>
+<script>
+  const { S, crear, tiempo, resorte, aparecer, contrato, cabecera, M } = E;
+  const puntos = (S.puntos || []).map((p, i) => ({ ...p, t0: tiempo(p, 0.8 + i * 0.9) }));
+  const portada = !puntos.length;
+  const tTitulo = tiempo(S.titulo, 0);
+  const tSub = S.subtitulo ? tiempo(S.subtitulo, tTitulo + 0.6) : null;
+  let dibujarCab, barra, sub, filas = [];
+
+  contrato([tTitulo, tSub ?? 0, ...puntos.map(p => p.t0)], () => {
+    const cab = cabecera(S.titulo, S.kicker);
+    dibujarCab = cab.dibujar;
+    const header = document.querySelector('.cabecera');
+    if (portada && header) {
+      header.className = 'portada';
+      barra = crear('div', 'barra', header);
+      if (S.subtitulo) { sub = crear('div', 'sub', header, S.subtitulo.texto || S.subtitulo); sub.dataset.caja = 'subtitulo'; }
+    }
+    const lista = crear('section', 'puntos');
+    filas = puntos.map((p, i) => {
+      const fila = crear('div', 'punto', lista);
+      const num = crear('div', 'num', fila, String(i + 1).padStart(2, '0'));
+      const txt = crear('div', 'txt', fila, p.texto);
+      txt.dataset.caja = 'punto ' + (i + 1);
+      return { fila, num, t0: p.t0 };
+    });
+  }, t => {
+    dibujarCab(t);
+    if (barra) {
+      const tb = tTitulo + 0.35;
+      barra.style.transform = `scaleX(${resorte(t - tb).toFixed(4)})`;
+    }
+    if (sub) {
+      sub.style.opacity = aparecer(t, tSub);
+      sub.style.transform = `translateY(${((1 - resorte(t - tSub)) * (M.subida ?? 28)).toFixed(2)}px)`;
+    }
+    // el foco es el último punto que ya entró: su número va en acento
+    const foco = filas.reduce((f, x, i) => (t >= x.t0 ? i : f), -1);
+    filas.forEach((x, i) => {
+      x.fila.style.opacity = aparecer(t, x.t0);
+      x.fila.style.transform = `translateY(${((1 - resorte(t - x.t0)) * (M.subida ?? 28)).toFixed(2)}px)`;
+      x.num.style.color = i === foco ? 'var(--acento)' : 'var(--tenue)';
+    });
+  });
+</script>

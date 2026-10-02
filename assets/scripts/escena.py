@@ -51,10 +51,11 @@ def tiempos_de_cuadros(duracion: float, fps: int) -> list[float]:
     return [i / fps for i in range(n)]
 
 
-def comando_ffmpeg(salida, fps: int) -> list[str]:
+def comando_ffmpeg(salida, fps: int, ancho: int = ANCHO_BASE) -> list[str]:
     """PNGs por stdin -> h264 yuv420p, el mismo formato que los segmentos de editar.py."""
     return ["ffmpeg", "-y", "-loglevel", "error",
             "-f", "image2pipe", "-framerate", str(fps), "-c:v", "png", "-i", "-",
+            *(["-vf", f"scale={ancho}:-2:flags=lanczos"] if ancho != ANCHO_BASE else []),
             "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
             "-r", str(fps), "-an", str(salida)]
 
@@ -148,14 +149,15 @@ def navegador():
 
 
 @contextmanager
-def pagina_de_escena(browser, plantilla, spec: dict, brand: dict, ancho: int = ANCHO_BASE):
+def pagina_de_escena(browser, plantilla, spec: dict, brand: dict):
     """Abre la escena, verifica el contrato y devuelve (page, duracion).
 
-    La página se diseña a 1920x1080 siempre; para previsualizar más chico se baja el
-    device_scale_factor, así el layout es idéntico y sólo cambia la resolución.
+    Siempre a 1920x1080 y escala 1. Con un device_scale_factor fraccionario Chrome
+    NO rasteriza igual entre cargas (medido: a 960 de ancho una de cada cuatro
+    cargas daba otro PNG para el mismo t), y eso rompe "mismo t, mismo cuadro".
+    Para previsualizar más chico escala ffmpeg, no Chrome.
     """
-    page = browser.new_page(viewport={"width": ANCHO_BASE, "height": ALTO_BASE},
-                            device_scale_factor=ancho / ANCHO_BASE)
+    page = browser.new_page(viewport={"width": ANCHO_BASE, "height": ALTO_BASE}, device_scale_factor=1)
     errores = []
     page.on("pageerror", lambda e: errores.append(str(e)))
     try:
@@ -185,9 +187,9 @@ def render(plantilla, spec: dict, salida, brand: dict | None = None, palabras=No
     spec = resolver_spec(spec, palabras)
     brand = brand or cargar_brand(None)
     Path(salida).parent.mkdir(parents=True, exist_ok=True)
-    with navegador() as b, pagina_de_escena(b, plantilla, spec, brand, ancho) as (page, duracion):
+    with navegador() as b, pagina_de_escena(b, plantilla, spec, brand) as (page, duracion):
         tiempos = tiempos_de_cuadros(duracion, fps)
-        ff = subprocess.Popen(comando_ffmpeg(salida, fps), stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+        ff = subprocess.Popen(comando_ffmpeg(salida, fps, ancho), stdin=subprocess.PIPE, stderr=subprocess.PIPE)
         try:
             for t in tiempos:
                 ff.stdin.write(_cuadro(page, t))
@@ -206,7 +208,7 @@ def hoja_contacto(escenas, salida, brand: dict | None = None, columnas: int = 3)
     with tempfile.TemporaryDirectory() as tmp, navegador() as b:
         celdas = []
         for i, (nombre, plantilla, spec) in enumerate(escenas):
-            with pagina_de_escena(b, plantilla, spec, brand, ancho=640) as (page, duracion):
+            with pagina_de_escena(b, plantilla, spec, brand) as (page, duracion):
                 for t in tiempos_contacto(duracion):
                     png = Path(tmp) / f"{i:02d}-{t:.3f}.png"
                     png.write_bytes(_cuadro(page, t))

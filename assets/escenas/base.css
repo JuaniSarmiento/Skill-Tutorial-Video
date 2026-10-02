@@ -1,0 +1,21 @@
+/* Base común de las escenas. Sin transiciones ni animaciones CSS: el tiempo lo maneja seek(t). */
+* { box-sizing: border-box; margin: 0; padding: 0; transition: none !important; animation: none !important; }
+html, body { width: 1920px; height: 1080px; overflow: hidden; }
+body {
+  font-family: var(--fuente);
+  color: var(--texto);
+  background:
+    radial-gradient(1500px 900px at 12% -10%, color-mix(in srgb, var(--superficie) 85%, transparent), transparent 72%),
+    var(--fondo);
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "tnum" 1, "ss01" 1;
+  position: relative;
+}
+.cabecera { position: absolute; left: 140px; top: 112px; right: 140px; }
+.kicker {
+  display: inline-block; margin-bottom: 20px;
+  font-size: 24px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; color: var(--acento);
+}
+.titulo { display: table; font-size: 76px; font-weight: 700; letter-spacing: -.025em; line-height: 1.1; }
+.titulo .palabra { display: inline-block; margin-right: .26em; }
+.titulo .palabra:last-child { margin-right: 0; }

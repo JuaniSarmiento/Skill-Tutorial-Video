@@ -1,0 +1,74 @@
+<!doctype html>
+<!--
+Escena "datos": barras que crecen hasta su valor, cada una en su cue.
+
+spec:
+  {"tipo": "datos",
+   "kicker": "...", "titulo": {"texto": "1.000 pesos al 10 % anual"},
+   "prefijo": "$", "sufijo": "",                     (opcionales, alrededor del número)
+   "barras": [{"etiqueta": "Año 0", "valor": 1000, "cue": "hoy"},
+              {"etiqueta": "Año 30", "valor": 17449, "cue": "treinta", "destacar": true}],
+   "nota": "Fuente: ..."}                              (opcional, abajo a la derecha)
+
+La barra destacada va en el color de acento; el resto, neutras. El número cuenta
+hacia arriba mientras la barra crece. Las barras usan un resorte sin overshoot:
+en un gráfico, pasarse del valor aunque sea un instante es mentir.
+-->
+<meta charset="utf-8">
+<link rel="stylesheet" href="base.css">
+<style>
+  .base { position: absolute; height: 3px; background: var(--borde); border-radius: 2px; }
+  .barra { position: absolute; border-radius: 12px 12px 3px 3px;
+           background: color-mix(in srgb, var(--texto) 20%, var(--fondo)); }
+  .barra.destacada { background: var(--acento); }
+  .valor { position: absolute; transform: translateX(-50%); white-space: nowrap;
+           font-size: 54px; font-weight: 700; letter-spacing: -.02em; }
+  .cat { position: absolute; transform: translateX(-50%); white-space: nowrap;
+         font-size: 36px; font-weight: 500; color: var(--tenue); }
+  .nota { position: absolute; right: 140px; bottom: 52px; font-size: 22px; color: var(--tenue); }
+</style>
+<script src="base.js"></script>
+<script>
+  const { S, crear, tiempo, resorte, aparecer, contrato, cabecera, medir } = E;
+  const barras = (S.barras || []).map((b, i) => ({ ...b, t0: tiempo(b, 0.5 + i * 0.7) }));
+  const maximo = Math.max(1, ...barras.map(b => b.valor));
+  const formato = v => (S.prefijo || '') + Math.round(v).toLocaleString('es-AR') + (S.sufijo || '');
+  const G = { x0: 220, x1: 1700, base: 930, alto: 500 };
+  let dibujarCab;
+
+  contrato([tiempo(S.titulo, 0), ...barras.map(b => b.t0)], () => {
+    dibujarCab = cabecera(S.titulo, S.kicker).dibujar;
+    const slot = (G.x1 - G.x0) / Math.max(1, barras.length);
+    const ancho = Math.min(240, slot * 0.56);
+    // el rótulo de categoría más largo tiene que entrar en su slot
+    const pxCat = Math.min(36, ...barras.map(b => 36 * (slot - 24) / Math.max(1, medir(b.etiqueta, 36, 500))));
+    const linea = crear('div', 'base');
+    Object.assign(linea.style, { left: (G.x0 - 20) + 'px', width: (G.x1 - G.x0 + 40) + 'px', top: G.base + 'px' });
+    barras.forEach((b, i) => {
+      b.cx = G.x0 + slot * (i + 0.5);
+      b.h = Math.max(6, (b.valor / maximo) * G.alto);
+      b.el = crear('div', 'barra' + (b.destacar ? ' destacada' : ''));
+      Object.assign(b.el.style, { left: (b.cx - ancho / 2) + 'px', width: ancho + 'px' });
+      b.val = crear('div', 'valor', document.body, formato(b.valor));
+      b.val.dataset.caja = 'valor ' + b.etiqueta;
+      b.val.style.left = b.cx + 'px';
+      b.cat = crear('div', 'cat', document.body, b.etiqueta);
+      b.cat.dataset.caja = 'categoria ' + b.etiqueta;
+      Object.assign(b.cat.style, { left: b.cx + 'px', top: (G.base + 24) + 'px', fontSize: pxCat + 'px' });
+    });
+    if (S.nota) crear('div', 'nota', document.body, S.nota).dataset.caja = 'nota';
+  }, t => {
+    dibujarCab(t);
+    for (const b of barras) {
+      const p = resorte(t - b.t0, 1, 1.5);
+      // alto y top reales, no scaleY: un transform sobre la esquina redondeada deja
+      // estado de raster entre cuadros y el mismo t salía con un pixel distinto
+      const h = (b.h * p).toFixed(2);
+      Object.assign(b.el.style, { height: h + 'px', top: (G.base - h) + 'px', opacity: t >= b.t0 ? 1 : 0 });
+      b.val.textContent = formato(b.valor * p);
+      b.val.style.top = (G.base - b.h * p - 76) + 'px';
+      b.val.style.opacity = aparecer(t, b.t0);
+      b.cat.style.opacity = aparecer(t, b.t0);
+    }
+  });
+</script>
