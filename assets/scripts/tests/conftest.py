@@ -8,3 +8,11 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
+
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers",
+        "integracion: abre Chrome de verdad y renderiza (necesita playwright: "
+        "uv run --with pytest --with playwright ...). Filtrar con -m 'not integracion'.",
+    )
