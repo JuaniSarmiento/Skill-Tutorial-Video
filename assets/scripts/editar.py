@@ -20,7 +20,7 @@ uso:
 
 Un segmento con "escena": {"tipo": "diagrama|presentacion|datos", ...} no se corta del crudo:
 se renderiza con el motor de escenas (escena.py) y dura su slot, igual que los demás. Con
-escenas, editar.py corre con: uv run --with playwright --with faster-whisper python editar.py ...
+escenas, editar.py corre con: uv run --with playwright --with faster-whisper --with "av<19" python editar.py ...
 voces: argentina (PRINCIPAL: Fish, femenina argentina, speed 0.80, la mas expresiva medida) | joven (Fish, "Narrador Joven argentino") | profe (Fish, Profesora Argentina, la mas plana) | daniela (Piper local) | juani (wavs importados en videos/<vNN>/juani/NN.wav) | elevenlabs (API, key en ~/.config/elevenlabs/api_key) | fish (Fish Audio, Profesora Argentina, key en ~/.config/fish/api_key)
 """
 import json

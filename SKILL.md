@@ -344,7 +344,7 @@ $S/cmd.sh v07-ej1 /opsx-apply c-01-nombre "opsx-apply C-01"
 # remux + editar + verificar
 for f in raw/*.mkv; do ffmpeg -y -i "$f" -c copy -movflags +faststart "${f%.mkv}.mp4"; done
 $S/editar.py imagen v01 argentina && $S/editar.py voz v01 argentina   # argentina = voz principal (default)
-uv run --with faster-whisper python $S/verificar_voz.py argentina v01
+uv run --with faster-whisper --with "av<19" python $S/verificar_voz.py argentina v01
 ffmpeg -i videos/v01/final-argentina.mp4 -af silencedetect=noise=-40dB:d=0.9 -f null - 2>&1 | grep -c silence_end
 
 # escenas (Chrome instalado, no baja navegadores)

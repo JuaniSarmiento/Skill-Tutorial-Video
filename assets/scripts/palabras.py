@@ -12,7 +12,7 @@ Una "cue" se escribe de tres formas:
   "cuando dice 'base de datos'"   la misma frase, en la forma larga del guion
   1.5                             un tiempo en segundos, para cuando no hay voz
 
-uso: uv run --with faster-whisper python palabras.py <audio> [salida.json] [--modelo base]
+uso: uv run --with faster-whisper --with "av<19" python palabras.py <audio> [salida.json] [--modelo base]
 """
 import json
 import re

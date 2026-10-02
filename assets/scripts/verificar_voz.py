@@ -5,7 +5,7 @@ Transcribe cada wav con Whisper y lo compara con el texto del guion:
 - repeticiones consecutivas ("modelo modelo") que no están en el texto original
 - transcripciones mucho más largas que el texto
 
-uso: uv run --with faster-whisper python verificar_voz.py <voz> [vNN ...]
+uso: uv run --with faster-whisper --with "av<19" python verificar_voz.py <voz> [vNN ...]
 imprime los tramos sospechosos; con --borrar elimina esos wav para que se regeneren.
 """
 import json
