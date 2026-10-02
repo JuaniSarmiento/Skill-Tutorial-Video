@@ -185,6 +185,50 @@ def test_la_palabra_dicha_de_verdad_se_sigue_encontrando(dicho, cue, t):
     assert palabras.resolver_cue(_oido(dicho), cue) == t
 
 
+# --- error en palabra corta, sólo con un ancla exacta -------------------------
+# Transcripción REAL del ejemplo (Fish + Whisper base, QA2 02/10), segmentos 3 y 4.
+# Regla: si la cue tiene OTRA palabra de 4+ letras que coincide exacto (el ancla),
+# se tolera 1 error en una palabra corta y hasta 2 en una larga. "la"/"el" no anclan.
+
+SEG3 = ("Hablamos números. Hoy ponés mil pesos al 10 % anual. Pasada una década, "
+        "tenés 2 .600. A las 2 décadas, 6 .700 y a las 3 décadas, más de 17 .000.")
+SEG4 = ("Para llevarte, empezar tembrano pesan las que poner mucho porque el que "
+        "multiplica es el tiempo.")
+
+
+def _resuelve(voz, cue):
+    try:
+        return palabras.resolver_cue(voz, cue)
+    except ValueError:
+        return None
+
+
+@pytest.mark.parametrize("dicho, cue, t", [
+    (SEG4, "más que poner", 2.5),       # "las que poner": ancla "poner"
+    (SEG3, "Hagamos números", 0.0),     # "Hablamos" (2 errores, larga): ancla "números"
+    (SEG3, "17000", 14.5),              # Whisper escribió "17 .000"
+    (SEG3, "17.000", 14.5),
+    (SEG3, "más de 17000", 13.5),
+    (SEG3, "2600", 7.0),                # "2 .600"
+    ("Ahora son las cara", "más cara", 1.5),   # ancla de justo 4 letras
+])
+def test_un_error_se_tolera_si_otra_palabra_de_la_cue_coincide_exacto(dicho, cue, t):
+    assert _resuelve(_oido(dicho), cue) == t
+
+
+@pytest.mark.parametrize("dicho, cue", [
+    (SEG4, "pesa más"),                  # "pesan las": dos errores y ningún ancla (costo declarado)
+    ("Ahora son las que", "más que"),    # "que" tiene 3 letras: no ancla
+    ("compró lacasa", "la tasa"),        # pegadas: "la" no ancla a "casa"
+    ("fue elsolo", "el sol"),
+    (SEG3, "Hacemos números"),           # contra "Hablamos": 3 errores, ni con ancla
+    ("Tenés 2 .700", "2600"),            # un número con un dígito distinto es otro número
+])
+def test_sin_ancla_exacta_o_con_demasiados_errores_la_cue_falla(dicho, cue):
+    with pytest.raises(ValueError, match="no se dice"):
+        palabras.resolver_cue(_oido(dicho), cue)
+
+
 def test_una_frase_repetida_mas_veces_de_las_que_se_dice_falla():
     with pytest.raises(ValueError, match="no se dice"):
         palabras.resolver_cues(_oido("la base crece"), ["la base", "la base"])
