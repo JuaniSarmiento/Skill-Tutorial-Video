@@ -1,0 +1,144 @@
+"""Segmentos de guion que son escenas en vez de cortes del crudo (editar.py).
+
+Un segmento con "escena": {"tipo": ..., ...} se renderiza con el motor de
+escenas y dura exactamente su slot, igual que un tramo de pantalla. Las cues
+del spec se resuelven contra la voz de ESE segmento, que en el slot arranca
+después de LEAD segundos de silencio.
+"""
+import json
+import subprocess
+
+import pytest
+
+import editar
+import escena
+import palabras
+
+
+@pytest.fixture
+def raiz(tmp_path, monkeypatch):
+    monkeypatch.setattr(editar, "ROOT", tmp_path)
+    (tmp_path / "guion").mkdir()
+    return tmp_path
+
+
+def _guion(raiz, vid, g):
+    (raiz / "guion" / f"{vid}.json").write_text(json.dumps(g))
+
+
+ESCENA = {"tipo": "presentacion", "titulo": {"texto": "Hola"},
+          "puntos": [{"texto": "Sol", "cue": "el sol"}, {"texto": "Fin", "cue": 1.0}]}
+VOZ = [{"palabra": "Mirá", "inicio": 0.0, "fin": 0.3},
+       {"palabra": "el", "inicio": 0.3, "fin": 0.4},
+       {"palabra": "sol.", "inicio": 0.4, "fin": 0.9}]
+
+
+# --- crudos ------------------------------------------------------------------
+
+def test_un_guion_solo_de_escenas_no_necesita_crudo(raiz):
+    g = {"segmentos": [{"escena": ESCENA, "texto": "Mirá el sol."}]}
+    assert editar.crudo_faltante(g) is None
+
+
+def test_un_segmento_de_pantalla_sin_crudo_sigue_frenando(raiz):
+    g = {"segmentos": [{"escena": ESCENA, "texto": "a"}, {"inicio": 0, "fin": 3, "texto": "b"}]}
+    assert editar.crudo_faltante(g) == (1, None)
+
+
+def test_un_crudo_que_no_existe_se_reporta_con_su_ruta(raiz):
+    g = {"raw": "raw/v01.mp4", "segmentos": [{"inicio": 0, "fin": 3, "texto": "b"}]}
+    assert editar.crudo_faltante(g) == (0, raiz / "raw/v01.mp4")
+
+
+# --- spec de la escena -------------------------------------------------------
+
+def test_la_escena_dura_el_slot_y_sus_cues_caen_donde_suena_la_palabra():
+    spec = editar.spec_de_escena({"escena": ESCENA, "texto": "Mirá el sol."}, 4.2, VOZ)
+
+    assert spec["duracion"] == 4.2
+    assert spec["puntos"][0]["t"] == pytest.approx(0.3 + editar.LEAD)   # "el sol" suena a 0.3 del wav
+    assert spec["puntos"][1]["t"] == 1.0                                 # en segundos: desde el inicio del slot
+
+
+def test_una_escena_sin_tipo_falla_diciendo_cual_falta():
+    with pytest.raises(ValueError, match="tipo"):
+        editar.spec_de_escena({"escena": {"titulo": "x"}, "texto": "x"}, 3.0, VOZ)
+
+
+def test_la_escena_del_guion_no_se_modifica():
+    seg = {"escena": json.loads(json.dumps(ESCENA)), "texto": "Mirá el sol."}
+    editar.spec_de_escena(seg, 4.2, VOZ)
+    assert seg["escena"] == ESCENA
+
+
+# --- palabras de la voz, cacheadas -------------------------------------------
+
+def test_las_palabras_se_transcriben_una_vez_y_se_cachean_junto_al_wav(tmp_path, monkeypatch):
+    wav = tmp_path / "03.wav"
+    wav.write_bytes(b"x")
+    llamadas = []
+    monkeypatch.setattr(palabras, "transcribir", lambda a, modelo=None: llamadas.append(a) or VOZ)
+
+    assert editar.palabras_de_voz(wav) == VOZ
+    assert editar.palabras_de_voz(wav) == VOZ
+    assert len(llamadas) == 1
+    assert json.loads((tmp_path / "03.palabras.json").read_text()) == VOZ
+
+
+def test_si_la_voz_cambio_despues_del_cache_se_vuelve_a_transcribir(tmp_path, monkeypatch):
+    import os
+    wav = tmp_path / "03.wav"
+    wav.write_bytes(b"x")
+    cache = tmp_path / "03.palabras.json"
+    cache.write_text(json.dumps([{"palabra": "viejo", "inicio": 0, "fin": 1}]))
+    os.utime(cache, (1_000_000, 1_000_000))            # el cache es más viejo que el wav
+    monkeypatch.setattr(palabras, "transcribir", lambda a, modelo=None: VOZ)
+
+    assert editar.palabras_de_voz(wav) == VOZ
+
+
+# --- build_segment -----------------------------------------------------------
+
+def test_un_segmento_de_escena_se_renderiza_con_el_motor_y_no_corta_el_crudo(raiz, monkeypatch):
+    llamadas = []
+    monkeypatch.setattr(escena, "render", lambda plantilla, spec, salida, brand=None, **kw:
+                        llamadas.append((plantilla, spec, salida, brand)) or spec["duracion"])
+    monkeypatch.setattr(editar, "run", lambda cmd: pytest.fail(f"no debía llamar a ffmpeg: {cmd[:4]}"))
+    out = raiz / "seg" / "02.mp4"
+
+    editar.build_segment("v01", None, {"escena": ESCENA, "texto": "Mirá el sol."}, 4.2, out, VOZ)
+
+    (plantilla, spec, salida, brand), = llamadas
+    assert plantilla.name == "presentacion.html"
+    assert spec["duracion"] == 4.2
+    assert salida == out
+    assert brand["colores"]["acento"] == escena.cargar_brand(None)["colores"]["acento"]
+
+
+def test_el_brand_de_la_serie_vive_en_la_raiz_del_tutorial(raiz, monkeypatch):
+    (raiz / "brand.json").write_text(json.dumps({"colores": {"acento": "#00AA88"}}))
+    llamadas = []
+    monkeypatch.setattr(escena, "render", lambda plantilla, spec, salida, brand=None, **kw: llamadas.append(brand))
+
+    editar.build_segment("v01", None, {"escena": ESCENA, "texto": "x"}, 4.2, raiz / "o.mp4", VOZ)
+
+    assert llamadas[0]["colores"]["acento"] == "#00AA88"
+
+
+# --- editar.py escenas: preparar sin renderizar ------------------------------
+
+def test_escenas_deja_cada_spec_resuelto_para_la_hoja_de_contacto(raiz, monkeypatch):
+    wav = raiz / "voz.wav"
+    subprocess.run(["ffmpeg", "-loglevel", "error", "-f", "lavfi", "-i", "sine=d=2", str(wav)], check=True)
+    monkeypatch.setattr(editar, "voice_wav", lambda vid, voz, i, texto: wav)
+    monkeypatch.setattr(palabras, "transcribir", lambda a, modelo=None: VOZ)
+    _guion(raiz, "v09", {"segmentos": [{"escena": ESCENA, "texto": "Mirá el sol."},
+                                       {"escena": {**ESCENA, "tipo": "datos", "barras": []}, "texto": "x"}]})
+
+    rutas = editar.escenas("v09", "argentina")
+
+    assert [r.name for r in rutas] == ["00.json", "01.json"]
+    spec = json.loads(rutas[0].read_text())
+    assert spec["tipo"] == "presentacion"
+    assert spec["duracion"] > 2.0 + editar.LEAD          # el slot se mide con la voz
+    assert spec["puntos"][0]["t"] == pytest.approx(0.3 + editar.LEAD)

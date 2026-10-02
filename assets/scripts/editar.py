@@ -16,6 +16,11 @@ uso:
   editar.py imagen  <vNN> [voz]      arma videos/<vNN>/video-<voz>.mp4 con slots medidos con esa voz (sin silencios de relleno)
   editar.py voz     <vNN> <voz>      genera videos/<vNN>/voz-<voz>.wav y final-<voz>.mp4 (+ .srt)
   editar.py exportar <vNN>           exporta textos por segmento para generar voces fuera (Colab)
+  editar.py escenas <vNN> [voz]      deja videos/<vNN>/escenas/NN.json listos para la hoja de contacto (no renderiza)
+
+Un segmento con "escena": {"tipo": "diagrama|presentacion|datos", ...} no se corta del crudo:
+se renderiza con el motor de escenas (escena.py) y dura su slot, igual que los demás. Con
+escenas, editar.py corre con: uv run --with playwright --with faster-whisper python editar.py ...
 voces: argentina (PRINCIPAL: Fish, femenina argentina, speed 0.80, la mas expresiva medida) | joven (Fish, "Narrador Joven argentino") | profe (Fish, Profesora Argentina, la mas plana) | daniela (Piper local) | juani (wavs importados en videos/<vNN>/juani/NN.wav) | elevenlabs (API, key en ~/.config/elevenlabs/api_key) | fish (Fish Audio, Profesora Argentina, key en ~/.config/fish/api_key)
 """
 import json
@@ -227,7 +232,7 @@ def voice_wav(vid: str, voz: str, idx: int, text: str) -> Path:
     return out
 
 
-def build_segment(vid: str, raw: Path, seg: dict, slot: float, out: Path) -> None:
+def build_segment(vid: str, raw: Path, seg: dict, slot: float, out: Path, voz_palabras=None) -> None:
     """Arma el tramo de video de un segmento y lo deja durando exactamente `slot`.
 
     El segmento puede traer su propio "raw": un tutorial largo se graba por
@@ -235,6 +240,12 @@ def build_segment(vid: str, raw: Path, seg: dict, slot: float, out: Path) -> Non
     la toma entera. Con `raw` por segmento se regraba solo ese archivo.
     """
     fps = 30
+    if es_escena(seg):
+        import escena
+        spec = spec_de_escena(seg, slot, voz_palabras or [])
+        brand = escena.cargar_brand(ROOT / "brand.json" if (ROOT / "brand.json").exists() else None)
+        escena.render(escena.ruta_plantilla(spec["tipo"]), spec, out, brand=brand, fps=fps)
+        return
     if seg.get("raw"):
         raw = ROOT / seg["raw"]
     if seg.get("tipo") == "titulo":
@@ -282,27 +293,97 @@ def build_segment(vid: str, raw: Path, seg: dict, slot: float, out: Path) -> Non
     tmp.unlink()
 
 
-def imagen(vid: str, voz_name: str = "argentina") -> None:
-    g = load(vid)
+def es_escena(seg: dict) -> bool:
+    return bool(seg.get("escena"))
+
+
+def crudo_faltante(g: dict):
+    """(índice, ruta) del primer segmento de pantalla cuyo crudo no existe, o None.
+
+    Los títulos y las escenas no usan crudo: un guion hecho sólo de escenas no lo necesita.
+    """
     raw = ROOT / g["raw"] if g.get("raw") else None
-    # aviso temprano: un crudo que falta recien se nota a mitad del render
     for i, s in enumerate(g["segmentos"]):
-        if s.get("tipo") == "titulo":
+        if s.get("tipo") == "titulo" or es_escena(s):
             continue
         r = ROOT / s["raw"] if s.get("raw") else raw
         if r is None or not r.exists():
-            sys.exit(f"  ABORTADO: el segmento {i:02d} apunta a un crudo que no existe: {r}")
-    work = ROOT / "videos" / vid
-    (work / "seg").mkdir(parents=True, exist_ok=True)
-    slots = []
-    for i, seg in enumerate(g["segmentos"]):
+            return i, r
+    return None
+
+
+def palabras_de_voz(wav: Path) -> list[dict]:
+    """Tiempos por palabra del wav, cacheados en NN.palabras.json (se rehacen si la voz cambió)."""
+    import palabras
+    cache = wav.with_suffix(".palabras.json")
+    if cache.exists() and cache.stat().st_mtime >= wav.stat().st_mtime:
+        return json.loads(cache.read_text())
+    out = palabras.transcribir(wav)
+    cache.write_text(json.dumps(out, ensure_ascii=False))
+    return out
+
+
+def spec_de_escena(seg: dict, slot: float, voz_palabras: list[dict]) -> dict:
+    """Spec listo para el motor: dura el slot y cada cue tiene su t dentro del slot.
+
+    La voz arranca LEAD segundos después del inicio del slot, así que los tiempos de
+    las palabras se corren LEAD. Una cue en segundos ya es relativa al slot.
+    """
+    import escena
+    spec = seg["escena"]
+    if not spec.get("tipo"):
+        raise ValueError(f"la escena del segmento {seg.get('texto', '')[:40]!r} no dice su tipo "
+                         "(diagrama, presentacion, datos)")
+    corridas = [{**p, "inicio": p["inicio"] + LEAD, "fin": p["fin"] + LEAD} for p in voz_palabras]
+    return escena.resolver_spec({**spec, "duracion": slot}, corridas)
+
+
+def preparar(vid: str, voz_name: str) -> list[tuple[dict, float, list | None]]:
+    """Genera (o reusa) la voz de cada segmento y mide su slot: [(seg, slot, palabras)].
+
+    Las palabras sólo se transcriben para los segmentos de escena, que las necesitan
+    para resolver sus cues.
+    """
+    tramos = []
+    for i, seg in enumerate(load(vid)["segmentos"]):
         wav = voice_wav(vid, voz_name, i, seg["texto"])
         voice = duration(wav)
         cola = 0.6 if FISH_SPEED.get(voz_name, 0.8) >= 1.0 else (1.0 if voz_name in FISH_LENTAS else TAIL)
         slot = round(max(seg.get("min", 0), voice + LEAD + cola), 2)
-        slots.append(slot)
-        build_segment(vid, raw, seg, slot, work / "seg" / f"{i:02d}.mp4")
+        tramos.append((seg, slot, palabras_de_voz(wav) if es_escena(seg) else None))
         print(f"  seg {i:02d}: voz {voice:5.1f}s -> slot {slot:5.1f}s")
+    return tramos
+
+
+def escenas(vid: str, voz_name: str = "argentina") -> list[Path]:
+    """Deja en videos/<vNN>/escenas/NN.json el spec resuelto de cada escena, SIN renderizar.
+
+    Es el paso previo a la hoja de contacto: los slots y las cues ya son los del render.
+    """
+    out = ROOT / "videos" / vid / "escenas"
+    out.mkdir(parents=True, exist_ok=True)
+    rutas = []
+    for i, (seg, slot, pal) in enumerate(preparar(vid, voz_name)):
+        if es_escena(seg):
+            r = out / f"{i:02d}.json"
+            r.write_text(json.dumps(spec_de_escena(seg, slot, pal), ensure_ascii=False, indent=1))
+            rutas.append(r)
+    return rutas
+
+
+def imagen(vid: str, voz_name: str = "argentina") -> None:
+    g = load(vid)
+    raw = ROOT / g["raw"] if g.get("raw") else None
+    # aviso temprano: un crudo que falta recien se nota a mitad del render
+    falta = crudo_faltante(g)
+    if falta:
+        sys.exit(f"  ABORTADO: el segmento {falta[0]:02d} apunta a un crudo que no existe: {falta[1]}")
+    work = ROOT / "videos" / vid
+    (work / "seg").mkdir(parents=True, exist_ok=True)
+    slots = []
+    for i, (seg, slot, pal) in enumerate(preparar(vid, voz_name)):
+        slots.append(slot)
+        build_segment(vid, raw, seg, slot, work / "seg" / f"{i:02d}.mp4", pal)
     (work / f"slots-{voz_name}.json").write_text(json.dumps(slots))
     lst = work / "seg" / "lista.txt"
     lst.write_text("".join(f"file '{i:02d}.mp4'\n" for i in range(len(slots))))
@@ -375,5 +456,9 @@ if __name__ == "__main__":
         voz(vid, sys.argv[3])
     elif accion == "exportar":
         exportar(vid)
+    elif accion == "escenas":
+        rutas = escenas(vid, sys.argv[3] if len(sys.argv) > 3 else "argentina")
+        print("hoja de contacto: uv run --with playwright python escena.py contacto "
+              + " ".join(str(r) for r in rutas) + f" -o {ROOT / 'videos' / vid / 'contacto.png'}")
     else:
         sys.exit(__doc__)
