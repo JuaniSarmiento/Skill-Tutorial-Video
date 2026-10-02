@@ -108,3 +108,12 @@ def test_transcribir_redondea_los_tiempos_a_milisegundos():
 def test_una_cue_sin_palabras_es_un_error_y_no_el_segundo_cero(cue):
     with pytest.raises(ValueError, match="vacía"):
         palabras.resolver_cue(TRANSCRIPCION, cue)
+
+
+def test_las_cues_no_tienen_que_venir_en_el_orden_en_que_se_dicen():
+    # un diagrama lista nodos y despues flechas, pero la voz los intercala
+    assert palabras.resolver_cues(TRANSCRIPCION, ["base de datos", "interés"]) == [1.80, 0.12]
+
+
+def test_la_misma_frase_repetida_toma_la_aparicion_siguiente_aunque_haya_otras_en_medio():
+    assert palabras.resolver_cues(TRANSCRIPCION, ["base", "crecer", "base"]) == [1.80, 1.30, 3.00]

@@ -65,19 +65,21 @@ def resolver_cue(palabras: list[dict], cue, desde: float = 0.0) -> float:
 
 
 def resolver_cues(palabras: list[dict], cues: list) -> list[float]:
-    """Resuelve una lista de cues EN ORDEN: cada frase se busca después de la anterior.
+    """Resuelve varias cues. El orden de la lista NO tiene que ser el orden en que se dicen.
 
-    Así dos elementos nombrados igual ("la base", "la base") toman la primera y la
-    segunda vez que se dice, en vez de caer los dos en la primera.
+    Un diagrama lista sus nodos y después sus flechas, pero la voz los intercala.
+    Cada frase se busca sola; si la misma frase se repite ("la base", "la base"),
+    cada repetición toma la aparición siguiente a la anterior de ESA frase.
     """
-    tiempos, cursor = [], 0
+    tiempos, ultima = [], {}
     for cue in cues:
         if isinstance(cue, (int, float)):
             tiempos.append(float(cue))
             continue
-        i = _buscar(palabras, cue, cursor)
+        clave = tuple(_frase(cue))
+        i = _buscar(palabras, cue, ultima.get(clave, -1) + 1)
+        ultima[clave] = i
         tiempos.append(palabras[i]["inicio"])
-        cursor = i + len(_frase(cue))
     return tiempos
 
 
