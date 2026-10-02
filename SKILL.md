@@ -54,7 +54,9 @@ pueden mezclar con segmentos de pantalla en el mismo guion. Ejemplo completo, si
   poner") y hasta 2 en una de 6+ ("Hagamos números" ← "Hablamos números"). Una cue
   de una sola palabra corta y los números van exactos ("sí"≠"sin", "10"≠"100"). Los
   números se comparan en dígitos: "17 .000", "17.000", "17000" y "diecisiete mil" son
-  el mismo ("por ciento" no se convierte). **Costo**: dos errores sin ancla no se
+  el mismo ("por ciento" no se convierte). Sólo se unen los miles con punto y
+  exactamente tres dígitos detrás: "100, 200" y "3 100" son dos números, y una coma
+  entre dígitos es decimal ("2,500" es dos coma cinco y no matchea "2500"). **Costo**: dos errores sin ancla no se
   resuelven ("pesa más" ← "pesan las"). **Nunca anclan** (`NO_ANCLAN` en `palabras.py`):
   los artículos (el, la, los, las, lo, un, una, unos, unas), las contracciones al y del,
   y los demostrativos (este, ese, aquel y sus formas). Van delante de cualquier
