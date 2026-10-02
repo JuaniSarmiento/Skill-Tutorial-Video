@@ -181,7 +181,7 @@ El último elemento que entró es el foco y lleva el color de acento; el resto, 
     for (const n of nodos) {
       const v = resorte(t - n.t0);
       n.el.style.opacity = aparecer(t, n.t0);
-      // sube a su lugar en vez de escalar (regla de SKILL.md: sin transform: scale)
+      // sube a su lugar desde un poco más abajo
       n.el.style.top = (n.cy - n.h / 2 + (1 - v) * (E.M.subida ?? 28)).toFixed(2) + 'px';
       n.el.style.borderColor = n === foco ? 'var(--acento)' : 'var(--borde)';
     }

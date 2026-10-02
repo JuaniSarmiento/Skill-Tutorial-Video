@@ -65,11 +65,14 @@ pueden mezclar con segmentos de pantalla en el mismo guion. Ejemplo completo, si
 - **Plantilla propia**: un HTML con `window.DURATION` y `async window.seek(t)` donde todo es
   función pura de `t` (sin `Date.now`, timers, `requestAnimationFrame` ni transiciones CSS).
   `escena.py render` falla claro si falta el contrato o si el JS tira un error.
-- **El motor repinta la página entera en cada cuadro** (saca el `body` del layout y lo
-  vuelve a meter después de `seek`). Sin eso Chrome repinta sólo lo que cambió, y una
-  esquina redondeada quieta conserva los pixeles del primer cuadro en que se dibujó: el
-  mismo `t` salía distinto según el orden de render (medido 02/10: 14 de 27 cuadros en la
-  portada). Igual, en una plantilla: nada de `transform: scale`; mover con `top`/`height`.
+- **El motor saca el `body` del layout y lo vuelve a meter después de cada `seek`**, y
+  eso es lo que hace determinista el render. Sin ese paso, el mismo `t` salía distinto
+  según el orden de los cuadros (medido 02/10: 14 de 27 cuadros en la portada, 11 de 27
+  en `datos`); con él, salen iguales. Los píxeles que cambiaban eran el borde
+  antialiaseado, del lado quieto, de un elemento con `border-radius` que cambia de tamaño
+  (el fondo de una barra que crece, el extremo izquierdo de una que se ensancha), por 1 a
+  10 niveles. `transform: scale` no era la causa: con el relayout, una barra animada con
+  `scaleX`/`scaleY` también sale igual en cualquier orden.
   Y Chrome a escala fraccionaria tampoco es determinista: el motor captura siempre a
   1920x1080 y achica con ffmpeg.
 - **`av<19`**: la faster-whisper actual rompe con `av` 19 (`metadata_errors`). Va pineado en

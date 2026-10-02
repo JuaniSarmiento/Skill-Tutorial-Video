@@ -98,7 +98,7 @@ Si los números no entran ni a 24 px, la escena falla en vez de pisarlos.
     dibujarCab(t);
     for (const b of barras) {
       const p = resorte(t - b.t0, 1, 1.5);
-      // alto y top reales, no scaleY (regla de SKILL.md: sin transform: scale)
+      // la barra crece desde la línea de cero: hacia arriba, o hacia abajo si es negativa
       const h = b.h * p;
       const top = b.valor < 0 ? cero : cero - h;
       Object.assign(b.el.style, { height: h.toFixed(2) + 'px', top: top.toFixed(2) + 'px', opacity: t >= b.t0 ? 1 : 0 });

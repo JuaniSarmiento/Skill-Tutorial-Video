@@ -68,7 +68,6 @@ entran, la escena falla en vez de dejar puntos fuera de pantalla.
     dibujarCab(t);
     if (barra) {
       const tb = tTitulo + 0.35;
-      // ancho real, no scaleX (regla de SKILL.md: sin transform: scale)
       barra.style.width = (96 * resorte(t - tb)).toFixed(2) + 'px';
     }
     if (sub) {
