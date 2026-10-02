@@ -98,6 +98,20 @@ def test_si_la_voz_cambio_despues_del_cache_se_vuelve_a_transcribir(tmp_path, mo
     assert editar.palabras_de_voz(wav) == VOZ
 
 
+def test_un_wav_con_otro_contenido_pero_fecha_vieja_se_vuelve_a_transcribir(tmp_path, monkeypatch):
+    # cp -p o el unzip del export de Colab dejan la fecha vieja: la fecha no dice si la voz cambió
+    import os
+    wav = tmp_path / "03.wav"
+    wav.write_bytes(b"voz vieja")
+    monkeypatch.setattr(palabras, "transcribir",
+                        lambda a, modelo=None: [{"palabra": a.read_bytes().decode(), "inicio": 0, "fin": 1}])
+    editar.palabras_de_voz(wav)
+    wav.write_bytes(b"voz nueva")
+    os.utime(wav, (1_000_000, 1_000_000))
+
+    assert editar.palabras_de_voz(wav)[0]["palabra"] == "voz nueva"
+
+
 # --- build_segment -----------------------------------------------------------
 
 def test_un_segmento_de_escena_se_renderiza_con_el_motor_y_no_corta_el_crudo(raiz, monkeypatch):
