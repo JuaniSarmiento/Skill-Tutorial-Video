@@ -465,7 +465,10 @@ if __name__ == "__main__":
         exportar(vid)
     elif accion == "escenas":
         rutas = escenas(vid, sys.argv[3] if len(sys.argv) > 3 else "argentina")
-        print("hoja de contacto: uv run --with playwright python escena.py contacto "
-              + " ".join(str(r) for r in rutas) + f" -o {ROOT / 'videos' / vid / 'contacto.png'}")
+        if not rutas:
+            print(f"{vid}: el guion no tiene escenas: no hay nada que revisar antes del render")
+        else:   # ruta absoluta: el comando se copia y se corre desde la raíz del tutorial
+            print(f"hoja de contacto: uv run --with playwright python {Path(__file__).resolve().parent / 'escena.py'} contacto "
+                  + " ".join(str(r) for r in rutas) + f" -o {ROOT / 'videos' / vid / 'contacto.png'}")
     else:
         sys.exit(__doc__)

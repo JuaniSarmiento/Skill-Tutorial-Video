@@ -271,11 +271,16 @@ def _cli(argv) -> None:
         p.add_argument("--brand")
         p.add_argument("--palabras", help="palabras.json de la voz, para cues de texto")
     a = ap.parse_args(argv)
+    if a.accion == "render":
+        if a.duracion is not None and a.duracion <= 0:
+            ap.error(f"--duracion tiene que ser mayor que 0 (vino {a.duracion})")
+        if a.ancho <= 0 or a.ancho % 2:
+            ap.error(f"--ancho tiene que ser un número par (vino {a.ancho}): h264 yuv420p no acepta impares")
     brand = cargar_brand(a.brand)
     voz = json.loads(Path(a.palabras).read_text()) if a.palabras else None
     if a.accion == "render":
         spec = json.loads(Path(a.spec).read_text())
-        if a.duracion:
+        if a.duracion is not None:
             spec["duracion"] = a.duracion
         d = render(ruta_plantilla(a.plantilla), spec, a.salida, brand, voz, a.fps, a.ancho)
         print(f"{a.salida}: {d:.2f} s")
@@ -283,6 +288,8 @@ def _cli(argv) -> None:
         escenas = []
         for s in a.specs:
             spec = json.loads(Path(s).read_text())
+            if not spec.get("tipo"):
+                ap.error(f"{s} no dice su 'tipo' (diagrama, presentacion, datos)")
             escenas.append((Path(s).stem + " " + spec["tipo"], ruta_plantilla(spec["tipo"]),
                             resolver_spec(spec, voz)))
         print(hoja_contacto(escenas, a.salida, brand, a.columnas))
