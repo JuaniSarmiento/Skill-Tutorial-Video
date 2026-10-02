@@ -14,8 +14,9 @@ La barra destacada va en el color de acento; el resto, neutras. El número cuent
 hacia arriba mientras la barra crece. Las barras usan un resorte sin overshoot:
 en un gráfico, pasarse del valor aunque sea un instante es mentir.
 
-El número se muestra con los decimales que trae el dato (3.5 -> "3,5"), en formato
-es-AR. Un negativo cuelga debajo de la línea de cero y un cero no tiene barra. Una
+El número se muestra con los decimales que trae el dato (3.5 -> "3,5"; hasta 6, y
+sin el ruido de coma flotante: 0.1 + 0.2 -> "0,3"), en formato es-AR, con el signo
+antes del prefijo ("-$500"). Un valor que se vería "0" sin serlo (1e-7) es un error. Un negativo cuelga debajo de la línea de cero y un cero no tiene barra. Una
 barra sin `valor` numérico es un error: dibujar "NaN" o inventar un cero es mentir.
 Si los números no entran ni a 24 px, la escena falla en vez de pisarlos.
 -->
@@ -40,12 +41,23 @@ Si los números no entran ni a 24 px, la escena falla en vez de pisarlos.
   for (const b of barras) {
     if (typeof b.valor !== 'number' || !Number.isFinite(b.valor))
       throw new Error(`la barra ${JSON.stringify(b.etiqueta)} no tiene un valor numérico (vino ${JSON.stringify(b.valor)})`);
-    const m = /\.(\d+)$/.exec(String(b.valor));
-    b.dec = m ? Math.min(m[1].length, 6) : 0;   // la precisión del dato, no la del redondeo
+    b.dec = Math.min(decimales(b.valor), 6);   // la precisión del dato, no la del redondeo
+    if (b.valor !== 0 && Number(b.valor.toFixed(b.dec)) === 0)
+      throw new Error(`la barra ${JSON.stringify(b.etiqueta)} vale ${b.valor} y se vería como 0: ` +
+                      'usá una unidad más chica (miles -> unidades, % -> puntos básicos)');
   }
-  // `|| 0` saca el -0 del arranque de una barra negativa ("-0" sería otro dato falso)
-  const formato = (v, dec) => (S.prefijo || '') +
-    (v || 0).toLocaleString('es-AR', { minimumFractionDigits: dec, maximumFractionDigits: dec }) + (S.sufijo || '');
+  // cuántos decimales tiene el dato: 0.1 + 0.2 da 0.30000000000000004, que es 0,3
+  function decimales(v) {
+    let d = 0;
+    while (d < 20 && Math.abs(Number(v.toFixed(d)) - v) > Math.abs(v) * 1e-12) d++;
+    return d;
+  }
+  // el signo va antes del prefijo ("-$500", no "$-500"), y un número que se ve
+  // como cero no lleva signo: el arranque de una barra negativa no es "-0"
+  function formato(v, dec) {
+    const n = Math.abs(v).toLocaleString('es-AR', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+    return (v < 0 && /[1-9]/.test(n) ? '-' : '') + (S.prefijo || '') + n + (S.sufijo || '');
+  }
   const G = { x0: 220, x1: 1700, arriba: 410, abajo: 890 };
   const positivo = Math.max(0, ...barras.map(b => b.valor));
   const negativo = Math.min(0, ...barras.map(b => b.valor));
