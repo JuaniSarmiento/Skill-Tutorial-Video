@@ -73,9 +73,18 @@ def _sin_tilde(c: str) -> str:
     return "".join(x for x in unicodedata.normalize("NFD", c) if unicodedata.category(x) != "Mn")
 
 
+# Miles en es-AR: un punto seguido de EXACTAMENTE tres dígitos ("17.000", y "17 .000"
+# como lo escribe Whisper). Dentro de un texto se une ahí mismo; si el ".000" llega
+# como palabra suelta de Whisper, se conserva el punto para que _juntar_miles sepa
+# que es la cola de un número. Una coma nunca separa miles: "2,5" y "2,500" son
+# decimales, y "100, 200" son dos números.
+_MILES = re.compile(r"(?<=\d)\s*\.(?=\d{3}(?!\d))")
+_TOKEN = re.compile(r"\.\d{3}(?!\d)|[a-z0-9ñ]+")
+
+
 def _limpiar(texto: str) -> list[str]:
     sin_tildes = "".join(_sin_tilde(c) for c in unicodedata.normalize("NFC", texto.lower()))
-    return re.sub(r"[^a-z0-9ñ]+", " ", sin_tildes).split()
+    return _TOKEN.findall(_MILES.sub("", sin_tildes))
 
 
 def _numerar(pares) -> list[tuple]:
@@ -122,14 +131,17 @@ def _numeros(pares: list[tuple]) -> list[tuple]:
 
 def _juntar_miles(pares) -> list[tuple]:
     """"17 .000", "17.000" y "17000" son el mismo número: Whisper escribe los miles
-    con un punto (y a veces un espacio), que al normalizar parte el número en dos.
+    con un punto, a veces como palabra aparte (".000"). Sólo se une esa cola con
+    punto: "100, 200" y "3 100" siguen siendo dos números.
     Recibe (palabra, origen) y cada número unido conserva el origen de su primera parte."""
     salida = []
     for w, origen in pares:
-        if salida and salida[-1][0].isdigit() and w.isdigit() and len(w) == 3:
-            salida[-1] = (salida[-1][0] + w, salida[-1][1])
-        else:
-            salida.append((w, origen))
+        if w.startswith("."):
+            if salida and salida[-1][0].isdigit():
+                salida[-1] = (salida[-1][0] + w[1:], salida[-1][1])
+                continue
+            w = w[1:]
+        salida.append((w, origen))
     return salida
 
 
