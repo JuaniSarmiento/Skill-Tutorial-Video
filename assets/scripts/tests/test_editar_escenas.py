@@ -66,9 +66,10 @@ def test_una_escena_sin_tipo_falla_diciendo_cual_falta():
 
 
 def test_la_escena_del_guion_no_se_modifica():
-    seg = {"escena": json.loads(json.dumps(ESCENA)), "texto": "Mirá el sol."}
+    # literal propio: comparar contra ESCENA no sirve si otro test ya lo contaminó
+    seg = {"escena": {"tipo": "presentacion", "puntos": [{"texto": "Sol", "cue": "el sol"}]}, "texto": "x"}
     editar.spec_de_escena(seg, 4.2, VOZ)
-    assert seg["escena"] == ESCENA
+    assert seg["escena"] == {"tipo": "presentacion", "puntos": [{"texto": "Sol", "cue": "el sol"}]}
 
 
 # --- palabras de la voz, cacheadas -------------------------------------------
