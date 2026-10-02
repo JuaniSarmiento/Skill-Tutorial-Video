@@ -151,6 +151,24 @@ def navegador():
             b.close()
 
 
+# Una fuente que no está hace que Chrome use otra EN SILENCIO (medido por QA: Noto
+# Sans en vez de Inter). Si la fuente existe, el texto mide distinto que con la
+# genérica de respaldo; si mide igual contra dos genéricas, no está.
+FUENTE_FALTA = """f => {
+  const c = document.createElement('canvas').getContext('2d');
+  const ancho = fam => { c.font = `700 72px ${fam}`; return c.measureText('Interés compuesto 0123').width; };
+  return ['monospace', 'serif'].every(g => ancho(`"${f}", ${g}`) === ancho(g));
+}"""
+
+
+def avisar_si_falta_la_fuente(page, fuente) -> bool:
+    if fuente and page.evaluate(FUENTE_FALTA, fuente):
+        print(f"AVISO: la fuente {fuente!r} del brand no está instalada: Chrome va a usar otra. "
+              "Instalala (Inter es libre, OFL) o cambiá 'fuente' en brand.json.", file=sys.stderr)
+        return True
+    return False
+
+
 @contextmanager
 def pagina_de_escena(browser, plantilla, spec: dict, brand: dict):
     """Abre la escena, verifica el contrato y devuelve (page, duracion).
@@ -172,6 +190,7 @@ def pagina_de_escena(browser, plantilla, spec: dict, brand: dict):
         info = page.evaluate("({duracion: window.DURATION === undefined ? null : window.DURATION,"
                              " seek: typeof window.seek})")
         verificar_contrato(info, plantilla)
+        avisar_si_falta_la_fuente(page, brand.get("fuente"))
         yield page, float(info["duracion"])
         if errores:
             raise ContratoError(f"{plantilla} tiró un error de JavaScript: {errores[0]}")
