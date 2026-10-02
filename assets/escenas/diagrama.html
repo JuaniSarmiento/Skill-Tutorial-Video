@@ -13,7 +13,8 @@ la etiqueta de cada flecha entre sin tocar a nadie. Si no entran en una fila a 3
 van en dos filas en "S" (la segunda de derecha a izquierda, así la flecha que las une
 baja derecho); si tampoco entran a 24 px, la escena falla en vez de pisar textos. Un
 texto de nodo largo se parte en renglones. Para otra forma, cada nodo acepta "x" e "y"
-(centro, en fracción de pantalla: 0.5 = medio), acotados para que el nodo no se salga.
+(centro, en fracción de pantalla: 0.5 = medio), acotados para que el nodo no se salga
+ni suba hasta el título o el kicker (queda debajo de la cabecera y del área del diagrama).
 El último elemento que entró es el foco y lleva el color de acento; el resto, neutro.
 -->
 <meta charset="utf-8">
@@ -85,10 +86,13 @@ El último elemento que entró es el foco y lleva el color de acento; el resto, 
     if (!nodos.length) return 54;
     if (nodos.every(n => n.x != null && n.y != null)) {
       const px = 54;
+      // techo: debajo de la cabecera (un título largo ocupa dos renglones) y del área
+      const cab = document.querySelector('header.cabecera');
+      const techo = Math.max(AREA.y0, cab ? cab.getBoundingClientRect().bottom + 40 : 0);
       nodos.forEach(n => {
         Object.assign(n, medida(n, px));
         n.cx = Math.min(1920 - n.w / 2 - 40, Math.max(n.w / 2 + 40, n.x * 1920));
-        n.cy = Math.min(1080 - n.h / 2 - 40, Math.max(n.h / 2 + 40, n.y * 1080));
+        n.cy = Math.min(1080 - n.h / 2 - 40, Math.max(techo + n.h / 2, n.y * 1080));
       });
       return px;
     }
