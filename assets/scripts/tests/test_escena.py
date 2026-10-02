@@ -200,3 +200,46 @@ def test_un_tipo_desconocido_falla_listando_los_que_hay():
         escena.ruta_plantilla("pizarron")
     for tipo in ("diagrama", "presentacion", "datos"):
         assert tipo in str(e.value)
+
+
+# --- CLI: lo que no sirve se rechaza antes de abrir Chrome --------------------
+
+@pytest.fixture
+def renders(monkeypatch):
+    llamadas = []
+    monkeypatch.setattr(escena, "render", lambda plantilla, spec, salida, *a, **k: llamadas.append(spec) or 1.0)
+    monkeypatch.setattr(escena, "hoja_contacto", lambda escenas, salida, *a, **k: llamadas.append(escenas) or salida)
+    return llamadas
+
+
+def _spec(tmp_path, nombre="s.json", **spec):
+    p = tmp_path / nombre
+    p.write_text(json.dumps(spec))
+    return str(p)
+
+
+@pytest.mark.parametrize("args, dice", [
+    (["--duracion", "0"], "--duracion"),
+    (["--duracion", "-2"], "--duracion"),
+    (["--ancho", "961"], "par"),
+], ids=["duracion-cero", "duracion-negativa", "ancho-impar"])
+def test_el_cli_rechaza_valores_que_no_sirven(tmp_path, renders, capsys, args, dice):
+    with pytest.raises(BaseException) as e:
+        escena._cli(["render", "datos", _spec(tmp_path, duracion=2), "-o", str(tmp_path / "o.mp4"), *args])
+    assert isinstance(e.value, SystemExit), repr(e.value)
+    assert dice in capsys.readouterr().err
+    assert renders == []
+
+
+def test_el_cli_con_una_duracion_valida_la_pasa_al_spec(tmp_path, renders):
+    escena._cli(["render", "datos", _spec(tmp_path, duracion=2), "-o", str(tmp_path / "o.mp4"), "--duracion", "3.5"])
+    assert renders[0]["duracion"] == 3.5
+
+
+def test_contacto_con_un_spec_sin_tipo_falla_nombrando_el_archivo(tmp_path, renders, capsys):
+    with pytest.raises(BaseException) as e:
+        escena._cli(["contacto", _spec(tmp_path, "sin-tipo.json", duracion=2), "-o", str(tmp_path / "h.png")])
+    assert isinstance(e.value, SystemExit), repr(e.value)
+    err = capsys.readouterr().err
+    assert "sin-tipo.json" in err and "tipo" in err
+    assert renders == []

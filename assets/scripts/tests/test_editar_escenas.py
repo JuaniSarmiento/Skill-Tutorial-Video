@@ -157,3 +157,35 @@ def test_escenas_deja_cada_spec_resuelto_para_la_hoja_de_contacto(raiz, monkeypa
     assert spec["tipo"] == "presentacion"
     assert spec["duracion"] > 2.0 + editar.LEAD          # el slot se mide con la voz
     assert spec["puntos"][0]["t"] == pytest.approx(0.3 + editar.LEAD)
+
+
+# --- editar.py escenas por línea de comandos ---------------------------------
+
+def _correr_cli(raiz, monkeypatch, capsys, segmentos):
+    import runpy
+    import sys
+    from pathlib import Path
+    (raiz / "videos" / "v09" / "juani").mkdir(parents=True)
+    for i in range(len(segmentos)):
+        subprocess.run(["ffmpeg", "-loglevel", "error", "-f", "lavfi", "-i", "sine=d=1",
+                        str(raiz / "videos" / "v09" / "juani" / f"{i:02d}.wav")], check=True)
+    _guion(raiz, "v09", {"segmentos": segmentos})
+    monkeypatch.setattr(palabras, "transcribir", lambda a, modelo=None: VOZ)
+    monkeypatch.setenv("TUT_ROOT", str(raiz))
+    monkeypatch.setattr(sys, "argv", ["editar.py", "escenas", "v09", "juani"])
+    runpy.run_path(str(Path(editar.__file__)), run_name="__main__")
+    return capsys.readouterr().out
+
+
+def test_escenas_imprime_un_comando_de_contacto_que_anda_desde_cualquier_carpeta(raiz, monkeypatch, capsys):
+    from pathlib import Path
+    out = _correr_cli(raiz, monkeypatch, capsys, [{"escena": ESCENA, "texto": "Mirá el sol."}])
+    linea = next(ln for ln in out.splitlines() if " contacto " in ln)
+    assert str(Path(editar.__file__).resolve().parent / "escena.py") in linea
+    assert str(raiz / "videos" / "v09" / "escenas" / "00.json") in linea
+
+
+def test_escenas_sin_escenas_en_el_guion_no_imprime_un_comando_sin_specs(raiz, monkeypatch, capsys):
+    out = _correr_cli(raiz, monkeypatch, capsys, [{"tipo": "titulo", "titulo": "Hola", "texto": "Hola."}])
+    assert " contacto " not in out
+    assert "no tiene escenas" in out
