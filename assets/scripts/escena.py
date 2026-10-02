@@ -198,10 +198,10 @@ def pagina_de_escena(browser, plantilla, spec: dict, brand: dict):
         page.close()
 
 
-# Después de seek, el body sale y vuelve a entrar al layout. Eso es lo que hace
-# determinista el cuadro: sin esto el mismo t salía distinto según el orden (medido:
-# la portada, 14 de 27 cuadros; datos, 11 de 27), con diferencias de 1 a 10 niveles
-# en el borde antialiaseado y quieto de un elemento redondeado que cambia de tamaño.
+# Forzar relayout del body después de cada seek hace determinista el render (medido:
+# sin él 14/27 y 11/27 cuadros dependen del orden; con él 0). La causa exacta en
+# Chrome no está identificada: en la portada la diferencia cae en el borde de un
+# elemento redondeado, en `datos` en una fila horizontal de ~242 px.
 SEEK = """async t => {
   try { await window.seek(t); } catch (e) { return String((e && e.message) || e); }
   const b = document.body;
