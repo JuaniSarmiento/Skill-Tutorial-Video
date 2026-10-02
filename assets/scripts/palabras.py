@@ -197,7 +197,7 @@ def _buscar(palabras: list[dict], cue: str, desde_idx: int) -> int:
     Se queda con el tramo con menos errores (con 1 palabra de más o de menos,
     porque Whisper a veces pega dos: "se suma" -> "esuma"); a igual cantidad, el
     primero. La frase exacta tiene 0 errores, así que siempre le gana a una parecida.
-    Ver LARGA para qué error se tolera y cuál no.
+    Ver LARGA y ANCLA para qué error se tolera y cuál no.
     """
     frase = _frase(cue)
     if not frase:

@@ -47,9 +47,16 @@ pueden mezclar con segmentos de pantalla en el mismo guion. Ejemplo completo, si
 
 - **`cue` es la frase que nombra al elemento**, tal cual la dice el `texto` del segmento
   (`"cue": "tres décadas"`), o un número de segundos. El elemento entra en esa palabra.
-  Se resuelve transcribiendo la voz con faster-whisper; tolera lo que Whisper oye mal
-  ("tembrano") y los números que escribe en dígitos ("3 décadas"). Si una cue no se
-  encuentra, el error muestra qué se oyó: corregí la cue, no el guion.
+  Se resuelve transcribiendo la voz con faster-whisper. Lo que Whisper oye mal se
+  tolera así: una palabra de 6+ letras admite 1 error ("tembrano"). Si la cue tiene
+  además un **ancla** (otra palabra suya de 4+ letras oída exacta; "la"/"el" no anclan),
+  se admite 1 error en una palabra de 5 letras o menos ("más que poner" ← "las que
+  poner") y hasta 2 en una de 6+ ("Hagamos números" ← "Hablamos números"). Una cue
+  de una sola palabra corta y los números van exactos ("sí"≠"sin", "10"≠"100"). Los
+  números se comparan en dígitos: "17 .000", "17.000", "17000" y "diecisiete mil" son
+  el mismo ("por ciento" no se convierte). **Costo**: dos errores sin ancla no se
+  resuelven ("pesa más" ← "pesan las"). Si una cue no se encuentra, el error muestra
+  qué se oyó: corregí la cue, no el guion.
 - **Hoja de contacto antes del render**: `editar.py escenas vNN VOZ` genera las voces y deja
   cada spec resuelto en `videos/vNN/escenas/`; imprime el comando de `escena.py contacto`.
   Mirá el PNG (10/50/90 % de cada escena) y recién ahí `editar.py imagen`.
