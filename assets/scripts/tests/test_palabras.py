@@ -269,6 +269,31 @@ def test_un_numero_en_palabras_distinto_del_oido_falla(dicho, cue):
         palabras.resolver_cue(_oido(dicho), cue)
 
 
+# --- miles: sólo se une el patrón de miles, no dos números vecinos -----------
+# Whisper escribe los miles con punto ("17.000", y partido "17 .000"). Dos números
+# separados por coma y espacio son dos números (QA3, 02/10).
+
+@pytest.mark.parametrize("dicho, cue, t", [
+    ("cuesta 100, 200 y después 100 más", "100", 0.5),   # unía "100200" y tomaba el segundo 100
+    ("cuesta 100, 200 y después 100 más", "200", 1.0),
+    ("en 2024, 500 personas", "500", 1.0),
+    ("subió 3 100 veces", "3", 0.5),                     # sin punto, tampoco se unen
+    ("son 1 .000 .000 de pesos", "1000000", 0.5),         # el patrón real se sigue uniendo
+    ("más de 17.000", "17000", 1.0),
+])
+def test_solo_se_unen_los_miles_escritos_con_punto(dicho, cue, t):
+    assert _resuelve(_oido(dicho), cue) == t
+
+
+@pytest.mark.parametrize("dicho, cue", [
+    ("cuesta 2500 pesos", "2,500"),     # en es-AR "2,500" es dos coma cinco
+    ("cuesta 2,500 pesos", "2500"),
+])
+def test_una_coma_entre_digitos_es_decimal_y_no_separa_miles(dicho, cue):
+    with pytest.raises(ValueError, match="no se dice"):
+        palabras.resolver_cue(_oido(dicho), cue)
+
+
 def test_una_frase_repetida_mas_veces_de_las_que_se_dice_falla():
     with pytest.raises(ValueError, match="no se dice"):
         palabras.resolver_cues(_oido("la base crece"), ["la base", "la base"])
