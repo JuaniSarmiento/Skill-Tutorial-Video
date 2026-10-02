@@ -311,10 +311,15 @@ def test_diagrama_con_coordenadas_en_el_borde_queda_dentro_de_la_pantalla(chrome
     assert [c for c in _choques(nodos) if c.startswith("FUERA")] == []
 
 
-@pytest.mark.parametrize("x, y", [(0.1, 0.0), (0.3, 0.12), (0.5, 0.2)],
-                         ids=["arriba-izquierda", "sobre-el-titulo", "pegado-abajo-del-titulo"])
-def test_diagrama_con_coordenadas_arriba_no_tapa_el_titulo(chrome, x, y):
-    spec = {"kicker": "Finanzas", "titulo": {"texto": "Cómo circula la plata"},
+TITULO_LARGO = "Cómo circula la plata entre el ahorro, el plazo fijo y los intereses compuestos"
+
+
+@pytest.mark.parametrize("x, y, titulo", [
+    (0.1, 0.0, "Cómo circula la plata"), (0.3, 0.12, "Cómo circula la plata"),
+    (0.5, 0.2, "Cómo circula la plata"), (0.5, 0.0, TITULO_LARGO)],
+    ids=["arriba-izquierda", "sobre-el-titulo", "pegado-abajo-del-titulo", "titulo-en-dos-renglones"])
+def test_diagrama_con_coordenadas_arriba_no_tapa_el_titulo(chrome, x, y, titulo):
+    spec = {"kicker": "Finanzas", "titulo": {"texto": titulo},
             "nodos": [{"id": "a", "texto": "Ahorro", "x": x, "y": y, "cue": 0.1},
                       {"id": "b", "texto": "Plazo fijo", "x": 0.7, "y": 0.7, "cue": 0.2}]}
     cajas = _al_final(chrome, "diagrama", spec, CAJAS)
