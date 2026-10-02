@@ -233,3 +233,56 @@ def test_datos_un_rotulo_largo_no_achica_todo_por_debajo_del_piso(chrome):
     cats = [c for c in cajas if c["n"].startswith("categoria")]
     assert min(c["px"] for c in cats) >= PISO_PX
     assert _choques(cajas) == []
+
+
+# --- desbordes: muchos elementos o textos largos ------------------------------
+
+PX_NODOS = "() => [...document.querySelectorAll('.nodo .txt')].map(e => parseFloat(getComputedStyle(e).fontSize))"
+LARGO = "Administración Federal de Ingresos Públicos de la Nación"
+
+
+def _cadena(textos, flecha="rinde"):
+    nodos = [{"id": str(i), "texto": t, "cue": 0.1 * i} for i, t in enumerate(textos)]
+    flechas = [{"de": str(i), "a": str(i + 1), "texto": flecha, "cue": 0.5 + 0.1 * i}
+               for i in range(len(textos) - 1)]
+    return {"titulo": {"texto": "Flujo"}, "nodos": nodos, "flechas": flechas}
+
+
+@pytest.mark.parametrize("spec", [
+    _cadena([f"Nodo {i}" for i in range(4)]),
+    _cadena([f"Nodo {i}" for i in range(6)]),
+    _cadena([f"Paso {i}" for i in range(4)], flecha="se transforma en"),
+    _cadena([LARGO, "Contribuyente monotributista", "Banco Central"]),
+], ids=["4-nodos", "6-nodos", "4-etiquetas-largas", "3-con-texto-largo"])
+def test_diagrama_con_muchos_nodos_o_texto_largo_entra_sin_pisar_flechas(chrome, spec):
+    assert _choques(_al_final(chrome, "diagrama", spec, CAJAS)) == []
+    assert min(_al_final(chrome, "diagrama", spec, PX_NODOS)) >= PISO_PX
+
+
+def test_diagrama_que_no_entra_ni_en_dos_filas_falla_claro(chrome):
+    with pytest.raises(Exception, match="no entra"):
+        _al_final(chrome, "diagrama", _cadena([f"Etapa número {i}" for i in range(14)]), CAJAS)
+
+
+def test_diagrama_con_coordenadas_en_el_borde_queda_dentro_de_la_pantalla(chrome):
+    spec = {"titulo": {"texto": "Coords"},
+            "nodos": [{"id": "a", "texto": "Izquierda", "x": 0.02, "y": 0.5, "cue": 0.1},
+                      {"id": "b", "texto": "Derecha", "x": 0.98, "y": 0.98, "cue": 0.2}]}
+    nodos = [c for c in _al_final(chrome, "diagrama", spec, CAJAS) if c["n"].startswith("nodo")]
+    assert [c for c in _choques(nodos) if c.startswith("FUERA")] == []
+
+
+@pytest.mark.parametrize("n", [8, 12])
+def test_presentacion_con_muchos_puntos_entra_entera_y_se_lee(chrome, n):
+    spec = {"titulo": {"texto": "Para llevarte"},
+            "puntos": [{"texto": f"Punto número {i + 1}", "cue": 0.1 * i} for i in range(n)]}
+    cajas = _al_final(chrome, "presentacion", spec, CAJAS)
+    assert _choques(cajas) == []
+    assert min(c["px"] for c in cajas) >= PISO_PX
+
+
+def test_presentacion_con_demasiados_puntos_falla_claro(chrome):
+    spec = {"titulo": {"texto": "Todo"},
+            "puntos": [{"texto": f"Punto número {i + 1}", "cue": 0.05 * i} for i in range(30)]}
+    with pytest.raises(Exception, match="no entran"):
+        _al_final(chrome, "presentacion", spec, CAJAS)
