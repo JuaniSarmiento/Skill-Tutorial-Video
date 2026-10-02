@@ -25,11 +25,15 @@ NUMEROS = dict(zip(
     "cero uno una un dos tres cuatro cinco seis siete ocho nueve diez once doce trece catorce "
     "quince veinte treinta cuarenta cincuenta sesenta setenta ochenta noventa cien".split(),
     "0 1 1 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 20 30 40 50 60 70 80 90 100".split()))
-# Whisper oye mal alguna letra ("tembrano" por "temprano"): se tolera UN error por
-# palabra, y sólo en palabras de LARGA letras o más. Una palabra corta con una letra
-# distinta es otra palabra ("sí"/"sin", "tasa"/"casa", "banco"/"blanco"), y un número
-# con un dígito distinto es otro número ("10"/"100"): esos tienen que estar tal cual.
+# Whisper oye mal alguna letra ("tembrano" por "temprano", "Hablamos" por "Hagamos").
+# Cuánto se tolera depende de si la cue tiene un ANCLA: otra palabra suya de ANCLA
+# letras o más que se oyó exacta. "la"/"el" no anclan: "la tasa" no es "la casa".
+#   sin ancla: palabra larga (LARGA+ letras) 1 error, palabra corta ninguno
+#   con ancla: palabra larga hasta 2 errores, palabra corta 1
+# Un número tiene que estar tal cual ("10"/"100" son otro número), y una cue de una
+# sola palabra corta también ("sí"/"sin", "banco"/"blanco"): no tiene con qué anclar.
 LARGA = 6
+ANCLA = 4
 
 MODELO = "base"  # "small" es mejor pero no entra en 1 GB de RAM libre junto a Chrome
 
@@ -54,7 +58,20 @@ def _sin_tilde(c: str) -> str:
 def _norm(texto: str) -> str:
     sin_tildes = "".join(_sin_tilde(c) for c in unicodedata.normalize("NFC", texto.lower()))
     palabras = re.sub(r"[^a-z0-9ñ]+", " ", sin_tildes).split()
-    return " ".join(NUMEROS.get(w, w) for w in palabras)
+    return " ".join(w for w, _ in _juntar_miles((NUMEROS.get(w, w), None) for w in palabras))
+
+
+def _juntar_miles(pares) -> list[tuple]:
+    """"17 .000", "17.000" y "17000" son el mismo número: Whisper escribe los miles
+    con un punto (y a veces un espacio), que al normalizar parte el número en dos.
+    Recibe (palabra, origen) y cada número unido conserva el origen de su primera parte."""
+    salida = []
+    for w, origen in pares:
+        if salida and salida[-1][0].isdigit() and w.isdigit() and len(w) == 3:
+            salida[-1] = (salida[-1][0] + w, salida[-1][1])
+        else:
+            salida.append((w, origen))
+    return salida
 
 
 def _distancia(a: str, b: str) -> int:
@@ -67,22 +84,57 @@ def _distancia(a: str, b: str) -> int:
     return fila[-1]
 
 
-def _tolera(texto: str) -> int:
-    return 0 if len(texto) < LARGA or any(c.isdigit() for c in texto) else 1
+def _es_numero(w: str) -> bool:
+    return any(c.isdigit() for c in w)
+
+
+def _tolera(palabra: str, ancla: bool) -> int:
+    if _es_numero(palabra):
+        return 0
+    if len(palabra) >= LARGA:
+        return 2 if ancla else 1
+    return 1 if ancla else 0
+
+
+def _ancla(palabra: str, errores: int) -> bool:
+    return errores == 0 and len(palabra) >= ANCLA and not _es_numero(palabra)
 
 
 def _errores(frase: list[str], oidas: list[str]):
     """Errores entre la frase de la cue y un tramo oído, o None si no es la misma frase."""
     if len(frase) == len(oidas):
         d = [_distancia(f, o) for f, o in zip(frase, oidas)]
-        return sum(d) if all(x <= _tolera(f) for x, f in zip(d, frase)) else None
-    # Whisper pegó o partió palabras ("se suma" -> "esuma"): se compara la frase
-    # junta, pero los números tienen que estar tal cual
-    if any(any(c.isdigit() for c in f) and f not in oidas for f in frase):
+        ancla = any(_ancla(f, x) for f, x in zip(frase, d))
+        return sum(d) if all(x <= _tolera(f, ancla) for x, f in zip(d, frase)) else None
+    # Whisper pegó o partió palabras ("se suma" -> "esuma"): se busca cómo partir lo
+    # oído en las palabras de la cue, con la misma regla de ancla palabra por palabra.
+    # Los números tienen que estar tal cual, como palabra oída.
+    if any(_es_numero(f) and f not in oidas for f in frase):
         return None
-    junta = "".join(frase)
-    d = _distancia(junta, "".join(oidas))
-    return d if d <= _tolera(junta) else None
+    return _partir("".join(oidas), frase)
+
+
+def _partir(junta: str, frase: list[str]):
+    """Menos errores al partir `junta` en las palabras de `frase`, o None si no se puede."""
+    mejor = None
+    for con_ancla in (False, True):
+        estados = {(0, False): 0}   # (letras consumidas, ¿ya hubo ancla?) -> errores
+        for f in frase:
+            nuevos = {}
+            for (pos, hubo), e in estados.items():
+                for largo in range(max(0, len(f) - 2), len(f) + 3):
+                    if pos + largo > len(junta):
+                        break
+                    x = _distancia(f, junta[pos:pos + largo])
+                    if x > _tolera(f, con_ancla):
+                        continue
+                    clave = (pos + largo, hubo or _ancla(f, x))
+                    nuevos[clave] = min(nuevos.get(clave, x + e), x + e)
+            estados = nuevos
+        for (pos, hubo), e in estados.items():
+            if pos == len(junta) and (hubo or not con_ancla) and (mejor is None or e < mejor):
+                mejor = e
+    return mejor
 
 
 def _frase(cue: str) -> list[str]:
@@ -101,15 +153,20 @@ def _buscar(palabras: list[dict], cue: str, desde_idx: int) -> int:
     frase = _frase(cue)
     if not frase:
         raise ValueError(f"la cue {cue!r} está vacía: no nombra ninguna palabra")
-    oidas = [_norm(p["palabra"]) for p in palabras]
+    # lo oído, normalizado palabra por palabra, recordando de qué palabra salió cada
+    # una: "17" y ".000" son dos palabras de Whisper y un solo número
+    pares = _juntar_miles((w, i) for i, p in enumerate(palabras) for w in _norm(p["palabra"]).split())
+    oidas, origen = [w for w, _ in pares], [i for _, i in pares]
     n = len(frase)
     mejor, idx = None, None
-    for i in range(desde_idx, len(oidas)):
+    for j in range(len(oidas)):
+        if origen[j] < desde_idx:
+            continue
         for k in (n - 1, n, n + 1):
-            if k >= 1 and i + k <= len(oidas):
-                e = _errores(frase, " ".join(oidas[i:i + k]).split())
+            if k >= 1 and j + k <= len(oidas):
+                e = _errores(frase, oidas[j:j + k])
                 if e is not None and (mejor is None or e < mejor):
-                    mejor, idx = e, i
+                    mejor, idx = e, origen[j]
     if idx is not None:
         return idx
     dicho = " ".join(p["palabra"] for p in palabras)
