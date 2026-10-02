@@ -121,10 +121,11 @@ def test_los_puntos_quedan_centrados_bajo_el_titulo_y_no_amontonados_arriba(chro
 # --- casos de borde: lo que muestra la escena tiene que ser el dato ----------
 
 def _al_final(chrome, tipo, spec, js):
-    """Lleva la escena a su último cuadro y devuelve lo que calcule `js`."""
+    """Lleva la escena a su último cuadro, por el mismo camino que el render (un error
+    de la plantilla sale como ContratoError), y devuelve lo que calcule `js`."""
     with escena.pagina_de_escena(chrome, escena.ruta_plantilla(tipo), {"duracion": 2.0, **spec},
                                  escena.cargar_brand(None)) as (page, d):
-        page.evaluate("t => window.seek(t)", d - 0.05)
+        escena._cuadro(page, d - 0.05)
         return page.evaluate(js)
 
 
@@ -241,7 +242,7 @@ def test_datos_muchas_barras_o_numeros_largos_no_se_pisan_y_se_leen(chrome, barr
 
 def test_datos_si_los_numeros_no_entran_ni_al_piso_falla_claro(chrome):
     barras = [{"etiqueta": str(i), "valor": 999999999999, "cue": 0.01 * i} for i in range(30)]
-    with pytest.raises(Exception, match="no entran"):
+    with pytest.raises(escena.ContratoError, match="no entran"):
         _al_final(chrome, "datos", _datos(barras), CAJAS)
 
 
@@ -297,7 +298,7 @@ def test_diagrama_en_s_toda_flecha_es_horizontal_o_baja_derecho(chrome, textos):
 
 
 def test_diagrama_que_no_entra_ni_en_dos_filas_falla_claro(chrome):
-    with pytest.raises(Exception, match="no entra"):
+    with pytest.raises(escena.ContratoError, match="no entra"):
         _al_final(chrome, "diagrama", _cadena([f"Etapa número {i}" for i in range(14)]), CAJAS)
 
 
@@ -306,6 +307,7 @@ def test_diagrama_con_coordenadas_en_el_borde_queda_dentro_de_la_pantalla(chrome
             "nodos": [{"id": "a", "texto": "Izquierda", "x": 0.02, "y": 0.5, "cue": 0.1},
                       {"id": "b", "texto": "Derecha", "x": 0.98, "y": 0.98, "cue": 0.2}]}
     nodos = [c for c in _al_final(chrome, "diagrama", spec, CAJAS) if c["n"].startswith("nodo")]
+    assert len(nodos) == 2, "sin nodos, el chequeo de abajo pasa vacío"
     assert [c for c in _choques(nodos) if c.startswith("FUERA")] == []
 
 
@@ -321,7 +323,7 @@ def test_presentacion_con_muchos_puntos_entra_entera_y_se_lee(chrome, n):
 def test_presentacion_con_demasiados_puntos_falla_claro(chrome):
     spec = {"titulo": {"texto": "Todo"},
             "puntos": [{"texto": f"Punto número {i + 1}", "cue": 0.05 * i} for i in range(30)]}
-    with pytest.raises(Exception, match="no entran"):
+    with pytest.raises(escena.ContratoError, match="no entran"):
         _al_final(chrome, "presentacion", spec, CAJAS)
 
 

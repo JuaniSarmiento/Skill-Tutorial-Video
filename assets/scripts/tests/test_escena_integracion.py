@@ -108,10 +108,9 @@ def test_un_error_de_js_a_mitad_del_render_falla_claro_y_no_deja_un_mp4_truncado
                                    "window.seek = async t => { if (t > 0.5) throw new Error('se rompió a mitad');"))
     mp4 = tmp_path / "out.mp4"
 
-    with pytest.raises(Exception) as e:
+    with pytest.raises(escena.ContratoError) as e:
         escena.render(html, {"duracion": 1.0}, mp4, fps=12, ancho=960)
     assert sorted(p.name for p in tmp_path.iterdir()) == ["rota-a-mitad.html"]
-    assert isinstance(e.value, escena.ContratoError), repr(e.value)[:200]
     assert re.search(r"seek\(0\.5\d*\).*se rompió a mitad", str(e.value)), str(e.value)
 
 
