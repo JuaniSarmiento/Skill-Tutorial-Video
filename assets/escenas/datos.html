@@ -13,6 +13,11 @@ spec:
 La barra destacada va en el color de acento; el resto, neutras. El número cuenta
 hacia arriba mientras la barra crece. Las barras usan un resorte sin overshoot:
 en un gráfico, pasarse del valor aunque sea un instante es mentir.
+
+El número se muestra con los decimales que trae el dato (3.5 -> "3,5"), en formato
+es-AR. Un negativo cuelga debajo de la línea de cero y un cero no tiene barra. Una
+barra sin `valor` numérico es un error: dibujar "NaN" o inventar un cero es mentir.
+Si los números no entran ni a 24 px, la escena falla en vez de pisarlos.
 -->
 <meta charset="utf-8">
 <link rel="stylesheet" href="base.css">
@@ -23,38 +28,58 @@ en un gráfico, pasarse del valor aunque sea un instante es mentir.
   .barra.destacada { background: var(--acento); }
   .valor { position: absolute; transform: translateX(-50%); white-space: nowrap;
            font-size: 54px; font-weight: 700; letter-spacing: -.02em; }
-  .cat { position: absolute; transform: translateX(-50%); white-space: nowrap;
+  .cat { position: absolute; text-align: center; line-height: 1.2;
          font-size: 36px; font-weight: 500; color: var(--tenue); }
   .nota { position: absolute; right: 140px; bottom: 44px; font-size: 22px; color: var(--tenue); }
 </style>
 <script src="base.js"></script>
 <script>
   const { S, crear, tiempo, resorte, aparecer, contrato, cabecera, medir } = E;
+  const PISO = 24;   // px: menos que esto no se lee a 1080p
   const barras = (S.barras || []).map((b, i) => ({ ...b, t0: tiempo(b, 0.5 + i * 0.7) }));
-  const maximo = Math.max(1, ...barras.map(b => b.valor));
-  const formato = v => (S.prefijo || '') + Math.round(v).toLocaleString('es-AR') + (S.sufijo || '');
-  const G = { x0: 220, x1: 1700, base: 890, alto: 480 };
-  let dibujarCab;
+  for (const b of barras) {
+    if (typeof b.valor !== 'number' || !Number.isFinite(b.valor))
+      throw new Error(`la barra ${JSON.stringify(b.etiqueta)} no tiene un valor numérico (vino ${JSON.stringify(b.valor)})`);
+    const m = /\.(\d+)$/.exec(String(b.valor));
+    b.dec = m ? Math.min(m[1].length, 6) : 0;   // la precisión del dato, no la del redondeo
+  }
+  // `|| 0` saca el -0 del arranque de una barra negativa ("-0" sería otro dato falso)
+  const formato = (v, dec) => (S.prefijo || '') +
+    (v || 0).toLocaleString('es-AR', { minimumFractionDigits: dec, maximumFractionDigits: dec }) + (S.sufijo || '');
+  const G = { x0: 220, x1: 1700, arriba: 410, abajo: 890 };
+  const positivo = Math.max(0, ...barras.map(b => b.valor));
+  const negativo = Math.min(0, ...barras.map(b => b.valor));
+  const escala = (G.abajo - G.arriba) / ((positivo - negativo) || 1);
+  const cero = G.arriba + positivo * escala;   // la línea de base es el cero, no el borde de abajo
+  let dibujarCab, pxVal;
 
   contrato([tiempo(S.titulo, 0), ...barras.map(b => b.t0)], () => {
     dibujarCab = cabecera(S.titulo, S.kicker).dibujar;
     const slot = (G.x1 - G.x0) / Math.max(1, barras.length);
     const ancho = Math.min(240, slot * 0.56);
-    // el rótulo de categoría más largo tiene que entrar en su slot
-    const pxCat = Math.min(36, ...barras.map(b => 36 * (slot - 24) / Math.max(1, medir(b.etiqueta, 36, 500))));
+    const cabe = slot - 24;
+    // el número más ancho tiene que entrar en su slot; si ni al piso entra, se avisa
+    pxVal = Math.min(54, ...barras.map(b => 54 * cabe / Math.max(1, medir(formato(b.valor, b.dec), 54, 700))));
+    if (pxVal < PISO)
+      throw new Error(`los números de las ${barras.length} barras no entran ni a ${PISO} px: ` +
+                      'usá menos barras o una unidad más grande (miles, millones)');
+    // los rótulos de categoría van a un solo tamaño; el que no entra a PISO se parte en renglones
+    const pxCat = Math.max(PISO, Math.min(36, ...barras.map(b => 36 * cabe / Math.max(1, medir(b.etiqueta, 36, 500)))));
     const linea = crear('div', 'base');
-    Object.assign(linea.style, { left: (G.x0 - 20) + 'px', width: (G.x1 - G.x0 + 40) + 'px', top: G.base + 'px' });
+    Object.assign(linea.style, { left: (G.x0 - 20) + 'px', width: (G.x1 - G.x0 + 40) + 'px', top: cero + 'px' });
     barras.forEach((b, i) => {
       b.cx = G.x0 + slot * (i + 0.5);
-      b.h = Math.max(6, (b.valor / maximo) * G.alto);
+      b.h = Math.abs(b.valor) * escala;
       b.el = crear('div', 'barra' + (b.destacar ? ' destacada' : ''));
       Object.assign(b.el.style, { left: (b.cx - ancho / 2) + 'px', width: ancho + 'px' });
-      b.val = crear('div', 'valor', document.body, formato(b.valor));
+      b.val = crear('div', 'valor', document.body, formato(b.valor, b.dec));
       b.val.dataset.caja = 'valor ' + b.etiqueta;
-      b.val.style.left = b.cx + 'px';
+      Object.assign(b.val.style, { left: b.cx + 'px', fontSize: pxVal + 'px' });
       b.cat = crear('div', 'cat', document.body, b.etiqueta);
       b.cat.dataset.caja = 'categoria ' + b.etiqueta;
-      Object.assign(b.cat.style, { left: b.cx + 'px', top: (G.base + 24) + 'px', fontSize: pxCat + 'px' });
+      Object.assign(b.cat.style, { left: (b.cx - cabe / 2) + 'px', width: cabe + 'px', top: (G.abajo + 24) + 'px', fontSize: pxCat + 'px' });
+      if (b.cat.scrollWidth > b.cat.clientWidth + 1 || b.cat.getBoundingClientRect().height > pxCat * 1.25 * 2 + 1)
+        throw new Error(`el rótulo ${JSON.stringify(b.etiqueta)} no entra en dos renglones de ${pxCat} px: acortalo`);
     });
     if (S.nota) crear('div', 'nota', document.body, S.nota).dataset.caja = 'nota';
   }, t => {
@@ -63,10 +88,12 @@ en un gráfico, pasarse del valor aunque sea un instante es mentir.
       const p = resorte(t - b.t0, 1, 1.5);
       // alto y top reales, no scaleY: un transform sobre la esquina redondeada deja
       // estado de raster entre cuadros y el mismo t salía con un pixel distinto
-      const h = (b.h * p).toFixed(2);
-      Object.assign(b.el.style, { height: h + 'px', top: (G.base - h) + 'px', opacity: t >= b.t0 ? 1 : 0 });
-      b.val.textContent = formato(b.valor * p);
-      b.val.style.top = (G.base - b.h * p - 76) + 'px';
+      const h = b.h * p;
+      const top = b.valor < 0 ? cero : cero - h;
+      Object.assign(b.el.style, { height: h.toFixed(2) + 'px', top: top.toFixed(2) + 'px', opacity: t >= b.t0 ? 1 : 0 });
+      b.val.textContent = formato(b.valor * p, b.dec);
+      // el número va arriba de la barra; el de una negativa, arriba de la línea de cero
+      b.val.style.top = ((b.valor < 0 ? cero : cero - h) - pxVal * 1.4).toFixed(2) + 'px';
       b.val.style.opacity = aparecer(t, b.t0);
       b.cat.style.opacity = aparecer(t, b.t0);
     }
