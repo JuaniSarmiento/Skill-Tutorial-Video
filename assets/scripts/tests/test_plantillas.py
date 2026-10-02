@@ -327,6 +327,40 @@ def test_diagrama_con_coordenadas_arriba_no_tapa_el_titulo(chrome, x, y, titulo)
     assert [c for c in _choques(cajas) if "nodo a" in c] == []
 
 
+# QA3 (02/10): 159 caracteres + kicker son 4 renglones de título, y el contenido
+# arrancaba en una altura fija que la cabecera ya había pasado.
+TITULO_4 = ("Cómo circula la plata cuando la dejás quieta en un plazo fijo durante treinta años "
+            "seguidos y sin tocar nada de nada para ver cuánto crece de verdad el capital")
+
+
+@pytest.mark.parametrize("tipo, spec", [
+    ("diagrama", _cadena(["Capital inicial ahorrado", "Interés del primer año", "Capital nuevo",
+                          "Interés sobre interés", "Patrimonio"])),
+    ("diagrama", _cadena(["Ahorro mensual constante", "Plazo fijo tradicional", "Intereses cobrados",
+                          "Capital nuevo acumulado", "Reinversión total", "Patrimonio"])),
+    ("presentacion", {"puntos": [{"texto": f"Punto número {i + 1}", "cue": 0.1 * i} for i in range(6)]}),
+    ("datos", _datos([{"etiqueta": "Año 0", "valor": 1000, "cue": 0.1},
+                      {"etiqueta": "Año 30", "valor": 17449, "cue": 0.2, "destacar": True}])),
+], ids=["diagrama-una-fila", "diagrama-en-s", "presentacion", "datos"])
+def test_un_titulo_de_cuatro_renglones_no_queda_tapado_por_el_contenido(chrome, tipo, spec):
+    spec = {**spec, "kicker": "Interés compuesto", "titulo": {"texto": TITULO_4}}
+    cajas = _al_final(chrome, tipo, spec, CAJAS)
+    titulo = next(c for c in cajas if c["n"] == "titulo")
+    assert titulo["h"] > 3 * 76, "el título no salió en 4 renglones: el caso no se armó"
+    assert [c for c in _choques(cajas) if "titulo" in c or "kicker" in c] == []
+
+
+@pytest.mark.parametrize("tipo, spec", [
+    ("diagrama", _cadena(["Capital", "Interés", "Capital nuevo"])),
+    ("presentacion", {"puntos": [{"texto": "Uno", "cue": 0.1}, {"texto": "Dos", "cue": 0.2}]}),
+    ("datos", _datos([{"etiqueta": "A", "valor": 1, "cue": 0.1}, {"etiqueta": "B", "valor": 2, "cue": 0.2}])),
+], ids=["diagrama", "presentacion", "datos"])
+def test_un_titulo_que_no_deja_lugar_al_contenido_falla_nombrando_el_titulo(chrome, tipo, spec):
+    spec = {**spec, "kicker": "K", "titulo": {"texto": TITULO_4 + " " + TITULO_4}}   # 8 renglones
+    with pytest.raises(escena.ContratoError, match="título"):
+        _al_final(chrome, tipo, spec, CAJAS)
+
+
 @pytest.mark.parametrize("n", [8, 12])
 def test_presentacion_con_muchos_puntos_entra_entera_y_se_lee(chrome, n):
     spec = {"titulo": {"texto": "Para llevarte"},
