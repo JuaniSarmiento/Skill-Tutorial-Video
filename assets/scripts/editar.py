@@ -59,10 +59,21 @@ LEAD = 0.3  # silencio antes de que arranque la voz en cada slot
 TAIL = 0.5  # margen después de la voz
 
 
-def run(cmd: list[str]) -> str:
-    res = subprocess.run(cmd, capture_output=True, text=True)
+def _timeout_default() -> float:
+    return float(os.environ.get("TUT_FFMPEG_TIMEOUT", "120"))
+
+
+def run(cmd: list[str], timeout: float | None = None) -> str:
+    t = timeout if timeout is not None else _timeout_default()
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=t)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(f"timeout ({t:.1f}s) corriendo: {' '.join(cmd)}")
     if res.returncode != 0:
-        raise RuntimeError(f"falló: {' '.join(cmd)}\n{res.stderr[-2000:]}")
+        # N6 (QA): si el tramo que falló usaba VAAPI, sugerir software en vez de
+        # dejar que el usuario mezcle encoders a mitad de un render (rompe G4).
+        sugerencia = ("\n(usaba h264_vaapi: probá TUT_ENCODER=software)" if "h264_vaapi" in cmd else "")
+        raise RuntimeError(f"falló: {' '.join(cmd)}\n{res.stderr[-2000:]}{sugerencia}")
     return res.stdout
 
 
