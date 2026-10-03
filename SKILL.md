@@ -35,7 +35,12 @@ metadata:
 - **Encoder de video** (`editar.py`, `escena.py`): `TUT_ENCODER` elige `software` (libx264,
   default, idéntico a como salía antes) | `auto` (VAAPI si el GPU codifica h264 de verdad,
   probado codificando 1 cuadro; si no, libx264 con un aviso) | `vaapi` (exige VAAPI, aborta
-  antes del primer tramo si no hay). `TUT_VAAPI_DEVICE` pisa `/dev/dri/renderD128`.
+  antes del primer tramo si no hay). `TUT_VAAPI_DEVICE` pisa `/dev/dri/renderD128`. Vacía o con
+  mayúsculas/espacios (`""`, ` AUTO `) se normaliza igual que sin definirla. Si VAAPI falla a
+  mitad de un tramo, el error sugiere `TUT_ENCODER=software` (nunca mezcla encoders a mitad
+  de un render: rompe G4). Cada llamada a ffmpeg tiene un timeout (`TUT_FFMPEG_TIMEOUT`,
+  default 120 s): si se cuelga, falla nombrando el comando en vez de colgar el proceso para
+  siempre.
 
 ## Escenas: segmentos que no son pantalla grabada
 
