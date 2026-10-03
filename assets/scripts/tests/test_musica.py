@@ -70,6 +70,39 @@ def test_resolver_archivo_con_un_archivo_valido_devuelve_la_ruta_absoluta(tmp_pa
     assert musica.resolver_archivo(root, "musica/ok.wav") == archivo.resolve()
 
 
+# --- N4 (QA 03/10/2026): más caminos de error que tienen que abortar al arrancar --------
+
+def test_resolver_archivo_con_un_wav_de_0_segundos_aborta_con_la_ruta_absoluta(tmp_path):
+    # duracion() no tira RuntimeError acá: ffprobe da "N/A" para format=duration de un wav
+    # de 0s, y float("N/A") tira ValueError, que resolver_archivo no atrapaba (sólo
+    # RuntimeError): el error se escapaba sin ruta y sin SystemExit.
+    root = tmp_path
+    (root / "musica").mkdir()
+    archivo = root / "musica" / "vacio.wav"
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "anullsrc", "-t", "0",
+                    str(archivo)], check=True)
+
+    with pytest.raises(SystemExit) as e:
+        musica.resolver_archivo(root, "musica/vacio.wav")
+
+    assert str(archivo.resolve()) in str(e.value)
+
+
+def test_resolver_archivo_con_un_mp4_sin_audio_aborta_con_la_ruta_absoluta(tmp_path):
+    # un mp4 sin stream de audio tiene duración de CONTENEDOR válida (ffprobe la lee bien),
+    # así que duracion() no fallaba: resolver_archivo lo daba por bueno y recién reventaba
+    # más adelante, al intentar procesarlo como audio (después de escribir la voz).
+    root = tmp_path
+    archivo = root / "video_sin_audio.mp4"
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=s=160x90:r=10:d=1",
+                    "-c:v", "libx264", "-pix_fmt", "yuv420p", "-an", str(archivo)], check=True)
+
+    with pytest.raises(SystemExit) as e:
+        musica.resolver_archivo(root, "video_sin_audio.mp4")
+
+    assert str(archivo.resolve()) in str(e.value)
+
+
 # --- ventanas(): silencio/voz/mute a partir de los slots y la voz de cada segmento ----
 
 def test_ventanas_de_un_segmento_con_lead_y_tail_da_silencio_voz_silencio():

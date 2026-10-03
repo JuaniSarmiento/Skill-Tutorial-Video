@@ -105,6 +105,36 @@ def test_voz_con_musica_ilegible_aborta_y_no_escribe_el_final(tutorial):
     assert not (work / "final-juani.mp4").exists()
 
 
+# --- N4 (QA 03/10/2026): "musica": false arriba y "musica": {} -----------------------
+
+def test_voz_con_musica_false_arriba_del_guion_se_trata_como_sin_musica(tutorial):
+    # HITO2.md documenta "musica" arriba como un objeto {archivo,...}; "false" sólo está
+    # documentado adentro de un segmento. Elegido (y documentado en musica.py): arriba,
+    # "false" es lo más coherente con "sin la clave musica -> sin música" (Sin música es
+    # justamente el default de esa fila de la tabla), no un error.
+    tmp_path, work = tutorial
+    _guion(tmp_path, musica=False)
+
+    editar.voz("v09", "juani")  # no debe tirar: se comporta como si "musica" no estuviera
+
+    assert (work / "final-juani.mp4").exists()
+
+
+def test_voz_con_musica_vacia_arriba_del_guion_aborta_antes_de_escribir_la_voz(tutorial):
+    # {} es un objeto (pasa el chequeo de "tiene que ser false o un objeto"), pero le falta
+    # la clave obligatoria "archivo": antes esto no abortaba temprano, reventaba más
+    # adelante (preparar_pista con m_archivo=None) DESPUÉS de ya haber escrito la voz.
+    tmp_path, work = tutorial
+    _guion(tmp_path, musica={})
+
+    with pytest.raises(SystemExit) as e:
+        editar.voz("v09", "juani")
+
+    assert "archivo" in str(e.value)
+    assert not (work / "voz-juani.wav").exists()
+    assert not (work / "final-juani.mp4").exists()
+
+
 def _con_musica(tmp_path, dur=10.0, freq=220):
     (tmp_path / "musica").mkdir()
     archivo = tmp_path / "musica" / "fondo.wav"

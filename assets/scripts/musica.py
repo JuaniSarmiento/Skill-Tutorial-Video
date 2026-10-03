@@ -270,13 +270,34 @@ def construir_pista(voz_wav: Path, pista: Path, vts: list[tuple[float, float, st
     aplicar_ducking(pista, vts, ganancias_db, out)
 
 
+def _tiene_audio(path: Path) -> bool:
+    """True si `path` tiene al menos un stream de audio (un mp4 sin audio no lo tiene,
+    aunque ffprobe lea bien su duración de CONTENEDOR: esa es de video, no de audio)."""
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "a", "-show_entries", "stream=index",
+         "-of", "csv=p=0", str(path)],
+        capture_output=True, text=True)
+    return out.returncode == 0 and bool(out.stdout.strip())
+
+
 def resolver_archivo(root: Path, archivo: str) -> Path:
-    """Ruta absoluta del archivo de música, o aborta (R-2.6) si no existe o no se puede leer."""
+    """Ruta absoluta del archivo de música, o aborta (R-2.6) si no existe, no se puede leer,
+    no tiene audio, o dura 0 segundos.
+
+    N4 (QA 03/10/2026): antes sólo atrapaba RuntimeError de duracion(), así que un wav de
+    0s (ffprobe da "N/A", float("N/A") tira ValueError) se escapaba sin SystemExit y sin
+    ruta; y un mp4 sin audio pasaba de largo (su duración de CONTENEDOR es válida) y recién
+    reventaba más adelante, al tratar de procesarlo como audio, después de escribir la voz.
+    """
     ruta = (root / archivo).resolve()
     if not ruta.exists():
         raise SystemExit(f"ABORTADO: no existe el archivo de música: {ruta}")
     try:
-        duracion(ruta)
-    except RuntimeError as e:
+        d = duracion(ruta)
+    except (RuntimeError, ValueError) as e:
         raise SystemExit(f"ABORTADO: no se pudo leer el archivo de música {ruta}: {e}")
+    if d <= 0:
+        raise SystemExit(f"ABORTADO: el archivo de música dura 0 segundos: {ruta}")
+    if not _tiene_audio(ruta):
+        raise SystemExit(f"ABORTADO: el archivo de música no tiene audio: {ruta}")
     return ruta

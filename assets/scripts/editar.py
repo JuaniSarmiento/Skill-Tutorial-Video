@@ -507,11 +507,29 @@ def srt_time(t: float) -> str:
     return f"{ms // 3600000:02d}:{ms // 60000 % 60:02d}:{ms // 1000 % 60:02d},{ms % 1000:03d}"
 
 
+def _normalizar_musica(musica_g):
+    """Normaliza la clave "musica" de arriba del guion: {archivo,...} | false | ausente.
+
+    N4 (QA 03/10/2026): HITO2.md documenta "musica" arriba como un objeto {archivo,...};
+    "false" sólo está documentado adentro de un segmento. Elegido (y documentado acá):
+    arriba, "false" se trata igual que ausente -"Sin música" es justamente el default de
+    esa fila de la tabla del formato-, no es un error. Un objeto sin "archivo" sí lo es:
+    aborta antes de generar nada (antes reventaba más adelante, después de escribir la voz).
+    """
+    if musica_g is False or musica_g is None:
+        return None
+    if not isinstance(musica_g, dict):
+        sys.exit(f"ABORTADO: 'musica' tiene que ser un objeto {{archivo,...}} o false, no {musica_g!r}")
+    if "archivo" not in musica_g:
+        sys.exit("ABORTADO: falta la clave 'archivo' en 'musica'")
+    return musica_g
+
+
 def voz(vid: str, name: str) -> None:
     g = load(vid)
     work = ROOT / "videos" / vid
     slots = json.loads((work / f"slots-{name}.json").read_text())
-    musica_g = g.get("musica")
+    musica_g = _normalizar_musica(g.get("musica"))
     # R-2.6: archivo de música faltante o ilegible aborta ACÁ, antes de generar nada
     # (ni la voz): "al arrancar", no a mitad de render.
     m_archivo = musica.resolver_archivo(ROOT, musica_g["archivo"]) if musica_g else None
