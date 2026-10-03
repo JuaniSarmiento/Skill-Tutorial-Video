@@ -62,6 +62,7 @@ pueden mezclar con segmentos de pantalla en el mismo guion. Ejemplo completo, si
 | `presentacion` | título cinético + puntos (sin puntos: portada con `subtitulo`) | `puntos[]`, `subtitulo` |
 | `diagrama` | nodos en fila y flechas que se dibujan | `nodos[]` (`id`, `texto`, `detalle`), `flechas[]` (`de`, `a`, `texto`) |
 | `datos` | barras que crecen hasta su valor, con el número contando | `barras[]` (`etiqueta`, `valor`, `destacar`), `prefijo`, `nota` |
+| `imagen` | metáforas dibujadas (SVG local), una fila, cada una con su rótulo | `dibujos[]` (`id`, `svg`, posición `x`/`y`? opcional), `rotulos[]` (`texto`, `de`) |
 
 - **`cue` es la frase que nombra al elemento**, tal cual la dice el `texto` del segmento
   (`"cue": "tres décadas"`), o un número de segundos. El elemento entra en esa palabra.
@@ -92,6 +93,26 @@ pueden mezclar con segmentos de pantalla en el mismo guion. Ejemplo completo, si
   nombrando el título.
 - **Estilo**: `brand.json` en `TUT_ROOT` pisa lo que declare de `assets/escenas/brand.json`
   (colores, `fuente`, movimiento). Un solo color de acento, una sans-serif.
+- **Escena `imagen`**: metáforas dibujadas, no fotos (decidido por Juani, Q8). El `svg` de cada
+  dibujo es una ruta a un archivo en `assets/escenas/dibujos/` (o al de la serie): SVG local
+  escrito a mano para esta skill, o de un set de licencia MIT/ISC recoloreado, nunca una foto
+  ni una referencia de red. Falta o `href` externo (`http://`/`https://` en `href`/`xlink:href`)
+  → error antes de abrir Chrome, sin `.mp4` ni `.parcial.mp4`.
+  - **Recoloreado**: el SVG se escribe con el trazo en `stroke="currentColor"` y, si tiene
+    relleno secundario, `class="lleno" fill="currentColor"`. Nunca un color fijo (`#fff`, `red`)
+    adentro del SVG: la escena fija la propiedad CSS `color` del contenedor al acento del brand
+    si el dibujo es el foco (el que entró más recientemente, igual que nodos y flechas de
+    `diagrama.html`) o a `--tenue` en caso contrario. Así cambiar `colores.acento` sólo mueve
+    los píxeles del dibujo en foco.
+  - **Que se dibuje, no que aparezca**: el trazo avanza con `stroke-dasharray`/`stroke-dashoffset`
+    en función de `t` (ease-out, sin overshoot: los píxeles no-fondo del recuadro nunca bajan de
+    un cuadro al siguiente) y el relleno `.lleno` entra después, en la segunda mitad de
+    `movimiento.entrada` del brand.
+  - Sin posición (`x`/`y`) van en una sola fila, cuadrados, espaciados; con muchos dibujos o
+    textos de rótulo largos, igual que las otras plantillas, falla claro en vez de pisar.
+- **Cero WebGL**: el motor bloquea `getContext('webgl'|'webgl2'|'experimental-webgl')` en
+  cualquier plantilla (la GPU integrada de Juani la arrastra, PLAN.md); si una lo llama, sale
+  como `ContratoError`, igual que cualquier otro error de JavaScript de la página.
 - **Plantilla propia**: un HTML con `window.DURATION` y `async window.seek(t)` donde todo es
   función pura de `t` (sin `Date.now`, timers, `requestAnimationFrame` ni transiciones CSS).
   `escena.py render` falla claro si falta el contrato o si el JS tira un error.

@@ -1,0 +1,16 @@
+{
+  "tipo": "imagen",
+  "kicker": "Cómo funciona esta skill",
+  "titulo": {"texto": "Una idea que crece y se protege"},
+  "dibujos": [
+    {"id": "lampara", "svg": "dibujos/lampara.svg", "cue": 0.3},
+    {"id": "semilla", "svg": "dibujos/semilla.svg", "cue": 1.8},
+    {"id": "escudo", "svg": "dibujos/escudo.svg", "cue": 3.3}
+  ],
+  "rotulos": [
+    {"texto": "La idea", "cue": 0.3, "de": "lampara"},
+    {"texto": "Crece", "cue": 1.8, "de": "semilla"},
+    {"texto": "Se protege", "cue": 3.3, "de": "escudo"}
+  ],
+  "duracion": 5.0
+}
