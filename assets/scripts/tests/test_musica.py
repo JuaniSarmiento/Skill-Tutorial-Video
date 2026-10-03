@@ -280,6 +280,40 @@ def test_construir_pista_en_tramos_con_voz_queda_al_menos_15_lu_por_debajo(tmp_p
     assert m_loudness_voz == pytest.approx(v_loudness - 18, abs=1.5)
 
 
+def test_construir_pista_separa_al_menos_15_lu_en_cada_tramo_aunque_la_voz_cambie_de_volumen(tmp_path):
+    # N1 (QA 03/10/2026): construir_pista medía el loudness de TODA la voz de una sola vez;
+    # con 15 LU de diferencia entre dos mitades, la mitad floja quedaba a sólo ~3 LU de la
+    # música (bien por debajo del piso de R-2.2) porque la ganancia salía del promedio, no
+    # del loudness de CADA tramo.
+    def _ruido(nombre, dur, ganancia_db):
+        out = tmp_path / nombre
+        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi",
+                        "-i", f"anoisesrc=color=pink:a=0.3:d={dur}", "-af", f"volume={ganancia_db}dB",
+                        "-ar", "44100", str(out)], check=True)
+        return out
+
+    floja = _ruido("vozA.wav", 6.0, -12)
+    fuerte = _ruido("vozB.wav", 6.0, 3)
+    voz = tmp_path / "voz.wav"
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(floja), "-i", str(fuerte),
+                    "-filter_complex", "[0:a][1:a]concat=n=2:v=0:a=1", str(voz)], check=True)
+    cruda = tmp_path / "musica-cruda.wav"
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi",
+                    "-i", "anoisesrc=color=pink:d=12", "-ar", "44100", str(cruda)], check=True)
+    vts = [(0.0, 6.0, "voz"), (6.0, 12.0, "voz")]
+    out = tmp_path / "musica-juani.wav"
+
+    musica.construir_pista(voz, cruda, vts, debajo_de_la_voz_lu=18, out=out)
+
+    voz_floja_lu = _loudness_en(voz, 0.0, 6.0)
+    voz_fuerte_lu = _loudness_en(voz, 6.0, 12.0)
+    m_floja_lu = _loudness_en(out, 0.0, 6.0)
+    m_fuerte_lu = _loudness_en(out, 6.0, 12.0)
+
+    assert voz_floja_lu - m_floja_lu >= 15, (voz_floja_lu, m_floja_lu)
+    assert voz_fuerte_lu - m_fuerte_lu >= 15, (voz_fuerte_lu, m_fuerte_lu)
+
+
 def test_construir_pista_en_silencios_queda_mas_arriba_que_en_tramos_con_voz(tmp_path):
     voz = _tono(tmp_path, "voz.wav", 4.0)
     cruda = _tono(tmp_path, "musica-cruda.wav", 4.0, sr=44100)

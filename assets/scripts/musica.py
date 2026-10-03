@@ -73,13 +73,16 @@ def ventanas(slots: list[float], voces: list[tuple[float, float] | None]) -> lis
     return out
 
 
-def _puntos_envolvente(vts: list[tuple[float, float, str]], ganancia_db: dict[str, float],
+def _puntos_envolvente(vts: list[tuple[float, float, str]], ganancias_db: list[float],
                         ramp: float) -> list[tuple[float, float]]:
     """[(t, nivel_lineal)] que describe la envolvente como curva lineal a tramos: constante en
     cada meseta, en rampa (no en escalón) entre niveles vecinos. `ramp` segundos centrados en
     cada cambio, recortados si alguna de las dos ventanas vecinas es más chica que eso.
+
+    `ganancias_db` trae una ganancia POR VENTANA (no por nombre de nivel): dos ventanas
+    "voz" pueden pedir ganancias distintas si la voz sonaba distinto en cada una (N1, QA).
     """
-    niveles = [10 ** (ganancia_db[nivel] / 20) for _, _, nivel in vts]
+    niveles = [10 ** (g / 20) for g in ganancias_db]
     puntos = [(vts[0][0], niveles[0])]
     for i in range(len(vts) - 1):
         b = vts[i][1]
@@ -132,9 +135,13 @@ def _formato(path: Path) -> tuple[int, int]:
     return int(sr), int(canales)
 
 
-def aplicar_ducking(pista: Path, vts: list[tuple[float, float, str]], ganancia_db: dict[str, float],
-                     out: Path, ramp: float = 0.15) -> None:
+def aplicar_ducking(pista: Path, vts: list[tuple[float, float, str]],
+                     ganancia_db: "dict[str, float] | list[float]", out: Path, ramp: float = 0.15) -> None:
     """Aplica la envolvente de ganancia (por ventana, en rampa) a `pista` y la deja en `out`.
+
+    `ganancia_db` acepta un dict {nivel: dB} (la misma ganancia para todas las ventanas de
+    ese nivel) o una lista con una ganancia por ventana (N1, QA: cada ventana "voz" puede
+    pedir una ganancia distinta si la voz sonaba distinto ahí).
 
     B1 (QA 03/10/2026): antes la envolvente era una expresión `if()` anidada para
     `volume=eval=frame` (2 niveles por transición), y el evaluador de ffmpeg corta en 100
@@ -143,7 +150,9 @@ def aplicar_ducking(pista: Path, vts: list[tuple[float, float, str]], ganancia_d
     calculadas en Python, sin ninguna expresión- y se aplica multiplicando sample a sample
     (`amultiply`): la profundidad del filtergraph no depende de la cantidad de segmentos.
     """
-    puntos = _puntos_envolvente(vts, ganancia_db, ramp)
+    ganancias = ([ganancia_db[nivel] for _, _, nivel in vts] if isinstance(ganancia_db, dict)
+                 else list(ganancia_db))
+    puntos = _puntos_envolvente(vts, ganancias, ramp)
     muestras, escala = _muestras_envolvente(puntos, SR_ENVOLVENTE)
     envolvente = out.with_name(f"{out.stem}.envolvente.wav")
     with wave.open(str(envolvente), "wb") as w:
@@ -190,20 +199,60 @@ def preparar_pista(archivo: Path, total: float, fundido: float, out: Path) -> No
         raise RuntimeError(f"falló preparando la pista de música: {res.stderr[-1000:]}")
 
 
+def _loudness_en_ventana(wav: Path, inicio: float, fin: float, default: float) -> float:
+    """Loudness integrado de sólo [inicio, fin) de `wav`, o `default` si la ventana es tan
+    corta que ebur128 no llega a dar un bloque válido (gate de -70 LUFS)."""
+    recorte = wav.with_name(f"{wav.stem}.ventana-{inicio:.3f}-{fin:.3f}.wav")
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(wav), "-ss", f"{inicio:.6f}",
+                    "-to", f"{fin:.6f}", str(recorte)], check=True)
+    try:
+        return loudness_integrada(recorte)
+    except RuntimeError:
+        return default
+    finally:
+        recorte.unlink(missing_ok=True)
+
+
+def _voz_lu_mas_cercana(voz_lu_por_indice: dict[int, float], i: int, default: float) -> float:
+    """El loudness de la ventana "voz" más cercana a `i` en la secuencia (antes si hay,
+    si no después): una ventana "silencio"/"mute" no tiene voz propia para medir."""
+    for j in range(i - 1, -1, -1):
+        if j in voz_lu_por_indice:
+            return voz_lu_por_indice[j]
+    for j in sorted(k for k in voz_lu_por_indice if k > i):
+        return voz_lu_por_indice[j]
+    return default
+
+
 def construir_pista(voz_wav: Path, pista: Path, vts: list[tuple[float, float, str]],
                      debajo_de_la_voz_lu: float, out: Path) -> None:
     """La pista de música ya atenuada (R-2.2): mide la voz y la música, y calcula cuánta
     ganancia hace falta para que la música quede `debajo_de_la_voz_lu` LU bajo la voz en los
     tramos con voz, y SILENCIO_LU en los silencios. "mute" (musica: false) va a MUTE_DB fijo.
+
+    N1 (QA 03/10/2026): la voz se mide POR VENTANA "voz" (no una sola vez para todo el
+    archivo): medida una sola vez, con una diferencia grande de volumen entre tramos la
+    mitad floja queda mucho más cerca de la música que el piso de R-2.2 (cumple sólo "en
+    promedio", no en cada tramo). Las ventanas "silencio"/"mute" no tienen voz propia:
+    usan el loudness de la ventana "voz" más cercana en la secuencia.
     """
-    voz_lu = loudness_integrada(voz_wav)
     musica_lu = loudness_integrada(pista)
-    ganancia_db = {
-        "voz": (voz_lu - debajo_de_la_voz_lu) - musica_lu,
-        "silencio": (voz_lu - SILENCIO_LU) - musica_lu,
-        "mute": MUTE_DB,
+    voz_lu_global = loudness_integrada(voz_wav)
+    voz_lu_por_indice: dict[int, float] = {
+        i: _loudness_en_ventana(voz_wav, ini, fin, voz_lu_global)
+        for i, (ini, fin, nivel) in enumerate(vts) if nivel == "voz"
     }
-    aplicar_ducking(pista, vts, ganancia_db, out)
+    ganancias_db = []
+    for i, (ini, fin, nivel) in enumerate(vts):
+        if nivel == "mute":
+            ganancias_db.append(MUTE_DB)
+            continue
+        voz_lu = voz_lu_por_indice.get(i, None)
+        if voz_lu is None:
+            voz_lu = _voz_lu_mas_cercana(voz_lu_por_indice, i, voz_lu_global)
+        objetivo = debajo_de_la_voz_lu if nivel == "voz" else SILENCIO_LU
+        ganancias_db.append((voz_lu - objetivo) - musica_lu)
+    aplicar_ducking(pista, vts, ganancias_db, out)
 
 
 def resolver_archivo(root: Path, archivo: str) -> Path:
