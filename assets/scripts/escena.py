@@ -293,6 +293,21 @@ def pagina_de_escena(browser, plantilla, spec: dict, brand: dict):
     page = browser.new_page(viewport={"width": ANCHO_BASE, "height": ALTO_BASE}, device_scale_factor=1)
     errores = []
     page.on("pageerror", lambda e: errores.append(str(e)))
+
+    def _bloquear_red(route):
+        """B1, defensa en profundidad: el saneado de resolver_dibujos es la primera barrera;
+        esta es la segunda, para todas las plantillas. Nada sale al mundo (XHR/fetch/img/CSS):
+        sólo file:// de la propia escena. Un intento de red falla el render con ContratoError
+        en vez de pasar en silencio (antes un `catch` de la plantilla se lo tragaba).
+        """
+        url = route.request.url
+        if url.startswith("file://"):
+            route.continue_()
+        else:
+            errores.append(f"intento de red bloqueado ({route.request.method} {url})")
+            route.abort()
+
+    page.route("**/*", _bloquear_red)
     try:
         page.add_init_script(GUARDIA_WEBGL)
         page.add_init_script(f"window.SPEC = {json.dumps(spec)}; window.BRAND = {json.dumps(brand)};")
