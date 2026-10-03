@@ -414,13 +414,20 @@ def imagen(vid: str, voz_name: str = "argentina") -> None:
 
 
 def read_pcm(path: Path, max_len: float) -> bytes:
-    """Lee un wav, lo normaliza a mono 22050 s16 y lo acelera si no entra en max_len."""
+    """Lee un wav, lo normaliza a mono 22050 s16 y lo acelera si no entra en max_len.
+
+    QA (03/10/2026): ffmpeg 6.1.1 se cuelga con `-af atempo=1.0000` para ciertas
+    entradas (deadlock, no es un bug de esta skill). Factor 1.0 es exactamente
+    el camino normal (la voz entra en el slot), así que no se arma ese filtro:
+    no hay nada que acelerar.
+    """
     norm = path.with_suffix(".norm.wav")
     d = duration(path)
     tempo = d / max_len if d > max_len else 1.0
     if tempo > 1.15:
         print(f"  AVISO {path.name}: la voz dura {d:.1f}s y el slot da {max_len:.1f}s (x{tempo:.2f})")
-    run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(path), "-af", f"atempo={tempo:.4f}", "-ac", "1", "-ar", str(RATE),
+    af = [] if tempo == 1.0 else ["-af", f"atempo={tempo:.4f}"]
+    run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(path), *af, "-ac", "1", "-ar", str(RATE),
          "-sample_fmt", "s16", str(norm)])
     with wave.open(str(norm)) as w:
         data = w.readframes(w.getnframes())
