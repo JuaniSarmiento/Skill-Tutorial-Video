@@ -41,6 +41,23 @@ def test_software_explicito_es_igual_que_sin_la_variable(monkeypatch):
         "-c:v", "libx264", "-preset", "ultrafast", "-crf", "18"]
 
 
+# --- N2 (QA 03/10/2026): TUT_ENCODER="" se comporta como no-definida ---------
+
+def test_tut_encoder_vacia_se_comporta_como_no_definida(monkeypatch):
+    monkeypatch.setenv("TUT_ENCODER", "")
+    assert encoder.cv_args(crf=20, preset="veryfast") == [
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p"]
+
+
+def test_tut_encoder_con_mayusculas_y_espacios_se_normaliza(monkeypatch):
+    monkeypatch.setenv("TUT_ENCODER", " AUTO ")
+    monkeypatch.setenv("TUT_VAAPI_DEVICE", "/no/existe")
+
+    args = encoder.cv_args(crf=20)
+
+    assert args[1] == "libx264"
+
+
 # --- TUT_ENCODER inválido -----------------------------------------------------
 
 def test_un_encoder_desconocido_falla_nombrando_las_opciones(monkeypatch):

@@ -42,7 +42,7 @@ def _probar_vaapi(device: str) -> tuple[bool, str]:
 @functools.lru_cache(maxsize=1)
 def _elegido() -> tuple[str, str]:
     """(modo_real, device). 'vaapi' o 'software'. Se decide una sola vez por proceso."""
-    modo = os.environ.get("TUT_ENCODER", "software")
+    modo = os.environ.get("TUT_ENCODER", "software").strip().lower() or "software"
     if modo not in MODOS:
         raise ValueError(f"TUT_ENCODER inválido: {modo!r} (opciones: {', '.join(MODOS)})")
     if modo == "software":
