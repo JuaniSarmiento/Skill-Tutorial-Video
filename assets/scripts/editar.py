@@ -27,6 +27,8 @@ import json
 import os
 import subprocess
 import sys
+import threading
+import time
 import wave
 from pathlib import Path
 
@@ -65,17 +67,65 @@ def _timeout_default() -> float:
 
 
 def run(cmd: list[str], timeout: float | None = None) -> str:
+    """Corre `cmd` y devuelve stdout; falla (RuntimeError) si el proceso no termina bien.
+
+    B2 (QA 03/10/2026): `timeout` (default `TUT_FFMPEG_TIMEOUT`) ya NO es un límite total
+    -eso cortaba tramos largos que iban progresando bien, como un screen recording de 20
+    minutos en la 2da pasada de build_segment-, sino segundos SIN AVANCE: el cuelgue real
+    (atempo con ciertos wavs) es un deadlock con 0% CPU y sin salida. Si `cmd` es ffmpeg, se
+    le agrega `-progress pipe:1` para tener un latido aunque "-loglevel error" lo deje
+    callado mientras todo va bien; si no es ffmpeg (ffprobe, o los comandos de los tests),
+    cualquier byte nuevo en stdout/stderr cuenta como avance, y sin avance alguno el límite
+    sigue actuando como un timeout total (como antes).
+    """
     t = timeout if timeout is not None else _timeout_default()
-    try:
-        res = subprocess.run(cmd, capture_output=True, text=True, timeout=t)
-    except subprocess.TimeoutExpired:
-        raise RuntimeError(f"timeout ({t:.1f}s) corriendo: {' '.join(cmd)}")
-    if res.returncode != 0:
+    es_ffmpeg = bool(cmd) and Path(cmd[0]).name == "ffmpeg"
+    cmd_run = [cmd[0], "-progress", "pipe:1", *cmd[1:]] if es_ffmpeg else list(cmd)
+
+    proc = subprocess.Popen(cmd_run, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    salida: dict[str, list[str]] = {"out": [], "err": []}
+    estado = {"ultimo": time.monotonic()}
+    bloqueo = threading.Lock()
+
+    def _leer(stream, clave: str) -> None:
+        for linea in iter(stream.readline, ""):
+            with bloqueo:
+                salida[clave].append(linea)
+                estado["ultimo"] = time.monotonic()
+        stream.close()
+
+    hilos = [threading.Thread(target=_leer, args=(proc.stdout, "out"), daemon=True),
+             threading.Thread(target=_leer, args=(proc.stderr, "err"), daemon=True)]
+    for h in hilos:
+        h.start()
+
+    colgado = False
+    while proc.poll() is None:
+        time.sleep(0.05)
+        with bloqueo:
+            ocioso = time.monotonic() - estado["ultimo"]
+        if ocioso > t:
+            colgado = True
+            proc.kill()
+            break
+    proc.wait()
+    for h in hilos:
+        h.join(timeout=1)
+
+    if colgado:
+        if es_ffmpeg and cmd:
+            # el último argumento es la salida por convención en todos los llamados de este
+            # módulo: a medio escribir, un .mp4/.wav parcial es peor que no tener nada (un
+            # render repetido lo encontraría y lo daría por bueno).
+            Path(cmd[-1]).unlink(missing_ok=True)
+        raise RuntimeError(f"TUT_FFMPEG_TIMEOUT: {t:.1f}s sin avance corriendo: {' '.join(cmd)}")
+
+    if proc.returncode != 0:
         # N6 (QA): si el tramo que falló usaba VAAPI, sugerir software en vez de
         # dejar que el usuario mezcle encoders a mitad de un render (rompe G4).
         sugerencia = ("\n(usaba h264_vaapi: probá TUT_ENCODER=software)" if "h264_vaapi" in cmd else "")
-        raise RuntimeError(f"falló: {' '.join(cmd)}\n{res.stderr[-2000:]}{sugerencia}")
-    return res.stdout
+        raise RuntimeError(f"falló: {' '.join(cmd)}\n{''.join(salida['err'])[-2000:]}{sugerencia}")
+    return "".join(salida["out"])
 
 
 def duration(path: Path) -> float:
