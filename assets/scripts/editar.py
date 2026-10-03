@@ -31,6 +31,7 @@ import wave
 from pathlib import Path
 
 import encoder
+import musica
 
 ROOT = Path(os.environ.get("TUT_ROOT", os.getcwd()))
 PIPER_MODEL = Path.home() / ".local/share/piper-voices/es_AR-daniela-high.onnx"
@@ -444,8 +445,14 @@ def voz(vid: str, name: str) -> None:
     g = load(vid)
     work = ROOT / "videos" / vid
     slots = json.loads((work / f"slots-{name}.json").read_text())
+    musica_g = g.get("musica")
+    # R-2.6: archivo de música faltante o ilegible aborta ACÁ, antes de generar nada
+    # (ni la voz): "al arrancar", no a mitad de render.
+    m_archivo = musica.resolver_archivo(ROOT, musica_g["archivo"]) if musica_g else None
+
     pcm = bytearray()
     srt = []
+    voces = []  # (inicio_rel, fin_rel) de la voz dentro de cada slot, o None si "musica": false
     t = 0.0
     for i, (seg, slot) in enumerate(zip(g["segmentos"], slots)):
         data = read_pcm(voice_wav(vid, name, i, seg["texto"]), slot - LEAD - 0.1)
@@ -454,6 +461,7 @@ def voz(vid: str, name: str) -> None:
         body += b"\x00\x00" * max(int(slot * RATE) - len(body) // 2, 0)
         pcm += body[: int(slot * RATE) * 2]
         srt.append(f"{i + 1}\n{srt_time(t + LEAD)} --> {srt_time(t + LEAD + len(data) / 2 / RATE)}\n{seg['texto']}\n")
+        voces.append(None if seg.get("musica") is False else (LEAD, LEAD + len(data) / 2 / RATE))
         t += slot
     wav_out = work / f"voz-{name}.wav"
     with wave.open(str(wav_out), "wb") as w:
@@ -467,9 +475,23 @@ def voz(vid: str, name: str) -> None:
     # y con -shortest el final perdía cuadros (685 -> 681, medido por QA). La voz se
     # completa con silencio (apad) hasta el largo del video.
     video = work / f"video-{name}.mp4"
-    run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(video), "-i", str(wav_out), "-map", "0:v", "-map", "1:a",
-         "-c:v", "copy", "-c:a", "aac", "-b:a", "160k", "-af", "loudnorm=I=-16:TP=-1.5,apad",
-         "-t", f"{duration(video):.6f}", str(final)])
+    if musica_g is None:
+        # sin "musica" en el guion: EXACTAMENTE el comando de antes del Hito 2 (G3).
+        run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(video), "-i", str(wav_out), "-map", "0:v", "-map", "1:a",
+             "-c:v", "copy", "-c:a", "aac", "-b:a", "160k", "-af", "loudnorm=I=-16:TP=-1.5,apad",
+             "-t", f"{duration(video):.6f}", str(final)])
+    else:
+        total = sum(slots)
+        cruda = work / f"musica-cruda-{name}.wav"
+        musica.preparar_pista(m_archivo, total, musica_g.get("fundido", 2.0), cruda)
+        vts = musica.ventanas(slots, voces)
+        musica_out = work / f"musica-{name}.wav"
+        musica.construir_pista(wav_out, cruda, vts, musica_g.get("debajo_de_la_voz_lu", 18), musica_out)
+        run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(video), "-i", str(wav_out), "-i", str(musica_out),
+             "-filter_complex", "[1:a][2:a]amix=inputs=2:duration=longest:normalize=0[amix];"
+                                 "[amix]loudnorm=I=-16:TP=-1.5,apad[aout]",
+             "-map", "0:v", "-map", "[aout]", "-c:v", "copy", "-c:a", "aac", "-b:a", "160k",
+             "-t", f"{duration(video):.6f}", str(final)])
     print(f"{vid}: {final.name} {duration(final):.1f}s")
 
 
