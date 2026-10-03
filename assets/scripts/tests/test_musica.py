@@ -126,6 +126,68 @@ def test_aplicar_ducking_la_transicion_es_rampa_no_escalon(tmp_path):
     assert base * 0.15 < en_el_cambio < base * 0.85
 
 
+def test_aplicar_ducking_la_rampa_progresa_de_a_poco_y_no_salta_de_golpe(tmp_path):
+    # N3(a) (QA 03/10/2026): el test anterior medía con una ventana de RMS (0.01s) tan
+    # ancha como la mitad de la rampa (ramp=0.2 -> r/2=0.1): esa ventana promedia un
+    # escalón seco (sin rampa) con la meseta de ANTES y la de DESPUÉS y da el mismo
+    # resultado "entre medio" que una rampa real, así que un escalón también la pasaba.
+    # Acá se muestrean varios puntos chicos (ventana 0.005s) atravesando la rampa y se
+    # pide que progresen de forma monótona SIN llegar de entrada a ninguna de las dos
+    # mesetas: un escalón pondría los puntos de antes exactamente en la meseta de antes
+    # y los de después exactamente en la de después, violando la monotonía estricta
+    # entre ellos (todos saltan juntos en el mismo instante).
+    tono = _tono(tmp_path, "tono.wav", 3.0)
+    base = _rms_en(tono, 0.5)
+    vts = [(0.0, 1.0, "silencio"), (1.0, 2.0, "voz"), (2.0, 3.0, "silencio")]
+    out = tmp_path / "out.wav"
+
+    musica.aplicar_ducking(tono, vts, {"silencio": 0.0, "voz": -20.0}, out, ramp=0.2)
+
+    puntos = [_rms_en(out, 1.0 + d, ventana=0.005) for d in (-0.08, -0.04, 0.0, 0.04, 0.08)]
+    # estrictamente decreciente (silencio -> voz, -20dB): cada punto más cerca de la meseta
+    # de voz que el anterior, y ninguno YA en una meseta (ni en el primero ni en el último).
+    for a, b in zip(puntos, puntos[1:]):
+        assert a > b * 1.02, puntos  # progreso real, no una meseta repetida
+    assert puntos[0] < base * 0.98, puntos      # no arrancó ya en la meseta "silencio"
+    assert puntos[-1] > base * 0.1 * 1.3, puntos  # no llegó ya a la meseta "voz"
+
+
+# --- B1 (QA 03/10/2026): con muchos segmentos, el evaluador de ffmpeg no puede con -------
+# una expresión de if() anidados (2 niveles por transición, límite de 100 del evaluador).
+
+def test_aplicar_ducking_con_muchos_segmentos_no_rompe_el_evaluador_de_ffmpeg(tmp_path):
+    # repro de QA: con 33 segmentos de 6s (igual patrón silencio/voz/silencio que acá, con
+    # slots más chicos para que el test sea rápido) la expresión anidada pasaba los 100
+    # niveles que el evaluador de ffmpeg admite y fallaba con "Missing ')' or too many args".
+    # Con 32 andaba: no es un límite de tamaño de archivo, es de PROFUNDIDAD de la expresión.
+    n = 40
+    tono = _tono(tmp_path, "tono.wav", n * 0.3)
+    vts = musica.ventanas([0.3] * n, [(0.05, 0.25)] * n)
+    out = tmp_path / "out.wav"
+
+    musica.aplicar_ducking(tono, vts, {"voz": -18, "silencio": -10}, out)
+
+    assert musica.duracion(out) == pytest.approx(n * 0.3, abs=0.2)
+
+
+def test_aplicar_ducking_con_300_segmentos_tambien_funciona(tmp_path):
+    # triangula B1 con un n bien por encima del límite (no alcanza con "subir el límite
+    # un poco": la solución tiene que ser independiente de la cantidad de segmentos).
+    import time
+
+    n = 300
+    tono = _tono(tmp_path, "tono.wav", n * 0.3)
+    vts = musica.ventanas([0.3] * n, [(0.05, 0.25)] * n)
+    out = tmp_path / "out.wav"
+
+    inicio = time.monotonic()
+    musica.aplicar_ducking(tono, vts, {"voz": -18, "silencio": -10}, out)
+    tardo = time.monotonic() - inicio
+
+    assert musica.duracion(out) == pytest.approx(n * 0.3, abs=0.2)
+    assert tardo < 60, f"tardó {tardo:.1f}s con 300 segmentos"
+
+
 # --- preparar_pista(): dura exactamente `total`, en bucle o recortada con fundido -----
 
 def test_preparar_pista_mas_corta_que_el_total_hace_bucle(tmp_path):
