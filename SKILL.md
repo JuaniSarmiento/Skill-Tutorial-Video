@@ -32,6 +32,11 @@ metadata:
 | 5. Verificar | Whisper sobre cada tramo (repeticiones) + `silencedetect` | `verificar_voz.py` |
 | 6. Publicar | comprimir <10 MB, subir con Claude in Chrome, playlist/carpeta pública | ver Publicación |
 
+- **Encoder de video** (`editar.py`, `escena.py`): `TUT_ENCODER` elige `software` (libx264,
+  default, idéntico a como salía antes) | `auto` (VAAPI si el GPU codifica h264 de verdad,
+  probado codificando 1 cuadro; si no, libx264 con un aviso) | `vaapi` (exige VAAPI, aborta
+  antes del primer tramo si no hay). `TUT_VAAPI_DEVICE` pisa `/dev/dri/renderD128`.
+
 ## Escenas: segmentos que no son pantalla grabada
 
 Un segmento con `"escena"` en vez de `inicio`/`fin` no se corta del crudo: se renderiza desde
@@ -341,6 +346,8 @@ una grabacion corta con `rec.py`.
 ```bash
 # variables comunes
 export TUT_ROOT=~/Proyectos/tutorial-X   # raíz: raw/, guion/, videos/
+export TUT_ENCODER=auto                   # auto|vaapi|software (default software, igual que antes de VAAPI)
+export TUT_VAAPI_DEVICE=/dev/dri/renderD128  # sólo si el dispositivo no es el default
 export OC_DIR=~/Proyectos/proyecto-X      # directorio donde corre opencode
 export OC_WIN=0x06a00005                  # id de ventana de la terminal (wmctrl -l)
 S=~/.claude/skills/tutorial-video-agente/assets/scripts
