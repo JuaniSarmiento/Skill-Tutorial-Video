@@ -91,6 +91,20 @@ def test_una_plantilla_que_llama_a_webgl_falla_con_contrato_error(tmp_path, tipo
         escena.render(html, {}, tmp_path / "out.mp4", fps=12, ancho=960)
 
 
+@pytest.mark.parametrize("tipo", ["webgl", "webgl2", "experimental-webgl"])
+def test_una_plantilla_que_llama_a_webgl_por_offscreencanvas_tambien_falla(tmp_path, tipo):
+    # B6 (QA 03/10/2026): la guardia sólo cubría HTMLCanvasElement; OffscreenCanvas
+    # la saltea y sigue pudiendo pedir WebGL.
+    html = tmp_path / "webgl-offscreen.html"
+    html.write_text(f"""<script>
+      window.DURATION = 1;
+      window.seek = async t => {{ new OffscreenCanvas(100, 100).getContext({tipo!r}); }};
+    </script>""")
+
+    with pytest.raises(escena.ContratoError, match="webgl"):
+        escena.render(html, {}, tmp_path / "out.mp4", fps=12, ancho=960)
+
+
 def test_una_plantilla_que_usa_canvas_2d_no_se_ve_afectada_por_la_guardia_de_webgl(tmp_path):
     html = tmp_path / "canvas2d.html"
     html.write_text("""<script>

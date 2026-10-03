@@ -271,13 +271,19 @@ def avisar_si_falta_la_fuente(page, fuente) -> bool:
 # R-4.5 (PLAN.md): Canvas 2D / SVG, nunca WebGL (la GPU integrada de Juani la arrastra).
 # Se patchea ANTES de que cargue la plantilla: si una la llama, página falla con el mismo
 # camino que un error de JS (page.on("pageerror")) y sale como ContratoError.
+# B6 (QA 03/10/2026): HTMLCanvasElement no es el único con getContext; OffscreenCanvas (que
+# puede pedir 'webgl' igual, sin estar en el DOM) la saltea si no se cubre también.
 GUARDIA_WEBGL = """(function () {
-  const orig = HTMLCanvasElement.prototype.getContext;
-  HTMLCanvasElement.prototype.getContext = function (tipo, ...resto) {
-    if (['webgl', 'webgl2', 'experimental-webgl'].includes(tipo))
-      throw new Error(`getContext(${JSON.stringify(tipo)}): esta skill es Canvas 2D / SVG, nunca WebGL`);
-    return orig.call(this, tipo, ...resto);
-  };
+  function bloquear(proto) {
+    const orig = proto.getContext;
+    proto.getContext = function (tipo, ...resto) {
+      if (['webgl', 'webgl2', 'experimental-webgl'].includes(tipo))
+        throw new Error(`getContext(${JSON.stringify(tipo)}): esta skill es Canvas 2D / SVG, nunca WebGL`);
+      return orig.call(this, tipo, ...resto);
+    };
+  }
+  bloquear(HTMLCanvasElement.prototype);
+  if (typeof OffscreenCanvas !== 'undefined') bloquear(OffscreenCanvas.prototype);
 })();"""
 
 
