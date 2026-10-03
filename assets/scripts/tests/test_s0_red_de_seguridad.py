@@ -29,9 +29,26 @@ import pytest
 
 pytest.importorskip("playwright")
 import editar  # noqa: E402
+import encoder  # noqa: E402
 import palabras  # noqa: E402
 
 pytestmark = pytest.mark.integracion
+
+
+@pytest.fixture(autouse=True)
+def _sin_encoder_ambiente(monkeypatch):
+    """N3 (QA 03/10/2026): esta es la base congelada del Hito 1 (software, G3).
+
+    Un TUT_ENCODER=vaapi (o cacheado de otro test) en el ambiente la rompe: antes
+    de este fixture, una corrida con esa variable puesta fallaba con EncoderError
+    en vez de comparar hashes.
+    """
+    monkeypatch.delenv("TUT_ENCODER", raising=False)
+    monkeypatch.delenv("TUT_VAAPI_DEVICE", raising=False)
+    encoder.reset()
+    yield
+    encoder.reset()
+
 
 FIXTURES = Path(__file__).parent / "fixtures" / "s0"
 GUION_EJEMPLO = Path(__file__).resolve().parents[2] / "guion-ejemplo" / "explicador-interes-compuesto.json"
