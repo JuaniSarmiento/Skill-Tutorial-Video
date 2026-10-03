@@ -41,6 +41,14 @@ metadata:
   de un render: rompe G4). Cada llamada a ffmpeg tiene un timeout (`TUT_FFMPEG_TIMEOUT`,
   default 120 s): si se cuelga, falla nombrando el comando en vez de colgar el proceso para
   siempre.
+- **Música de fondo** (`editar.py voz`, `musica.py`): `"musica": {"archivo", "debajo_de_la_voz_lu"?,
+  "fundido"?}` arriba del guion (ver README → El guion); `"musica": false` en un segmento la apaga
+  sólo ahí. `archivo` es relativo a `TUT_ROOT`; la música la pone quien arma el tutorial en
+  `TUT_ROOT/musica/` (la skill no la trae, por licencia) y si falta o no se puede leer, aborta
+  antes de generar nada. Ducking en rampa (no en escalón): 18 LU bajo la voz mientras hay voz,
+  10 LU en los silencios (`debajo_de_la_voz_lu` sólo ajusta el primero). El final sigue dando
+  -16 LUFS / TP ≤ -1.5 dBTP igual que sin música. Sin la clave `musica`, el audio sale idéntico
+  al de antes de esta función (G3).
 
 ## Escenas: segmentos que no son pantalla grabada
 
