@@ -191,4 +191,36 @@ def test_voz_con_musica_el_final_sigue_cumpliendo_el_loudness_objetivo(tutorial)
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(final), "-vn", str(audio)], check=True)
     i, tp = musica.medir_i_tp(audio)
     assert i == pytest.approx(-16.0, abs=1.0)
-    assert tp <= -1.5 + 0.3  # loudnorm no es exacto al dBTP: margen chico de medición
+    assert tp <= -1.5
+
+
+def test_voz_con_musica_picuda_y_voz_corta_el_tp_del_final_no_se_pasa_de_1_5_dbtp(tmp_path, monkeypatch):
+    # N2 (QA 03/10/2026): con música de clicks, el AAC del final le agrega TP de más (el
+    # ducking normal -tramos "voz"- ya atenúa bastante la música y lo tapa: hace falta un
+    # slot con una voz CORTA -mucho "silencio", sólo 10 LU bajo la voz- para que la música
+    # quede fuerte y el agregado del AAC se note). Sin tolerancia: una mutación que vuelva
+    # el target de loudnorm a TP=-0.5 tiene que hacer fallar este test.
+    monkeypatch.setattr(editar, "ROOT", tmp_path)
+    (tmp_path / "guion").mkdir()
+    work = tmp_path / "videos" / "v09"
+    (work / "juani").mkdir(parents=True)
+    slot = 8.0
+    _wav(work / "juani" / "00.wav", 0.5)  # voz de 0.5s en un slot de 8s: casi todo es "silencio"
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=s=320x180:r=30",
+                    "-frames:v", str(round(slot * 30)), "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                    str(work / "video-juani.mp4")], check=True)
+    (work / "slots-juani.json").write_text(json.dumps([slot]))
+    (tmp_path / "musica").mkdir()
+    archivo = tmp_path / "musica" / "clicks.wav"
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi",
+                    "-i", r"aevalsrc='if(lt(mod(t\,0.05)\,0.0015)\,0.99\,0)':d=30:s=44100",
+                    str(archivo)], check=True)
+    _guion(tmp_path, musica={"archivo": "musica/clicks.wav"})
+
+    editar.voz("v09", "juani")
+
+    final = work / "final-juani.mp4"
+    audio = work / "final-audio.wav"
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(final), "-vn", str(audio)], check=True)
+    _, tp = musica.medir_i_tp(audio)
+    assert tp <= -1.5, tp

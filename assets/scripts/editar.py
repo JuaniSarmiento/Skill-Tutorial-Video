@@ -60,6 +60,10 @@ FONT = _ruta_fuente("C:/Windows/Fonts/arial.ttf" if _ES_WINDOWS
 RATE = 22050
 LEAD = 0.3  # silencio antes de que arranque la voz en cada slot
 TAIL = 0.5  # margen después de la voz
+# N2 (QA 03/10/2026): el target de TP que se le pide a loudnorm en el camino CON música
+# (-c:a aac le agrega TP de más después, hasta ~0.7dB medido con música picuda): más
+# abajo que el -1.5 de R-2.3 para que el final MEDIDO (post-encode) siga cumpliéndolo.
+TP_OBJETIVO_CON_MUSICA = -2.0
 
 
 def _timeout_default() -> float:
@@ -549,9 +553,13 @@ def voz(vid: str, name: str) -> None:
         vts = musica.ventanas(slots, voces)
         musica_out = work / f"musica-{name}.wav"
         musica.construir_pista(wav_out, cruda, vts, musica_g.get("debajo_de_la_voz_lu", 18), musica_out)
+        # N2 (QA 03/10/2026): loudnorm mide el TP ANTES del encode; el AAC de -c:a aac le
+        # agrega TP de más (medido: hasta ~0.7dB con música picuda), así que pedirle
+        # TP=-1.5 a loudnorm no alcanza para que el final MEDIDO cumpla R-2.3 (TP<=-1.5).
+        # Apuntando más abajo (-2.0) queda margen para lo que el encoder agrega después.
         run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(video), "-i", str(wav_out), "-i", str(musica_out),
              "-filter_complex", "[1:a][2:a]amix=inputs=2:duration=longest:normalize=0[amix];"
-                                 "[amix]loudnorm=I=-16:TP=-1.5,apad[aout]",
+                                 f"[amix]loudnorm=I=-16:TP={TP_OBJETIVO_CON_MUSICA},apad[aout]",
              "-map", "0:v", "-map", "[aout]", "-c:v", "copy", "-c:a", "aac", "-b:a", "160k",
              "-t", f"{duration(video):.6f}", str(final)])
     print(f"{vid}: {final.name} {duration(final):.1f}s")
