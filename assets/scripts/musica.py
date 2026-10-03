@@ -89,13 +89,28 @@ def _puntos_envolvente(vts: list[tuple[float, float, str]], ganancias_db: list[f
         antes, despues = niveles[i], niveles[i + 1]
         ancho_izq = vts[i][1] - vts[i][0]
         ancho_der = vts[i + 1][1] - vts[i + 1][0]
-        r = max(min(ramp, ancho_izq, ancho_der), 0.0)
+        nivel_antes, nivel_despues = vts[i][2], vts[i + 1][2]
+        # N5 (QA 03/10/2026): entrando o saliendo de "mute" la rampa NO puede cruzar el
+        # borde del slot mudo (R-2.5: < -60dBFS en TODO ese slot, desde su primera muestra).
+        # Centrada (como el resto de las transiciones) dejaba la mitad de la bajada DENTRO
+        # del slot mudo: la música entraba ~ramp/2 "de más". Acá termina de bajar justo en
+        # el borde (toda la rampa adentro de la ventana de ANTES), o arranca a subir justo
+        # en el borde (toda la rampa adentro de la ventana de DESPUÉS).
+        if nivel_despues == "mute" and nivel_antes != "mute":
+            r = max(min(ramp, ancho_izq), 0.0)
+            lo, hi = b - r, b
+        elif nivel_antes == "mute" and nivel_despues != "mute":
+            r = max(min(ramp, ancho_der), 0.0)
+            lo, hi = b, b + r
+        else:
+            r = max(min(ramp, ancho_izq, ancho_der), 0.0)
+            lo, hi = b - r / 2, b + r / 2
         if r <= 0:
             puntos.append((b, antes))
             puntos.append((b, despues))
         else:
-            puntos.append((b - r / 2, antes))
-            puntos.append((b + r / 2, despues))
+            puntos.append((lo, antes))
+            puntos.append((hi, despues))
     puntos.append((vts[-1][1], niveles[-1]))
     return puntos
 

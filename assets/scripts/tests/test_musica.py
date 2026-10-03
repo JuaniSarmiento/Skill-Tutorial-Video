@@ -348,3 +348,34 @@ def test_construir_pista_en_un_segmento_con_musica_false_queda_por_debajo_de_60d
     musica.construir_pista(voz, cruda, vts, debajo_de_la_voz_lu=18, out=out)
 
     assert _dbfs_pico_en(out, 2.2, 2.8) < -60
+
+
+# --- N5 (QA 03/10/2026): R-2.5, la rampa hacia/desde "mute" no puede cruzar el borde ----
+
+def test_aplicar_ducking_al_entrar_en_mute_la_musica_ya_esta_callada_justo_en_el_borde(tmp_path):
+    # la rampa estaba centrada en el borde (mitad adentro del slot mudo): con ramp=0.15 la
+    # música entraba ~75ms "de más" en un slot "musica: false" (R-2.5). La bajada tiene que
+    # terminar ANTES de que el slot mudo arranque, no a mitad de camino en su borde.
+    tono = _tono(tmp_path, "tono.wav", 3.0)
+    vts = [(0.0, 1.5, "voz"), (1.5, 3.0, "mute")]
+    out = tmp_path / "out.wav"
+
+    musica.aplicar_ducking(tono, vts, {"voz": 0.0, "mute": -90.0}, out, ramp=0.15)
+
+    # 10ms DESPUÉS del borde (1.5s): con la rampa vieja (centrada, mitad-vida 0.075s dentro
+    # del slot mudo) todavía estaría a mitad de camino, muy por arriba de -60dBFS.
+    assert _dbfs_pico_en(out, 1.50, 1.52) < -60
+
+
+def test_aplicar_ducking_al_salir_de_mute_la_rampa_de_subida_arranca_despues_del_borde(tmp_path):
+    # simétrico: la subida (saliendo de "mute") tiene que EMPEZAR en el borde, no antes
+    # (si empezara antes, la música se oiría de a poco DURANTE el slot mudo, el mismo bug
+    # de R-2.5 pero en el otro sentido).
+    tono = _tono(tmp_path, "tono.wav", 3.0)
+    vts = [(0.0, 1.5, "mute"), (1.5, 3.0, "voz")]
+    out = tmp_path / "out.wav"
+
+    musica.aplicar_ducking(tono, vts, {"mute": -90.0, "voz": 0.0}, out, ramp=0.15)
+
+    # 10ms ANTES del borde (1.5s): todavía tiene que estar callada.
+    assert _dbfs_pico_en(out, 1.48, 1.50) < -60
