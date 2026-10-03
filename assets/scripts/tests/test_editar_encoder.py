@@ -101,22 +101,15 @@ def test_pantalla_con_vaapi_disponible_usa_h264_vaapi_en_las_dos_pasadas(tmp_pat
 
 # --- R-1.3 de punta a punta: imagen() aborta ANTES del primer tramo -------------
 
-def test_imagen_con_vaapi_forzado_sin_vaapi_aborta_antes_de_armar_el_primer_tramo(tmp_path, monkeypatch):
-    monkeypatch.setattr(editar, "ROOT", tmp_path)
-    monkeypatch.setenv("TUT_ENCODER", "vaapi")
-    monkeypatch.setenv("TUT_VAAPI_DEVICE", "/no/existe")
-    (tmp_path / "guion").mkdir()
-    (tmp_path / "guion" / "v01.json").write_text(
-        '{"segmentos": [{"tipo": "titulo", "titulo": "Hola", "texto": "x"}]}')
-    (tmp_path / "videos" / "v01" / "juani").mkdir(parents=True)
-    subprocess.run(["ffmpeg", "-loglevel", "error", "-f", "lavfi", "-i", "sine=d=1",
-                    str(tmp_path / "videos" / "v01" / "juani" / "00.wav")], check=True)
-
-    with pytest.raises(encoder.EncoderError, match="/no/existe"):
-        editar.imagen("v01", "juani")
-
-    assert not (tmp_path / "videos" / "v01" / "seg" / "00.mp4").exists()
-
+# N4 (QA 03/10/2026): había acá un test
+# "test_imagen_con_vaapi_forzado_sin_vaapi_aborta_antes_de_armar_el_primer_tramo" que sólo
+# comprobaba que no existiera seg/00.mp4 — y esa aserción pasa igual de verde aunque se borre
+# el encoder.preparar() de imagen() (comprobado a mano: build_segment del segmento "titulo"
+# también llama a encoder.cv_args(), que revienta igual, sólo que más tarde). El test de abajo
+# (test_imagen_aborta_antes_de_generar_ninguna_voz) sí lo detecta: mockea voice_wav para que
+# falle si se llama, y sin encoder.preparar() se llega a invocarla antes de que el encoder
+# aborte. Se borró el primero por redundante y más débil que el segundo, que cubre el mismo
+# escenario (R-1.3) con una aserción que de verdad depende de la llamada temprana.
 
 def test_imagen_aborta_antes_de_generar_ninguna_voz(tmp_path, monkeypatch):
     # "antes del primer tramo" significa antes de gastar en generar voces, no sólo
