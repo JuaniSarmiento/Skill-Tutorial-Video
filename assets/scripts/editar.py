@@ -30,6 +30,8 @@ import sys
 import wave
 from pathlib import Path
 
+import encoder
+
 ROOT = Path(os.environ.get("TUT_ROOT", os.getcwd()))
 PIPER_MODEL = Path.home() / ".local/share/piper-voices/es_AR-daniela-high.onnx"
 _ES_WINDOWS = sys.platform.startswith("win")
@@ -254,7 +256,7 @@ def build_segment(vid: str, raw: Path, seg: dict, slot: float, out: Path, voz_pa
             f"drawtext=fontfile={FONT}:text='{esc(seg.get('subtitulo', ''))}':fontcolor=0xB8C1EC:fontsize=44:x=(w-tw)/2:y=(h/2)+20"
         )
         run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", f"color=c=0x16161D:s=1920x1080:r={fps}:d={slot:.3f}",
-             "-vf", vf, "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", str(out)])
+             "-vf", encoder.vf(vf), *encoder.cv_args(crf=20, preset="veryfast"), str(out)])
         return
     tmp = out.with_suffix(".tmp.mp4")
     pre = "mpdecimate=hi=64*24:lo=64*8:frac=0.2," if seg.get("decimar", True) else ""
@@ -278,7 +280,8 @@ def build_segment(vid: str, raw: Path, seg: dict, slot: float, out: Path, voz_pa
                f"pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=0x16161D," + pre)
 
     run(["ffmpeg", "-y", "-loglevel", "error", "-ss", str(seg["inicio"]), "-to", str(seg["fin"]), "-i", str(raw),
-         "-vf", f"{pre}setpts=N/{fps}/TB", "-r", str(fps), "-an", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "18", str(tmp)])
+         "-vf", encoder.vf(f"{pre}setpts=N/{fps}/TB"), "-r", str(fps), "-an",
+         *encoder.cv_args(crf=18, preset="ultrafast", pix_fmt=False), str(tmp)])
     d = duration(tmp)
     factor = d / slot
     if factor > 1.05:
@@ -288,8 +291,8 @@ def build_segment(vid: str, raw: Path, seg: dict, slot: float, out: Path, voz_pa
                    f"box=1:boxcolor=0x000000AA:boxborderw=14:x=w-tw-40:y=h-th-40")
     else:
         vf = f"tpad=stop_mode=clone:stop_duration={max(slot - d, 0) + 0.2:.3f},fps={fps}"
-    run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(tmp), "-vf", vf, "-t", f"{slot:.3f}",
-         "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", str(out)])
+    run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(tmp), "-vf", encoder.vf(vf), "-t", f"{slot:.3f}",
+         *encoder.cv_args(crf=20, preset="veryfast"), str(out)])
     tmp.unlink()
 
 
@@ -379,6 +382,7 @@ def escenas(vid: str, voz_name: str = "argentina") -> list[Path]:
 
 
 def imagen(vid: str, voz_name: str = "argentina") -> None:
+    encoder.preparar()  # aviso temprano: TUT_ENCODER=vaapi sin VAAPI no gasta en generar voces
     g = load(vid)
     raw = ROOT / g["raw"] if g.get("raw") else None
     # aviso temprano: un crudo que falta recien se nota a mitad del render

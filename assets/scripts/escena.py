@@ -32,6 +32,7 @@ import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 
+import encoder
 import palabras as _palabras
 
 ESCENAS = Path(__file__).resolve().parent.parent / "escenas"
@@ -53,10 +54,11 @@ def tiempos_de_cuadros(duracion: float, fps: int) -> list[float]:
 
 def comando_ffmpeg(salida, fps: int, ancho: int = ANCHO_BASE) -> list[str]:
     """PNGs por stdin -> h264 yuv420p, el mismo formato que los segmentos de editar.py."""
+    vf = encoder.vf(f"scale={ancho}:-2:flags=lanczos" if ancho != ANCHO_BASE else "")
     return ["ffmpeg", "-y", "-loglevel", "error",
             "-f", "image2pipe", "-framerate", str(fps), "-c:v", "png", "-i", "-",
-            *(["-vf", f"scale={ancho}:-2:flags=lanczos"] if ancho != ANCHO_BASE else []),
-            "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
+            *(["-vf", vf] if vf else []),
+            *encoder.cv_args(crf=20, preset="veryfast"),
             "-r", str(fps), "-an", str(salida)]
 
 
