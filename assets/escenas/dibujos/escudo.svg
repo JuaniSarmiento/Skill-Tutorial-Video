@@ -1,0 +1,10 @@
+<!-- Escudo (protección). Escrito a mano para esta skill, sin licencia de terceros
+     (Q8). Misma convención de recoloreado que lampara.svg. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <path d="M100 30 L160 54 L160 104 Q160 150 100 176 Q40 150 40 104 L40 54 Z"
+        fill="none" stroke="currentColor" stroke-width="10" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M74 100 L94 122 L130 78" fill="none" stroke="currentColor" stroke-width="10"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <path class="lleno" fill="currentColor"
+        d="M100 44 L146 62 L146 102 Q146 138 100 160 Q54 138 54 102 L54 62 Z"/>
+</svg>

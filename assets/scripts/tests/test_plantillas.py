@@ -13,6 +13,8 @@ import escena  # noqa: E402
 
 pytestmark = pytest.mark.integracion
 
+DIBUJOS = escena.ESCENAS / "dibujos"
+
 SPECS = {
     "presentacion": {
         "titulo": {"texto": "El interés compuesto"},
@@ -37,9 +39,18 @@ SPECS = {
         "nota": "Interés compuesto anual, sin aportes extra",
         "duracion": 4.5,
     },
+    "imagen": {
+        "titulo": {"texto": "Una idea que crece"},
+        "dibujos": [{"id": "lampara", "svg": str(DIBUJOS / "lampara.svg"), "cue": 0.4},
+                    {"id": "semilla", "svg": str(DIBUJOS / "semilla.svg"), "cue": 2.0}],
+        "rotulos": [{"texto": "Idea", "cue": 0.4, "de": "lampara"},
+                    {"texto": "Crece", "cue": 2.0, "de": "semilla"}],
+        "duracion": 4.5,
+    },
 }
+SPECS["imagen"] = escena.resolver_dibujos(SPECS["imagen"])  # el markup se embebe ANTES de abrir Chrome
 # t en el que entra un elemento con cue, para cada plantilla
-CUE = {"presentacion": 2.0, "diagrama": 2.0, "datos": 2.0}
+CUE = {"presentacion": 2.0, "diagrama": 2.0, "datos": 2.0, "imagen": 2.0}
 
 
 @pytest.fixture(scope="module")
@@ -379,6 +390,38 @@ def test_presentacion_con_demasiados_puntos_falla_claro(chrome):
         _al_final(chrome, "presentacion", spec, CAJAS)
 
 
+# --- imagen: varios dibujos y rótulos (R-4.7) ---------------------------------
+
+def _imagen(dibujos, rotulos=(), **extra):
+    specs = {"lampara": DIBUJOS / "lampara.svg", "semilla": DIBUJOS / "semilla.svg",
+             "escudo": DIBUJOS / "escudo.svg"}
+    return escena.resolver_dibujos({
+        "titulo": {"texto": "Metáforas"},
+        "dibujos": [{"id": d, "svg": str(specs[d]), "cue": 0.1 * i} for i, d in enumerate(dibujos)],
+        "rotulos": [{"texto": t, "cue": 0.1 * i, "de": d} for i, (t, d) in enumerate(rotulos)],
+        **extra,
+    })
+
+
+def test_imagen_con_tres_dibujos_y_rotulos_entra_sin_pisar_y_se_lee(chrome):
+    spec = _imagen(["lampara", "semilla", "escudo"],
+                   [("Idea", "lampara"), ("Crece", "semilla"), ("Protege", "escudo")])
+    cajas = _al_final(chrome, "imagen", spec, CAJAS)
+    assert _choques(cajas) == []
+    # ".dibujo" es un contenedor de SVG, no texto propio (como ".nodo" en diagrama):
+    # el piso de legibilidad aplica a lo que sí se lee (título, kicker, rótulos).
+    con_texto = [c for c in cajas if not c["n"].startswith("dibujo")]
+    assert len(con_texto) >= 4, "se armó mal el caso: faltan título/kicker/rótulos"
+    assert min(c["px"] for c in con_texto) >= PISO_PX
+
+
+def test_imagen_con_demasiados_dibujos_falla_claro(chrome):
+    iconos = ["lampara", "semilla", "escudo"] * 4
+    spec = _imagen(iconos)
+    with pytest.raises(escena.ContratoError, match="no entran"):
+        _al_final(chrome, "imagen", spec, CAJAS)
+
+
 # --- determinismo en TODOS los cuadros, no sólo en cuatro tiempos -------------
 
 CORTAS = {
@@ -398,7 +441,13 @@ CORTAS = {
                         "barras": [{"etiqueta": "Año 0", "valor": 1000, "cue": 0.1},
                                    {"etiqueta": "Año 10", "valor": 2594, "cue": 0.4},
                                    {"etiqueta": "Año 30", "valor": 17449.5, "cue": 0.7, "destacar": True}]}),
+    "imagen": ("imagen", {**SPECS["imagen"], "duracion": 1.8,
+                          "dibujos": [{"id": "lampara", "svg": str(DIBUJOS / "lampara.svg"), "cue": 0.1},
+                                      {"id": "semilla", "svg": str(DIBUJOS / "semilla.svg"), "cue": 0.6}],
+                          "rotulos": [{"texto": "Idea", "cue": 0.1, "de": "lampara"},
+                                      {"texto": "Crece", "cue": 0.6, "de": "semilla"}]}),
 }
+CORTAS["imagen"] = (CORTAS["imagen"][0], escena.resolver_dibujos(CORTAS["imagen"][1]))
 
 
 @pytest.mark.parametrize("nombre", CORTAS)

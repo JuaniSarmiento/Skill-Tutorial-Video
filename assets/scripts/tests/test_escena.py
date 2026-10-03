@@ -188,7 +188,7 @@ def test_la_hoja_de_contacto_muestra_cada_cuadro_con_su_etiqueta():
 
 # --- plantillas --------------------------------------------------------------
 
-@pytest.mark.parametrize("tipo", ["diagrama", "presentacion", "datos"])
+@pytest.mark.parametrize("tipo", ["diagrama", "presentacion", "datos", "imagen"])
 def test_cada_tipo_tiene_su_plantilla(tipo):
     p = escena.ruta_plantilla(tipo)
     assert p.name == f"{tipo}.html"
@@ -198,7 +198,7 @@ def test_cada_tipo_tiene_su_plantilla(tipo):
 def test_un_tipo_desconocido_falla_listando_los_que_hay():
     with pytest.raises(ValueError) as e:
         escena.ruta_plantilla("pizarron")
-    for tipo in ("diagrama", "presentacion", "datos"):
+    for tipo in ("diagrama", "presentacion", "datos", "imagen"):
         assert tipo in str(e.value)
 
 

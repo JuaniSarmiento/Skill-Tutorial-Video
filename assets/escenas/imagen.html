@@ -1,0 +1,124 @@
+<!doctype html>
+<!--
+Escena "imagen": metáforas dibujadas (SVG local, Q8), cada una en su cue, con rótulos
+que las nombran.
+
+spec:
+  {"tipo": "imagen",
+   "kicker": "...", "titulo": {"texto": "La idea en una imagen"},
+   "dibujos": [{"id": "lampara", "svg": "dibujos/lampara.svg", "cue": "idea"}, ...],
+   "rotulos": [{"texto": "Idea", "cue": "idea", "de": "lampara"}, ...]}
+
+Cada dibujo se DIBUJA, no aparece de golpe: el trazo avanza con stroke-dasharray /
+stroke-dashoffset en función de t, y el relleno secundario (class="lleno") entra
+después, en la segunda mitad de "movimiento.entrada" del brand. Los píxeles no-fondo
+dentro del recuadro del dibujo nunca bajan de un cuadro al siguiente.
+
+Recoloreado al brand: el SVG se escribe con stroke="currentColor" (trazo) y
+class="lleno" fill="currentColor" (relleno); nunca un color fijo adentro del SVG.
+La escena fija la propiedad CSS "color" del contenedor al acento si el dibujo es el
+foco (el que entró más recientemente, igual que nodos y flechas de diagrama.html) o a
+"--tenue" en caso contrario: así cambiar colores.acento sólo mueve los píxeles del
+dibujo en foco.
+
+Por defecto los dibujos van en una sola fila, cuadrados, espaciados en el área del
+contenido. Para otra posición, cada dibujo acepta "x" e "y" (centro, fracción de
+pantalla). Un rótulo va debajo del dibujo que nombra ("de").
+-->
+<meta charset="utf-8">
+<link rel="stylesheet" href="base.css">
+<style>
+  .dibujo { position: absolute; }
+  .dibujo svg { width: 100%; height: 100%; display: block; overflow: visible; }
+  .rotulo {
+    position: absolute; transform: translateX(-50%); text-align: center; white-space: nowrap;
+    font-size: 32px; font-weight: 600; color: var(--tenue);
+  }
+</style>
+<script src="base.js"></script>
+<script>
+  const { S, crear, tiempo, salida, aparecer, resorte, contrato, cabecera, clamp, M } = E;
+  const dibujos = (S.dibujos || []).map((d, i) => ({ ...d, t0: tiempo(d, 0.4 + i * 0.9) }));
+  const porId = Object.fromEntries(dibujos.map(d => [d.id, d]));
+  const rotulos = (S.rotulos || []).map((r, i) => ({
+    ...r, t0: tiempo(r, (porId[r.de]?.t0 ?? 0) + 0.15),
+  }));
+  for (const r of rotulos) {
+    if (r.de && !porId[r.de]) throw new Error(`rótulo ${JSON.stringify(r.texto)}: dibujo ${r.de} inexistente`);
+  }
+  const AREA = { x0: 140, x1: 1780, y0: 340, y1: 960 };
+  const GAP = 48, ROTULO_ALTO = 56, LADO_MAX = 420, LADO_MIN = 160;
+  let dibujarCab;
+
+  // layout: una fila, cuadrados; "x"/"y" por dibujo pisa la posición automática
+  function layout() {
+    const n = dibujos.length;
+    if (!n) return;
+    if (dibujos.every(d => d.x != null && d.y != null)) {
+      const lado = Math.min(LADO_MAX, AREA.x1 - AREA.x0);
+      dibujos.forEach(d => {
+        d.lado = lado;
+        d.cx = Math.min(1920 - lado / 2 - 40, Math.max(lado / 2 + 40, d.x * 1920));
+        d.cy = Math.min(1080 - lado / 2 - ROTULO_ALTO - 40, Math.max(AREA.y0 + lado / 2, d.y * 1080));
+      });
+      return;
+    }
+    const lado = Math.min(LADO_MAX, (AREA.x1 - AREA.x0 - GAP * (n - 1)) / n);
+    if (lado < LADO_MIN)
+      throw new Error(`${n} dibujos no entran en una fila ni a ${LADO_MIN} px: usá menos dibujos`);
+    const ancho = lado * n + GAP * (n - 1);
+    const x0 = (AREA.x0 + AREA.x1) / 2 - ancho / 2;
+    const cy = (AREA.y0 + AREA.y1 - ROTULO_ALTO) / 2;
+    dibujos.forEach((d, i) => { d.lado = lado; d.cx = x0 + lado / 2 + i * (lado + GAP); d.cy = cy; });
+  }
+
+  contrato([tiempo(S.titulo, 0), ...dibujos.map(d => d.t0), ...rotulos.map(r => r.t0)], () => {
+    const cab = cabecera(S.titulo, S.kicker);
+    dibujarCab = cab.dibujar;
+    AREA.y0 = cab.techo(AREA.y0, LADO_MIN + ROTULO_ALTO, AREA.y1);
+    layout();
+    for (const d of dibujos) {
+      d.el = crear('div', 'dibujo');
+      d.el.dataset.caja = 'dibujo ' + d.id;
+      Object.assign(d.el.style, {
+        left: (d.cx - d.lado / 2) + 'px', top: (d.cy - d.lado / 2) + 'px',
+        width: d.lado + 'px', height: d.lado + 'px',
+      });
+      d.el.innerHTML = d.markup || '<svg viewBox="0 0 200 200"></svg>';
+      const svg = d.el.querySelector('svg');
+      const todos = [...svg.querySelectorAll('path, line, polyline, polygon, circle, rect, ellipse')];
+      d.trazos = todos.filter(el => !el.classList.contains('lleno'));
+      d.trazos.forEach(el => { el.dataset.largo = el.getTotalLength(); });
+      d.rellenos = todos.filter(el => el.classList.contains('lleno'));
+    }
+    for (const r of rotulos) {
+      const d = porId[r.de];
+      r.el = crear('div', 'rotulo', document.body, r.texto);
+      r.el.dataset.caja = 'rotulo ' + r.texto;
+      r.el.style.left = (d ? d.cx : 960) + 'px';
+      r.el.style.top = (d ? d.cy + d.lado / 2 + 16 : 1000) + 'px';
+    }
+  }, t => {
+    dibujarCab(t);
+    const entrados = dibujos.filter(d => t >= d.t0);
+    const foco = entrados.reduce((f, d) => (!f || d.t0 >= f.t0 ? d : f), null);
+    for (const d of dibujos) {
+      const p = salida((t - d.t0) / (M.entrada || 0.7));
+      d.el.style.color = d === foco ? 'var(--acento)' : 'var(--tenue)';
+      // antes de t0, p=0 y el dash queda desfasado a invisible, pero un cap "round" en
+      // 0 de largo visible todavía pinta un puntito (medido: ~88 px no-fondo). La opacidad
+      // corta eso de raíz, sin afectar el dibujado en curso (p>0 ya vale 1 siempre).
+      d.el.style.opacity = p > 0 ? 1 : 0;
+      for (const el of d.trazos) {
+        const largo = +el.dataset.largo;
+        el.setAttribute('stroke-dasharray', largo);
+        el.setAttribute('stroke-dashoffset', (largo * (1 - p)).toFixed(2));
+      }
+      for (const el of d.rellenos) el.setAttribute('fill-opacity', clamp((p - 0.5) / 0.5).toFixed(3));
+    }
+    for (const r of rotulos) {
+      r.el.style.opacity = aparecer(t, r.t0);
+      r.el.style.transform = `translate(-50%, ${((1 - resorte(t - r.t0)) * (M.subida ?? 28)).toFixed(2)}px)`;
+    }
+  });
+</script>

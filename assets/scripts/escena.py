@@ -26,6 +26,7 @@ Corre con: uv run --with playwright python escena.py ...   (usa el Chrome instal
 import copy
 import html
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -102,6 +103,33 @@ def resolver_spec(spec: dict, palabras) -> dict:
     return out
 
 
+# R-4.6: sólo SVG local (Q8, decidido por Juani): sin fotos ni referencias de red.
+HREF_EXTERNO = re.compile(r'(?:xlink:href|href)\s*=\s*["\']https?://')
+
+
+def resolver_dibujos(spec: dict) -> dict:
+    """Copia del spec con el contenido de cada dibujos[].svg embebido en "markup".
+
+    Escena "imagen" (HITO2.md S4). Se valida ANTES de abrir Chrome: un SVG
+    faltante o con href externo corta aquí, sin .mp4 ni .parcial.mp4 (R-4.6).
+    """
+    out = copy.deepcopy(spec)
+    for d in out.get("dibujos", []):
+        ruta = d.get("svg")
+        if not ruta:
+            continue
+        p = Path(ruta)
+        if not p.exists():
+            raise ValueError(f"dibujo {d.get('id', '?')!r}: no existe el SVG {ruta!r}")
+        contenido = p.read_text()
+        m = HREF_EXTERNO.search(contenido)
+        if m:
+            raise ValueError(f"dibujo {d.get('id', '?')!r}: el SVG {ruta!r} tiene un href externo "
+                             f"({m.group(0)}...); sólo SVG local (Q8)")
+        d["markup"] = contenido
+    return out
+
+
 def cargar_brand(ruta) -> dict:
     """Brand de la skill, con lo que declare el de la serie encima (un nivel de profundidad)."""
     brand = json.loads((ESCENAS / "brand.json").read_text())
@@ -171,6 +199,19 @@ def avisar_si_falta_la_fuente(page, fuente) -> bool:
     return False
 
 
+# R-4.5 (PLAN.md): Canvas 2D / SVG, nunca WebGL (la GPU integrada de Juani la arrastra).
+# Se patchea ANTES de que cargue la plantilla: si una la llama, página falla con el mismo
+# camino que un error de JS (page.on("pageerror")) y sale como ContratoError.
+GUARDIA_WEBGL = """(function () {
+  const orig = HTMLCanvasElement.prototype.getContext;
+  HTMLCanvasElement.prototype.getContext = function (tipo, ...resto) {
+    if (['webgl', 'webgl2', 'experimental-webgl'].includes(tipo))
+      throw new Error(`getContext(${JSON.stringify(tipo)}): esta skill es Canvas 2D / SVG, nunca WebGL`);
+    return orig.call(this, tipo, ...resto);
+  };
+})();"""
+
+
 @contextmanager
 def pagina_de_escena(browser, plantilla, spec: dict, brand: dict):
     """Abre la escena, verifica el contrato y devuelve (page, duracion).
@@ -184,6 +225,7 @@ def pagina_de_escena(browser, plantilla, spec: dict, brand: dict):
     errores = []
     page.on("pageerror", lambda e: errores.append(str(e)))
     try:
+        page.add_init_script(GUARDIA_WEBGL)
         page.add_init_script(f"window.SPEC = {json.dumps(spec)}; window.BRAND = {json.dumps(brand)};")
         page.goto(Path(plantilla).resolve().as_uri(), wait_until="load")
         page.evaluate("document.fonts.ready.then(() => true)")
@@ -226,7 +268,7 @@ def render(plantilla, spec: dict, salida, brand: dict | None = None, palabras=No
     Se escribe a un .parcial.mp4 y se renombra al final: si algo falla a mitad, no
     queda un mp4 corto que se reproduce bien y parece un render válido.
     """
-    spec = resolver_spec(spec, palabras)
+    spec = resolver_dibujos(resolver_spec(spec, palabras))
     brand = brand or cargar_brand(None)
     salida = Path(salida)
     salida.parent.mkdir(parents=True, exist_ok=True)
@@ -312,7 +354,7 @@ def _cli(argv) -> None:
             if not spec.get("tipo"):
                 ap.error(f"{s} no dice su 'tipo' (diagrama, presentacion, datos)")
             escenas.append((Path(s).stem + " " + spec["tipo"], ruta_plantilla(spec["tipo"]),
-                            resolver_spec(spec, voz)))
+                            resolver_dibujos(resolver_spec(spec, voz))))
         print(hoja_contacto(escenas, a.salida, brand, a.columnas))
 
 

@@ -1,0 +1,11 @@
+<!-- Lámpara (idea). Escrito a mano para esta skill, sin licencia de terceros (Q8).
+     Convención de recoloreado: trazo con stroke="currentColor", relleno secundario
+     con class="lleno" fill="currentColor". El color real lo fija imagen.html vía la
+     propiedad CSS "color" del contenedor; nunca un color fijo acá dentro. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <circle cx="100" cy="86" r="52" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round"/>
+  <path d="M78 134 L78 158 Q78 170 90 170 L110 170 Q122 170 122 158 L122 134"
+        fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="88" y1="182" x2="112" y2="182" stroke="currentColor" stroke-width="10" stroke-linecap="round"/>
+  <path class="lleno" fill="currentColor" d="M96 56 L76 98 L92 98 L84 126 L124 84 L104 84 Z"/>
+</svg>

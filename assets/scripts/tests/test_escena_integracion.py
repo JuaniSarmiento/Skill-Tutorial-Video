@@ -78,6 +78,31 @@ def test_una_pagina_que_tira_un_error_de_js_falla_con_ese_error(tmp_path):
         escena.render(html, {}, tmp_path / "out.mp4", fps=12, ancho=960)
 
 
+@pytest.mark.parametrize("tipo", ["webgl", "webgl2", "experimental-webgl"])
+def test_una_plantilla_que_llama_a_webgl_falla_con_contrato_error(tmp_path, tipo):
+    # R-4.5 (HITO2.md S4): Canvas 2D / SVG, nunca WebGL (PLAN.md, GPU integrada de Juani)
+    html = tmp_path / "webgl.html"
+    html.write_text(f"""<script>
+      window.DURATION = 1;
+      window.seek = async t => {{ document.createElement('canvas').getContext({tipo!r}); }};
+    </script>""")
+
+    with pytest.raises(escena.ContratoError, match="webgl"):
+        escena.render(html, {}, tmp_path / "out.mp4", fps=12, ancho=960)
+
+
+def test_una_plantilla_que_usa_canvas_2d_no_se_ve_afectada_por_la_guardia_de_webgl(tmp_path):
+    html = tmp_path / "canvas2d.html"
+    html.write_text("""<script>
+      window.DURATION = 1;
+      window.seek = async t => { document.createElement('canvas').getContext('2d'); };
+    </script>""")
+
+    d = escena.render(html, {}, tmp_path / "out.mp4", fps=12, ancho=960)
+
+    assert d == pytest.approx(1.0)
+
+
 def test_la_hoja_de_contacto_es_un_png_con_tres_cuadros_por_escena(tmp_path):
     html = tmp_path / "valida.html"
     html.write_text(VALIDA)
@@ -149,6 +174,25 @@ def test_el_cli_render_arma_el_mp4_con_el_fps_el_ancho_y_la_duracion_pedidos(tmp
     assert (ancho, cuadros) == ("960", "12")
 
 
+def test_el_cli_render_imagen_da_un_mp4_con_la_duracion_del_spec(tmp_path, capsys):
+    # R-4.1 (HITO2.md S4). Falla hoy: ValueError: no hay plantilla de escena 'imagen'.
+    svg = tmp_path / "dibujo.svg"
+    svg.write_text('<svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="4" stroke="currentColor" fill="none"/></svg>')
+    spec = tmp_path / "s.json"
+    spec.write_text(json.dumps({"tipo": "imagen",
+                                "dibujos": [{"id": "a", "svg": str(svg), "cue": 0.1}],
+                                "duracion": 1}))
+    mp4 = tmp_path / "o.mp4"
+
+    escena._cli(["render", "imagen", str(spec), "-o", str(mp4), "--fps", "12", "--ancho", "960"])
+
+    assert f"{mp4}: 1.00 s" in capsys.readouterr().out
+    cuadros = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v", "-count_packets",
+                              "-show_entries", "stream=nb_read_packets", "-of", "csv=p=0", str(mp4)],
+                             capture_output=True, text=True, check=True).stdout.strip()
+    assert cuadros == "12"
+
+
 def test_el_cli_contacto_arma_la_hoja_con_los_specs_que_deja_editar(tmp_path):
     specs = []
     for i, tipo in enumerate(["presentacion", "datos"]):
@@ -162,3 +206,31 @@ def test_el_cli_contacto_arma_la_hoja_con_los_specs_que_deja_editar(tmp_path):
     alto = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=height", "-of", "csv=p=0", str(hoja)],
                           capture_output=True, text=True, check=True).stdout
     assert int(alto) > 2 * 360, "dos escenas = dos filas"
+
+
+def test_el_cli_contacto_acepta_specs_imagen(tmp_path):
+    # R-4.8 (HITO2.md S4)
+    svg = tmp_path / "dibujo.svg"
+    svg.write_text('<svg viewBox="0 0 10 10"><path d="M1 1L9 9" stroke="currentColor" fill="none"/></svg>')
+    spec = tmp_path / "00.json"
+    spec.write_text(json.dumps({"tipo": "imagen",
+                                "dibujos": [{"id": "a", "svg": str(svg), "cue": 0.1}],
+                                "duracion": 1.0}))
+    hoja = tmp_path / "hoja.png"
+
+    escena._cli(["contacto", str(spec), "-o", str(hoja), "--columnas", "3"])
+
+    alto = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=height", "-of", "csv=p=0", str(hoja)],
+                          capture_output=True, text=True, check=True).stdout.strip()
+    assert int(alto) > 0
+
+
+def test_el_cli_contacto_con_svg_faltante_falla_antes_de_abrir_chrome(tmp_path):
+    # R-4.6 por el camino de contacto, no sólo por render
+    spec = tmp_path / "00.json"
+    spec.write_text(json.dumps({"tipo": "imagen",
+                                "dibujos": [{"id": "a", "svg": str(tmp_path / "no-existe.svg"), "cue": 0.1}],
+                                "duracion": 1.0}))
+
+    with pytest.raises(ValueError, match="no-existe.svg"):
+        escena._cli(["contacto", str(spec), "-o", str(tmp_path / "hoja.png")])

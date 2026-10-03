@@ -1,0 +1,9 @@
+<!-- Semilla que crece (progreso). Escrito a mano para esta skill, sin licencia de
+     terceros (Q8). Misma convención de recoloreado que lampara.svg. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <path d="M100 170 L100 90" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round"/>
+  <path d="M100 120 Q70 110 68 80 Q100 82 100 120" fill="none" stroke="currentColor" stroke-width="10" stroke-linejoin="round"/>
+  <path d="M100 100 Q130 90 132 60 Q100 62 100 100" fill="none" stroke="currentColor" stroke-width="10" stroke-linejoin="round"/>
+  <path class="lleno" fill="currentColor" d="M72 84 Q96 86 98 112 Q74 108 72 84 Z"/>
+  <ellipse cx="100" cy="176" rx="46" ry="10" fill="none" stroke="currentColor" stroke-width="10"/>
+</svg>
