@@ -3,6 +3,13 @@
 R-4.6: un SVG faltante o con href externo falla ANTES de abrir Chrome. Eso se
 decide acá (resolver_dibujos), no en el render: por eso no hace falta
 playwright para probarlo.
+
+B1 (QA 03/10/2026, repro en /tmp/claude-1000/qa-s4/repro/): el regex viejo
+(HREF_EXTERNO) sólo detectaba `https?://` en minúscula y con comillas, y el SVG
+entraba por innerHTML (los <script>/on*/foreignObject se ejecutaban). Ahora
+`resolver_dibujos` parsea el SVG como XML y lo pasa por una lista blanca de
+elementos y atributos (`sanear_svg`): lo que no está en la lista blanca falla
+ANTES de abrir Chrome, nombrando archivo/elemento/atributo.
 """
 import pytest
 
@@ -46,3 +53,101 @@ def test_resolver_dibujos_no_toca_el_spec_original(tmp_path):
     escena.resolver_dibujos(spec)
 
     assert "markup" not in spec["dibujos"][0]
+
+
+# --- B1: lista blanca de elementos/atributos (QA 03/10/2026) -------------------
+
+def _spec_con_svg(tmp_path, contenido, nombre="malo.svg"):
+    p = tmp_path / nombre
+    p.write_text(contenido)
+    return {"dibujos": [{"id": "a", "svg": str(p), "cue": 0.1}]}
+
+
+VECTORES_RECHAZADOS = [
+    ("mayusculas", '<svg><image href="HTTP://evil.example/x.png"/></svg>'),
+    ("entidad_numerica", '<svg><use href="&#104;ttp://evil.example/x"/></svg>'),
+    ("import_css", '<svg><style>@import url(http://evil.example/x.css);</style></svg>'),
+    ("font_face", '<svg><style>@font-face{font-family:x;src:url(http://evil.example/f.woff)}</style></svg>'),
+    ("fill_url_externo", '<svg><path fill="url(http://evil.example/x)" d="M0 0L1 1"/></svg>'),
+    ("foreignobject_img_onerror",
+     '<svg><foreignObject><img src=x onerror="alert(1)"></foreignObject></svg>'),
+    ("foreignobject_iframe", '<svg><foreignObject><iframe src="http://evil.example"></iframe></foreignObject></svg>'),
+    ("foreignobject_background",
+     '<svg><foreignObject><div style="background:url(http://evil.example/x)"></div></foreignObject></svg>'),
+    ("image_data_uri_foto", '<svg><image href="data:image/png;base64,AAAA"/></svg>'),
+    ("file_scheme", '<svg><use href="file:///etc/hostname"/></svg>'),
+    ("doctype", '<!DOCTYPE svg [<!ENTITY x "y">]><svg></svg>'),
+    ("entity", '<svg><!ENTITY x "y"><text>&x;</text></svg>'),
+    ("script_tag", '<svg><script>alert(1)</script></svg>'),
+    ("on_atributo", '<svg><path onclick="alert(1)" d="M0 0L1 1"/></svg>'),
+    ("smil_animate", '<svg><animate attributeName="x" to="100"/></svg>'),
+    ("style_con_url", '<svg><path style="fill:url(http://evil.example/x)" d="M0 0L1 1"/></svg>'),
+]
+
+
+@pytest.mark.parametrize("nombre, contenido", VECTORES_RECHAZADOS, ids=[v[0] for v in VECTORES_RECHAZADOS])
+def test_vector_de_qa_rechazado_antes_de_abrir_chrome(tmp_path, nombre, contenido):
+    spec = _spec_con_svg(tmp_path, contenido)
+    with pytest.raises(ValueError, match="malo.svg"):
+        escena.resolver_dibujos(spec)
+
+
+def test_svg_valido_de_la_convencion_sigue_quedando_embebido(tmp_path):
+    contenido = ('<svg viewBox="0 0 10 10">'
+                 '<path d="M0 0L10 10" fill="none" stroke="currentColor"/>'
+                 '<path class="lleno" fill="currentColor" d="M1 1L2 2L1 2Z"/>'
+                 '</svg>')
+    spec = _spec_con_svg(tmp_path, contenido, "bueno.svg")
+
+    out = escena.resolver_dibujos(spec)
+
+    assert "M0 0L10 10" in out["dibujos"][0]["markup"]
+
+
+# --- B3: svg relativo al directorio del spec, no al cwd (QA 03/10/2026) -------
+
+def test_svg_relativo_se_resuelve_contra_el_directorio_del_spec(tmp_path, monkeypatch):
+    serie = tmp_path / "serie"
+    serie.mkdir()
+    (serie / "dibujo.svg").write_text(
+        '<svg viewBox="0 0 10 10"><path d="M0 0L10 10" stroke="currentColor" fill="none"/></svg>')
+    spec = {"dibujos": [{"id": "a", "svg": "dibujo.svg", "cue": 0.1}]}
+    otro_cwd = tmp_path / "otro"
+    otro_cwd.mkdir()
+    monkeypatch.chdir(otro_cwd)   # el cwd NO tiene el svg: si se resolviera contra él, fallaría
+
+    out = escena.resolver_dibujos(spec, base_dir=serie)
+
+    assert "M0 0L10 10" in out["dibujos"][0]["markup"]
+
+
+def test_svg_relativo_sin_base_dir_se_resuelve_contra_el_cwd(tmp_path, monkeypatch):
+    (tmp_path / "dibujo.svg").write_text("<svg></svg>")
+    spec = {"dibujos": [{"id": "a", "svg": "dibujo.svg", "cue": 0.1}]}
+    monkeypatch.chdir(tmp_path)
+
+    out = escena.resolver_dibujos(spec)   # sin base_dir: default documentado, cwd
+
+    assert "markup" in out["dibujos"][0]
+
+
+def test_svg_absoluto_no_se_ve_afectado_por_base_dir(tmp_path):
+    p = tmp_path / "bueno.svg"
+    p.write_text("<svg></svg>")
+    spec = {"dibujos": [{"id": "a", "svg": str(p), "cue": 0.1}]}
+
+    out = escena.resolver_dibujos(spec, base_dir=tmp_path / "otro-directorio-inexistente")
+
+    assert "markup" in out["dibujos"][0]
+
+
+def test_use_con_href_interno_se_acepta(tmp_path):
+    contenido = ('<svg viewBox="0 0 10 10">'
+                 '<defs><path id="p" d="M0 0L10 10"/></defs>'
+                 '<use href="#p" stroke="currentColor"/>'
+                 '</svg>')
+    spec = _spec_con_svg(tmp_path, contenido, "bueno.svg")
+
+    out = escena.resolver_dibujos(spec)
+
+    assert 'href="#p"' in out["dibujos"][0]["markup"]
