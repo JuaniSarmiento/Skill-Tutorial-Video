@@ -31,14 +31,41 @@ pantalla). Un rótulo va debajo del dibujo que nombra ("de").
   .dibujo { position: absolute; }
   .dibujo svg { width: 100%; height: 100%; display: block; overflow: visible; }
   .rotulo {
-    position: absolute; transform: translateX(-50%); text-align: center; white-space: nowrap;
-    font-size: 32px; font-weight: 600; color: var(--tenue);
+    position: absolute; transform: translateX(-50%); text-align: center; white-space: pre-line;
+    font-size: 36px; font-weight: 600; line-height: 1.15; color: var(--tenue);
   }
 </style>
 <script src="base.js"></script>
 <script>
-  const { S, crear, tiempo, salida, aparecer, resorte, contrato, cabecera, clamp, M } = E;
+  const { S, crear, tiempo, salida, aparecer, resorte, contrato, cabecera, clamp, M, medir } = E;
+  const ROTULO_PX = 36;
+
+  // B2 (QA 03/10/2026): un rótulo largo entra en una o dos líneas dentro del ancho de su
+  // caja (el lado del dibujo que nombra); si ni partido en dos entra, falla nombrándolo en
+  // vez de pisar al vecino en silencio.
+  function partirRotulo(texto, px, anchoCaja) {
+    if (medir(texto, px, 600) <= anchoCaja) return [texto];
+    const palabras = String(texto).split(/\s+/);
+    let mejor = null;
+    for (let i = 1; i < palabras.length; i++) {
+      const l1 = palabras.slice(0, i).join(' '), l2 = palabras.slice(i).join(' ');
+      const ancho = Math.max(medir(l1, px, 600), medir(l2, px, 600));
+      if (ancho <= anchoCaja && (!mejor || ancho < mejor.ancho)) mejor = { lineas: [l1, l2], ancho };
+    }
+    if (mejor) return mejor.lineas;
+    throw new Error(`rótulo ${JSON.stringify(texto)} no entra ni en dos renglones en ` +
+                    `${Math.round(anchoCaja)} px: achicá el texto`);
+  }
   const dibujos = (S.dibujos || []).map((d, i) => ({ ...d, t0: tiempo(d, 0.4 + i * 0.9) }));
+  {
+    // B7 (QA 03/10/2026): dos dibujos con el mismo id se pisaban en silencio en porId
+    // (uno de los dos quedaba sin dibujarse, sin ningún aviso).
+    const vistos = new Set();
+    for (const d of dibujos) {
+      if (vistos.has(d.id)) throw new Error(`dibujo con id duplicado: ${JSON.stringify(d.id)}`);
+      vistos.add(d.id);
+    }
+  }
   const porId = Object.fromEntries(dibujos.map(d => [d.id, d]));
   const rotulos = (S.rotulos || []).map((r, i) => ({
     ...r, t0: tiempo(r, (porId[r.de]?.t0 ?? 0) + 0.15),
@@ -54,13 +81,29 @@ pantalla). Un rótulo va debajo del dibujo que nombra ("de").
   function layout() {
     const n = dibujos.length;
     if (!n) return;
-    if (dibujos.every(d => d.x != null && d.y != null)) {
+    // B5 (QA 03/10/2026, repro xy.json): o todos los dibujos traen "x"/"y" o ninguno; mixto
+    // caía antes en el layout automático e ignoraba en silencio la posición que sí vino.
+    const conPosicion = dibujos.filter(d => d.x != null && d.y != null);
+    if (conPosicion.length > 0 && conPosicion.length < n) {
+      const sin = dibujos.filter(d => !(d.x != null && d.y != null)).map(d => d.id);
+      throw new Error(`${conPosicion.length} de ${n} dibujos traen "x"/"y" y ${sin.length} no ` +
+                      `(${sin.map(JSON.stringify).join(', ')}): poné posición en todos o en ninguno`);
+    }
+    if (conPosicion.length === n) {
       const lado = Math.min(LADO_MAX, AREA.x1 - AREA.x0);
       dibujos.forEach(d => {
         d.lado = lado;
         d.cx = Math.min(1920 - lado / 2 - 40, Math.max(lado / 2 + 40, d.x * 1920));
         d.cy = Math.min(1080 - lado / 2 - ROTULO_ALTO - 40, Math.max(AREA.y0 + lado / 2, d.y * 1080));
       });
+      for (let i = 0; i < dibujos.length; i++) {
+        for (let j = i + 1; j < dibujos.length; j++) {
+          const a = dibujos[i], b = dibujos[j];
+          if (Math.abs(a.cx - b.cx) < a.lado && Math.abs(a.cy - b.cy) < a.lado)
+            throw new Error(`los dibujos ${JSON.stringify(a.id)} y ${JSON.stringify(b.id)} se pisan en ` +
+                            `su posición ("x"/"y"): alejalos`);
+        }
+      }
       return;
     }
     const lado = Math.min(LADO_MAX, (AREA.x1 - AREA.x0 - GAP * (n - 1)) / n);
@@ -93,7 +136,9 @@ pantalla). Un rótulo va debajo del dibujo que nombra ("de").
     }
     for (const r of rotulos) {
       const d = porId[r.de];
-      r.el = crear('div', 'rotulo', document.body, r.texto);
+      const anchoCaja = d ? d.lado : LADO_MAX;
+      r.lineas = partirRotulo(r.texto, ROTULO_PX, anchoCaja);
+      r.el = crear('div', 'rotulo', document.body, r.lineas.join('\n'));
       r.el.dataset.caja = 'rotulo ' + r.texto;
       r.el.style.left = (d ? d.cx : 960) + 'px';
       r.el.style.top = (d ? d.cy + d.lado / 2 + 16 : 1000) + 'px';
@@ -117,6 +162,9 @@ pantalla). Un rótulo va debajo del dibujo que nombra ("de").
       for (const el of d.rellenos) el.setAttribute('fill-opacity', clamp((p - 0.5) / 0.5).toFixed(3));
     }
     for (const r of rotulos) {
+      // Mejora de diseño: el rótulo del dibujo en foco lleva el color de texto principal;
+      // el resto, tenue (igual que nodos/flechas de diagrama.html).
+      r.el.style.color = porId[r.de] === foco ? 'var(--texto)' : 'var(--tenue)';
       r.el.style.opacity = aparecer(t, r.t0);
       r.el.style.transform = `translate(-50%, ${((1 - resorte(t - r.t0)) * (M.subida ?? 28)).toFixed(2)}px)`;
     }

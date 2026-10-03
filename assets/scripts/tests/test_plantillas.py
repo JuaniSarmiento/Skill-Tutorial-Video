@@ -418,7 +418,74 @@ def test_imagen_con_tres_dibujos_y_rotulos_entra_sin_pisar_y_se_lee(chrome):
 def test_imagen_con_demasiados_dibujos_falla_claro(chrome):
     iconos = ["lampara", "semilla", "escudo"] * 4
     spec = _imagen(iconos)
+    # B7: ids únicos (el caso ya repetía "lampara"/"semilla"/"escudo" como id antes de la
+    # validación nueva; lo que se quiere ejercitar acá es la cantidad, no el id).
+    for i, d in enumerate(spec["dibujos"]):
+        d["id"] = f"{d['id']}{i}"
     with pytest.raises(escena.ContratoError, match="no entran"):
+        _al_final(chrome, "imagen", spec, CAJAS)
+
+
+# B2 (QA 03/10/2026, repro rotulos-largos.json): imagen.html nunca medía el ancho del
+# rótulo; con texto largo se pisaba en silencio. Ahora se intenta acomodar en dos
+# renglones dentro del ancho del dibujo; si ni así entra, falla nombrando el rótulo.
+
+def test_imagen_con_rotulo_largo_se_acomoda_en_dos_renglones_sin_pisar(chrome):
+    # dos dibujos: cada uno queda con una caja ancha (lado ~420 px), así un rótulo de
+    # ~29 caracteres entra de sobra en dos renglones.
+    spec = _imagen(["lampara", "semilla"],
+                   [("Una idea que aparece de golpe", "lampara"),
+                    ("Una idea que crece despacito", "semilla")])
+    cajas = _al_final(chrome, "imagen", spec, CAJAS)
+    assert _choques(cajas) == []
+    rotulos = [c for c in cajas if c["n"].startswith("rotulo")]
+    assert len(rotulos) == 2
+    assert all("\n" in c["txt"] for c in rotulos), "un rótulo de 29 caracteres tiene que partirse en dos renglones"
+
+
+# B5 (QA 03/10/2026, repro xy.json): "x"/"y" mixto (algunos dibujos con posición y otros
+# sin ella) caía en el layout automático e ignoraba la posición dada en silencio; y con
+# posiciones, dos dibujos podían pisarse sin que nada lo avisara.
+
+def test_imagen_con_posicion_mixta_falla_claro(chrome):
+    spec = _imagen(["lampara", "semilla"])
+    spec["dibujos"][0]["x"] = spec["dibujos"][0]["y"] = 0.5
+    # el segundo dibujo se queda SIN x/y: mixto
+    with pytest.raises(escena.ContratoError, match="posici"):
+        _al_final(chrome, "imagen", spec, CAJAS)
+
+
+def test_imagen_con_dos_posiciones_que_se_pisan_falla_claro(chrome):
+    # repro xy.json: dos dibujos casi en el mismo punto (x=0.5/y=0.6 y x=0.55/y=0.62)
+    spec = _imagen(["lampara", "semilla"])
+    spec["dibujos"][0]["x"], spec["dibujos"][0]["y"] = 0.5, 0.6
+    spec["dibujos"][1]["x"], spec["dibujos"][1]["y"] = 0.55, 0.62
+    with pytest.raises(escena.ContratoError, match="pisa"):
+        _al_final(chrome, "imagen", spec, CAJAS)
+
+
+def test_imagen_con_dos_posiciones_separadas_no_falla(chrome):
+    spec = _imagen(["lampara", "semilla"])
+    spec["dibujos"][0]["x"], spec["dibujos"][0]["y"] = 0.2, 0.6
+    spec["dibujos"][1]["x"], spec["dibujos"][1]["y"] = 0.8, 0.6
+    cajas = _al_final(chrome, "imagen", spec, CAJAS)
+    assert _choques(cajas) == []
+
+
+def test_imagen_con_id_de_dibujo_duplicado_falla_claro(chrome):
+    # B7 (QA 03/10/2026): dos dibujos con el mismo id se pisaban en silencio en porId.
+    spec = _imagen(["lampara", "semilla"])
+    spec["dibujos"][1]["id"] = spec["dibujos"][0]["id"]
+    with pytest.raises(escena.ContratoError, match="duplicad"):
+        _al_final(chrome, "imagen", spec, CAJAS)
+
+
+def test_imagen_con_rotulo_que_no_entra_ni_en_dos_renglones_falla_nombrandolo(chrome):
+    # una sola palabra larga: no se puede partir en dos renglones, y no entra en una
+    # caja de 420 px (la más generosa posible, un solo dibujo).
+    texto = "Superextraordinariamenteelectromagnetico"
+    spec = _imagen(["lampara"], [(texto, "lampara")])
+    with pytest.raises(escena.ContratoError, match="Superextraordinariamenteelectromagnetico"):
         _al_final(chrome, "imagen", spec, CAJAS)
 
 
