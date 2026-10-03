@@ -464,6 +464,18 @@ def imagen(vid: str, voz_name: str = "argentina") -> None:
     print(f"{vid}: video-{voz_name}.mp4 {duration(work / f'video-{voz_name}.mp4'):.1f}s")
 
 
+def _factor_de_aceleracion(d: float, max_len: float) -> float:
+    """Factor de `atempo` para que `d` entre en `max_len`, o 1.0 si no hace falta acelerar.
+
+    N7 (QA 03/10/2026): ffmpeg 6.1.1 se cuelga (deadlock) no sólo con atempo=1.0000 exacto,
+    sino con cualquier factor entre 1.0 y ~1.0003 (desde 1.0005 ya anda bien). Se trata como
+    1.0 (sin filtro atempo) todo factor con |factor - 1| < 0.001: de sobra para cubrir el
+    rango que cuelga, y a esa distancia de 1.0 la aceleración es inaudible.
+    """
+    tempo = d / max_len if d > max_len else 1.0
+    return 1.0 if abs(tempo - 1.0) < 0.001 else tempo
+
+
 def read_pcm(path: Path, max_len: float) -> bytes:
     """Lee un wav, lo normaliza a mono 22050 s16 y lo acelera si no entra en max_len.
 
@@ -474,7 +486,7 @@ def read_pcm(path: Path, max_len: float) -> bytes:
     """
     norm = path.with_suffix(".norm.wav")
     d = duration(path)
-    tempo = d / max_len if d > max_len else 1.0
+    tempo = _factor_de_aceleracion(d, max_len)
     if tempo > 1.15:
         print(f"  AVISO {path.name}: la voz dura {d:.1f}s y el slot da {max_len:.1f}s (x{tempo:.2f})")
     af = [] if tempo == 1.0 else ["-af", f"atempo={tempo:.4f}"]

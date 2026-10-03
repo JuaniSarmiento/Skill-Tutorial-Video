@@ -42,3 +42,16 @@ def test_read_pcm_con_factor_mayor_a_1_sigue_acelerando(tmp_path, monkeypatch):
     # a doble velocidad, la cantidad de muestras (a 22050 Hz mono s16) es ~ la mitad
     muestras = len(data) // 2
     assert 22050 * 0.9 <= muestras <= 22050 * 1.1
+
+
+# --- N7 (QA 03/10/2026): atempo también se cuelga con factores apenas arriba de 1.0 -----
+# (ffmpeg 6.1.1, factores entre 1.0 y ~1.0003; desde 1.0005 no). Probado como función pura:
+# medir la diferencia en la duración real de salida con un factor tan cerca de 1.0 es
+# demasiado chica (~5 muestras sobre 22050) para separar con confianza "se aplicó" de "no".
+
+def test_factor_de_aceleracion_con_diferencia_menor_a_una_milesima_se_trata_como_1():
+    assert editar._factor_de_aceleracion(1.0005, 1.0) == 1.0
+
+
+def test_factor_de_aceleracion_con_factor_claramente_mayor_a_1_sigue_acelerando():
+    assert editar._factor_de_aceleracion(2.0, 1.0) == 2.0
