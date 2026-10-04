@@ -166,6 +166,16 @@ def test_fill_y_stroke_de_la_convencion_se_aceptan(tmp_path, fill, stroke):
     assert "M0 0L1 1" in out["dibujos"][0]["markup"]
 
 
+# --- B4(a): <text> es dibujo vectorial válido (QA 03/10/2026) -----------------
+
+def test_svg_con_text_se_acepta(tmp_path):
+    contenido = ('<svg viewBox="0 0 200 200">'
+                 '<text x="10" y="150" font-size="140" fill="currentColor">OK</text></svg>')
+    spec = _spec_con_svg(tmp_path, contenido, "bueno.svg")
+    out = escena.resolver_dibujos(spec)
+    assert "<text" in out["dibujos"][0]["markup"]
+
+
 def test_use_con_href_interno_se_acepta(tmp_path):
     contenido = ('<svg viewBox="0 0 10 10">'
                  '<defs><path id="p" d="M0 0L10 10"/></defs>'

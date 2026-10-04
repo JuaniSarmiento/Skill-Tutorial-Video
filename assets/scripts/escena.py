@@ -118,7 +118,7 @@ ET.register_namespace("xlink", NS_XLINK)
 # fotos) ni SMIL (<animate>/<set>, rompe el determinismo de t).
 ELEMENTOS_PERMITIDOS = {
     "svg", "g", "path", "circle", "ellipse", "rect", "line", "polyline", "polygon",
-    "defs", "use", "title", "desc",
+    "defs", "use", "title", "desc", "text",
 }
 ATRIBUTOS_PERMITIDOS = {
     "viewbox", "width", "height", "x", "y", "cx", "cy", "r", "rx", "ry",
@@ -127,6 +127,7 @@ ATRIBUTOS_PERMITIDOS = {
     "stroke-dasharray", "stroke-dashoffset", "fill-opacity", "stroke-opacity",
     "opacity", "fill-rule", "clip-rule", "class", "id",
     "href", "xmlns", "xmlns:xlink", "version",
+    "font-size", "font-weight", "font-family", "text-anchor",
 }
 # atributos cuyo valor puede referenciar una url(): sólo url(#id) interno, nunca de red
 ATRIBUTOS_CON_POSIBLE_URL = {"fill", "stroke"}
