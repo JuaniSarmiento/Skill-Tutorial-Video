@@ -6,6 +6,8 @@ el default es 18 LU en los tramos con voz y 10 LU en los silencios (Q3). La
 transición entre niveles es una rampa, no un escalón, para no "bombear".
 """
 import array
+import json
+import math
 import re
 import subprocess
 import wave
@@ -24,13 +26,38 @@ ATTACK_S = 0.15
 RELEASE_S = 0.6
 UMBRAL_HUECO_S = 0.8
 
+def _run(cmd: list[str]) -> subprocess.CompletedProcess:
+    """`subprocess.run(cmd, capture_output=True, text=True)`, pero pasando por el vigía
+    anti-cuelgue de `editar.run()` (QA 04/10/2026, NOTE ronda 3: todo subprocess de este
+    módulo tiene que pasar por ahí, no por `subprocess.run` directo).
+
+    Import perezoso -DENTRO de la función, no arriba del archivo-: `editar.py` hace
+    `import musica` en su tope; si este módulo hiciera `import editar` ahí también, el
+    ciclo se resolvería mal según quién se importe primero. Acá los dos módulos ya están
+    completamente cargados cuando `_run` corre (se llama desde el cuerpo de una función,
+    nunca al importar), así que no hay ciclo real.
+
+    `editar.run()` ya devuelve `(stdout, stderr)` con `devolver_stderr=True` y ya decodifica
+    con `errors="replace"`; esto sólo adapta esa forma a la que todo el resto de este
+    archivo ya esperaba de `subprocess.run` (un objeto con `.returncode`/`.stdout`/`.stderr`),
+    para no tener que tocar cada call site más de lo necesario.
+    """
+    import editar
+
+    try:
+        out, err = editar.run(cmd, devolver_stderr=True)
+        return subprocess.CompletedProcess(cmd, 0, stdout=out, stderr=err)
+    except RuntimeError as e:
+        return subprocess.CompletedProcess(cmd, 1, stdout="", stderr=str(e))
+
+
 _RE_INTEGRADA = re.compile(r"Integrated loudness:\s*\n\s*I:\s*(-?\d+\.?\d*) LUFS")
 
 
 def loudness_integrada(path: Path) -> float:
     """Loudness integrado (LUFS), medido con el filtro ebur128 de ffmpeg."""
-    res = subprocess.run(["ffmpeg", "-nostats", "-i", str(path), "-filter_complex", "ebur128",
-                          "-f", "null", "-"], capture_output=True, text=True)
+    res = _run(["ffmpeg", "-nostats", "-i", str(path), "-filter_complex", "ebur128",
+               "-f", "null", "-"])
     m = _RE_INTEGRADA.search(res.stderr)
     if not m:
         raise RuntimeError(f"no se pudo medir el loudness de {path}:\n{res.stderr[-1000:]}")
@@ -42,8 +69,8 @@ _RE_TP = re.compile(r"True peak:\s*\n\s*Peak:\s*(-?\d+\.?\d*) dBFS")
 
 def medir_i_tp(path: Path) -> tuple[float, float]:
     """(I en LUFS, TP en dBTP) de `path`, medidos con ebur128=peak=true."""
-    res = subprocess.run(["ffmpeg", "-nostats", "-i", str(path), "-filter_complex", "ebur128=peak=true",
-                          "-f", "null", "-"], capture_output=True, text=True)
+    res = _run(["ffmpeg", "-nostats", "-i", str(path), "-filter_complex", "ebur128=peak=true",
+               "-f", "null", "-"])
     i = _RE_INTEGRADA.search(res.stderr)
     tp = _RE_TP.search(res.stderr)
     if not i or not tp:
@@ -51,10 +78,77 @@ def medir_i_tp(path: Path) -> tuple[float, float]:
     return float(i.group(1)), float(tp.group(1))
 
 
+_RE_JSON_LOUDNORM = re.compile(r"\{[^{}]*\"input_i\"[^{}]*\}", re.S)
+
+
+def _medir_loudnorm(path: Path, objetivo_i: float, margen_tp: float, lra: float = 11.0) -> dict:
+    """1ra pasada de loudnorm (print_format=json): measured_I/TP/LRA/thresh de `path`."""
+    res = _run(
+        ["ffmpeg", "-nostats", "-i", str(path), "-af",
+         f"loudnorm=I={objetivo_i}:TP={margen_tp}:LRA={lra}:print_format=json", "-f", "null", "-"])
+    m = _RE_JSON_LOUDNORM.search(res.stderr)
+    if not m:
+        raise RuntimeError(f"no se pudo medir loudnorm (pasada 1) de {path}:\n{res.stderr[-1500:]}")
+    return json.loads(m.group(0))
+
+
+def normalizar_dos_pasadas(entrada: Path, salida: Path, objetivo_i: float, margen_tp: float,
+                            limite_tp_final: float, sr: int = 48000) -> None:
+    """Normaliza `entrada` a `objetivo_i` LUFS con **loudnorm de dos pasadas** (QA
+    04/10/2026, R-2.3): la 1ra mide (`_medir_loudnorm`), la 2da aplica con `measured_*` y
+    `linear=true` para que el integrado llegue al objetivo con precisión -el estándar
+    profesional; una sola pasada no llega cuando el TP restringe la ganancia.
+
+    `margen_tp` es el TP que se le pide a loudnorm en las dos pasadas (deliberadamente
+    laxo: así no es loudnorm el que frena la ganancia hacia `objetivo_i`). El TP real
+    queda garantizado después por un **limitador de TRUE PEAK** aparte (sobremuestreo +
+    `alimiter`, porque `linear=true` no limita TP en absoluto) a `limite_tp_final`.
+    `-ar sr` queda explícito en la salida: sin esto, el sample rate que loudnorm usa
+    internamente para sobremuestrear se cuela a la salida.
+    """
+    sr_oversample = sr * 4
+
+    def _filtro_limitador(limite_tp: float) -> str:
+        limite_lineal = 10 ** (limite_tp / 20)
+        # level=disabled: por default alimiter RENORMALIZA la salida (level=true), lo que
+        # anula el recorte que acaba de aplicar (QA 04/10/2026: sin esto, el límite pedido
+        # no se respetaba en absoluto).
+        return (f"aresample={sr_oversample},alimiter=limit={limite_lineal:.6f}:attack=1:release=50:"
+                f"level=disabled,aresample={sr}")
+
+    # Paso 1: domar los TRANSIENTES de la entrada ANTES de medir/normalizar (p.ej. música
+    # de clicks/percusión: picos aislados muy por encima de 0dBTP). Si no se hace esto
+    # primero, loudnorm ve un TP crudo altísimo y reacciona bajando la GANANCIA GLOBAL
+    # (modo dinámico) para controlar el pico, lo que hunde el integrado entero en vez de
+    # limitar sólo esos picos puntuales -exactamente el bug que esto arregla.
+    domada = salida.with_name(f"{salida.stem}.domada.wav")
+    res = _run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(entrada), "-af",
+               _filtro_limitador(margen_tp), str(domada)])
+    if res.returncode != 0:
+        raise RuntimeError(f"falló domando transientes antes de normalizar: {res.stderr[:2000]}")
+    try:
+        # Paso 2: loudnorm de dos pasadas sobre la señal ya domada (ahora su TP real
+        # coincide con `margen_tp`, así que loudnorm puede aplicar la ganancia que hace
+        # falta para el integrado sin que el TP la frene).
+        medidas = _medir_loudnorm(domada, objetivo_i, margen_tp)
+        filtro = (
+            f"loudnorm=I={objetivo_i}:TP={margen_tp}:LRA=11:"
+            f"measured_I={medidas['input_i']}:measured_TP={medidas['input_tp']}:"
+            f"measured_LRA={medidas['input_lra']}:measured_thresh={medidas['input_thresh']}:"
+            f"offset={medidas['target_offset']},"
+            f"{_filtro_limitador(limite_tp_final)}"
+        )
+        res = _run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(domada), "-af", filtro,
+                   "-ar", str(sr), str(salida)])
+    finally:
+        domada.unlink(missing_ok=True)
+    if res.returncode != 0:
+        raise RuntimeError(f"falló normalizando en dos pasadas: {res.stderr[:2000]}")
+
+
 def duracion(path: Path) -> float:
-    out = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)],
-        capture_output=True, text=True)
+    out = _run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)])
     if out.returncode != 0 or not out.stdout.strip():
         raise RuntimeError(f"ffprobe no pudo leer {path}: {out.stderr[-500:]}")
     return float(out.stdout)
@@ -84,9 +178,16 @@ def ventanas(slots: list[float], voces: list[tuple[float, float] | None]) -> lis
 
 def _puntos_envolvente(vts: list[tuple[float, float, str]], ganancias_db: list[float],
                         ramp: float, ramp_release: float | None = None) -> list[tuple[float, float]]:
-    """[(t, nivel_lineal)] que describe la envolvente como curva lineal a tramos: constante en
-    cada meseta, en rampa (no en escalón) entre niveles vecinos. `ramp` segundos centrados en
-    cada cambio, recortados si alguna de las dos ventanas vecinas es más chica que eso.
+    """[(t, nivel_db)] que describe la envolvente como curva lineal A TRAMOS EN dB:
+    constante en cada meseta, en rampa (no en escalón) entre niveles vecinos. `ramp`
+    segundos centrados en cada cambio, recortados si alguna de las dos ventanas vecinas es
+    más chica que eso.
+
+    QA 04/10/2026 (NOTE, ronda 3): la interpolación es en dB (no en amplitud lineal como
+    antes): interpolar en amplitud lineal da saltos de varios dB en 10ms cerca del extremo
+    bajo de una rampa grande (ahí la amplitud lineal cambia poco por muestra, pero esa
+    misma variación es enorme en dB -el oído mide en dB, no en amplitud lineal). En dB, la
+    rampa es una línea recta de verdad: dB/s constante en toda la transición.
 
     `ganancias_db` trae una ganancia POR VENTANA (no por nombre de nivel): dos ventanas
     "voz" pueden pedir ganancias distintas si la voz sonaba distinto en cada una (N1, QA).
@@ -97,7 +198,7 @@ def _puntos_envolvente(vts: list[tuple[float, float, str]], ganancias_db: list[f
     más (N5): son un corte deliberado, no la "respiración" voz/silencio que J1 ataca.
     """
     ramp_release = ramp if ramp_release is None else ramp_release
-    niveles = [10 ** (g / 20) for g in ganancias_db]
+    niveles = list(ganancias_db)  # ya están en dB: la interpolación es en dB, no en lineal
     puntos = [(vts[0][0], niveles[0])]
     for i in range(len(vts) - 1):
         b = vts[i][1]
@@ -134,34 +235,36 @@ def _puntos_envolvente(vts: list[tuple[float, float, str]], ganancias_db: list[f
 
 
 def _muestras_envolvente(puntos: list[tuple[float, float]], sr: int) -> tuple["array.array[int]", float]:
-    """Muestras s16 de la envolvente interpolada linealmente entre `puntos`, a `sr` Hz, y la
-    `escala` (nivel lineal más alto) con la que hay que reescalar después de multiplicar.
+    """Muestras s16 de la envolvente interpolada EN dB entre `puntos` (QA 04/10/2026: no en
+    amplitud lineal -eso da saltos de varios dB en 10ms cerca del extremo bajo de una rampa
+    grande), a `sr` Hz, y la `escala` (nivel LINEAL más alto) con la que hay que reescalar
+    después de multiplicar.
 
     Recorre `puntos` con un puntero que sólo avanza (no retrocede): generar la envolvente es
     O(muestras), sin importar cuántos segmentos la originaron (B1).
     """
     total = puntos[-1][0]
     n = max(int(round(total * sr)), 1)
-    escala = max(max(g for _, g in puntos), 1e-9)
+    escala = max(max(10 ** (g_db / 20) for _, g_db in puntos), 1e-9)
     out = array.array("h", bytes(2 * n))
     j = 0
     for i in range(n):
         t = i / sr
         while j + 2 < len(puntos) and puntos[j + 1][0] <= t:
             j += 1
-        t0, g0 = puntos[j]
-        t1, g1 = puntos[j + 1]
-        g = g1 if t1 <= t0 else g0 + (g1 - g0) * (t - t0) / (t1 - t0)
+        t0, db0 = puntos[j]
+        t1, db1 = puntos[j + 1]
+        db = db1 if t1 <= t0 else db0 + (db1 - db0) * (t - t0) / (t1 - t0)
+        g = 10 ** (db / 20)
         out[i] = int(max(min(g / escala, 1.0), -1.0) * 32767)
     return out, escala
 
 
 def _formato(path: Path) -> tuple[int, int]:
     """(sample_rate, canales) del stream de audio de `path`, vía ffprobe."""
-    res = subprocess.run(
+    res = _run(
         ["ffprobe", "-v", "error", "-select_streams", "a:0", "-show_entries",
-         "stream=sample_rate,channels", "-of", "csv=p=0", str(path)],
-        capture_output=True, text=True)
+         "stream=sample_rate,channels", "-of", "csv=p=0", str(path)])
     if res.returncode != 0 or not res.stdout.strip():
         raise RuntimeError(f"ffprobe no pudo leer el formato de audio de {path}: {res.stderr[:1000]}")
     sr, canales = res.stdout.strip().split(",")
@@ -173,14 +276,30 @@ def _sin_huecos_cortos(vts: list[tuple[float, float, str]], ganancias_db: list[f
     """Una ventana "silencio" más corta que `umbral` no deja que la música suba: se queda
     en la ganancia más atenuada de sus vecinas (J1, QA 03/10/2026: un hueco corto entre dos
     frases no es un silencio "de verdad", y subir y volver a bajar ahí es bombeo).
+
+    QA 04/10/2026 (NOTE, ronda 3): un hueco real puede cruzar el borde entre dos slots y
+    quedar partido en VARIAS ventanas "silencio" contiguas (una por slot): cada una por
+    separado puede ser más corta que `umbral` aunque juntas duren más. Acá se agrupan las
+    ventanas "silencio" contiguas y se evalúa la duración TOTAL del grupo, no la de cada
+    ventana aislada.
     """
     out = list(ganancias_db)
-    for i, (ini, fin, nivel) in enumerate(vts):
-        if nivel != "silencio" or fin - ini >= umbral:
+    i = 0
+    while i < len(vts):
+        if vts[i][2] != "silencio":
+            i += 1
             continue
-        vecinas = [out[j] for j in (i - 1, i + 1) if 0 <= j < len(vts)]
-        if vecinas:
-            out[i] = min(vecinas)
+        j = i
+        while j + 1 < len(vts) and vts[j + 1][2] == "silencio":
+            j += 1
+        duracion_grupo = vts[j][1] - vts[i][0]
+        if duracion_grupo < umbral:
+            vecinas = [out[k] for k in (i - 1, j + 1) if 0 <= k < len(vts)]
+            if vecinas:
+                nivel = min(vecinas)
+                for k in range(i, j + 1):
+                    out[k] = nivel
+        i = j + 1
     return out
 
 
@@ -222,9 +341,8 @@ def aplicar_ducking(pista: Path, vts: list[tuple[float, float, str]],
         pan = f",pan={canales}c" + "".join(f"|c{c}=c0" for c in range(canales)) if canales != 1 else ""
         filtro = (f"[1:a]aresample={sr},asetnsamples=n=64{pan}[env];"
                   f"[0:a][env]amultiply[prod];[prod]volume={escala:.8f}[out]")
-        res = subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(pista), "-i", str(envolvente),
-                              "-filter_complex", filtro, "-map", "[out]", str(out)],
-                             capture_output=True, text=True)
+        res = _run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(pista), "-i", str(envolvente),
+                   "-filter_complex", filtro, "-map", "[out]", str(out)])
     finally:
         envolvente.unlink(missing_ok=True)
     if res.returncode != 0:
@@ -237,59 +355,119 @@ def aplicar_ducking(pista: Path, vts: list[tuple[float, float, str]],
 CROSSFADE_BUCLE = 0.1  # segundos de crossfade en cada costura del bucle (N6, QA 03/10/2026)
 
 
+MINIMO_BUCLE_X_CROSSFADE = 2  # QA 04/10/2026: rechazar música más corta que esto (NOTE)
+
+
+def _construir_unidad_de_bucle(archivo: Path, d: float, cf: float, out_unidad: Path) -> None:
+    """Una unidad de bucle SIN COSTURA: el crossfade del final de `archivo` sobre su
+    comienzo, aplicado UNA sola vez (no por vuelta). Dura `d - cf`: repetida con
+    `-stream_loop` (sin más filtros), no hay click en la costura y el costo de generarla
+    es O(1) -tres recortes fijos del mismo archivo-, no O(vueltas) (QA 04/10/2026, NOTE:
+    antes se encadenaba un `acrossfade` POR VUELTA -1200 inputs para música de 1s en un
+    total de 1200s, 294s; con música de 0.15s en 600s, el comando era tan largo que el
+    sistema operativo lo rechazaba con "Argument list too long").
+    """
+    filtro = (
+        f"[0:a]atrim=0:{cf:.6f}[a];"
+        f"[1:a]atrim={max(d - cf, 0):.6f}:{d:.6f}[b];"
+        f"[2:a]atrim={cf:.6f}:{max(d - cf, cf):.6f}[cuerpo];"
+        f"[b][a]acrossfade=d={cf:.6f}:c1=tri:c2=tri[costura];"
+        f"[costura][cuerpo]concat=n=2:v=0:a=1[out]"
+    )
+    res = _run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-i", str(archivo), "-i", str(archivo), "-i", str(archivo),
+         "-filter_complex", filtro, "-map", "[out]", str(out_unidad)])
+    if res.returncode != 0:
+        raise RuntimeError(f"falló construyendo la unidad de bucle: {res.stderr[:2000]}")
+
+
 def preparar_pista(archivo: Path, total: float, fundido: float, out: Path) -> None:
     """Deja la música durando exactamente `total` (R-2.4): bucle si es corta, recorte con
     fundido de `fundido` segundos al final si es larga.
 
     N6 (QA 03/10/2026): -stream_loop repite el clip tal cual, sin pisar los extremos: si no
     cierra en un cruce por cero, cada vuelta salta de golpe del último valor al primero (un
-    click). Acá cada costura lleva un crossfade de CROSSFADE_BUCLE segundos (`acrossfade`).
+    click). QA 04/10/2026 (NOTE, ronda 3): el crossfade de la costura se arma UNA vez
+    (`_construir_unidad_de_bucle`), no por vuelta -el costo no crece con la cantidad de
+    vueltas-, y esa unidad se repite con `-stream_loop` sin filtros adicionales.
     """
     d = duracion(archivo)
     if d >= total:
         f = min(fundido, total)
-        res = subprocess.run(
+        res = _run(
             ["ffmpeg", "-y", "-loglevel", "error", "-i", str(archivo), "-t", f"{total:.3f}",
-             "-af", f"afade=t=out:st={max(total - f, 0):.3f}:d={f:.3f}", str(out)],
-            capture_output=True, text=True)
-    else:
-        cf = min(CROSSFADE_BUCLE, d / 2)
-        paso = d - cf if cf > 0 else d
-        vueltas = max(1, int((total - d) // paso) + 2)
-        if vueltas == 1 or cf <= 0:
-            res = subprocess.run(
-                ["ffmpeg", "-y", "-loglevel", "error", "-stream_loop", str(vueltas), "-i", str(archivo),
-                 "-t", f"{total:.3f}", str(out)],
-                capture_output=True, text=True)
-        else:
-            cmd = ["ffmpeg", "-y", "-loglevel", "error"]
-            for _ in range(vueltas):
-                cmd += ["-i", str(archivo)]
-            etiqueta = "0:a"
-            partes = []
-            for i in range(1, vueltas):
-                nueva = f"a{i}"
-                partes.append(f"[{etiqueta}][{i}:a]acrossfade=d={cf:.3f}:c1=tri:c2=tri[{nueva}]")
-                etiqueta = nueva
-            cmd += ["-filter_complex", ";".join(partes), "-map", f"[{etiqueta}]",
-                    "-t", f"{total:.3f}", str(out)]
-            res = subprocess.run(cmd, capture_output=True, text=True)
+             "-af", f"afade=t=out:st={max(total - f, 0):.3f}:d={f:.3f}", str(out)])
+        if res.returncode != 0:
+            raise RuntimeError(f"falló preparando la pista de música: {res.stderr[:2000]}")
+        return
+    cf = min(CROSSFADE_BUCLE, d / 2)
+    if cf > 0 and d < MINIMO_BUCLE_X_CROSSFADE * CROSSFADE_BUCLE:
+        raise SystemExit(
+            f"ABORTADO: el archivo de música es muy corto para hacer bucle en vueltas sin "
+            f"costura ({d:.3f}s < {MINIMO_BUCLE_X_CROSSFADE * CROSSFADE_BUCLE:.3f}s, "
+            f"{MINIMO_BUCLE_X_CROSSFADE}x el crossfade de {CROSSFADE_BUCLE}s): {archivo}")
+    if cf <= 0:
+        vueltas = max(1, int(total // d) + 1)
+        res = _run(
+            ["ffmpeg", "-y", "-loglevel", "error", "-stream_loop", str(vueltas), "-i", str(archivo),
+             "-t", f"{total:.3f}", str(out)])
+        if res.returncode != 0:
+            raise RuntimeError(f"falló preparando la pista de música: {res.stderr[:2000]}")
+        return
+    unidad = out.with_name(f"{out.stem}.unidad-bucle.wav")
+    _construir_unidad_de_bucle(archivo, d, cf, unidad)
+    try:
+        dur_unidad = duracion(unidad)
+        vueltas = max(1, int(total // dur_unidad) + 2)
+        res = _run(
+            ["ffmpeg", "-y", "-loglevel", "error", "-stream_loop", str(vueltas), "-i", str(unidad),
+             "-t", f"{total:.3f}", str(out)])
+    finally:
+        unidad.unlink(missing_ok=True)
     if res.returncode != 0:
         raise RuntimeError(f"falló preparando la pista de música: {res.stderr[:2000]}")
 
 
-def _loudness_en_ventana(wav: Path, inicio: float, fin: float, default: float) -> float:
-    """Loudness integrado de sólo [inicio, fin) de `wav`, o `default` si la ventana es tan
-    corta que ebur128 no llega a dar un bloque válido (gate de -70 LUFS)."""
-    recorte = wav.with_name(f"{wav.stem}.ventana-{inicio:.3f}-{fin:.3f}.wav")
-    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(wav), "-ss", f"{inicio:.6f}",
-                    "-to", f"{fin:.6f}", str(recorte)], check=True)
+_RE_MOMENTANEO = re.compile(r"pts_time:(-?[\d.]+)\nlavfi\.r128\.M=(-?[\d.]+|-inf|nan)")
+
+
+def _momentaneos(wav: Path) -> list[tuple[float, float]]:
+    """[(pts_time, M_dB)] del loudness MOMENTÁNEO (ventana de 400ms, cada 100ms) de `wav`,
+    medido en UNA sola pasada con ebur128 (QA 04/10/2026, NOTE: `construir_pista` ya no
+    hace un ffmpeg por ventana de voz -2 por ventana, 57s con 300 segmentos-, sino uno
+    para todo el archivo)."""
+    meta = wav.with_name(f"{wav.stem}.momentaneos.txt")
+    res = _run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(wav), "-af",
+               f"ebur128=metadata=1,ametadata=print:file={meta}", "-f", "null", "-"])
+    if res.returncode != 0:
+        raise RuntimeError(f"falló midiendo el loudness momentáneo de {wav}: {res.stderr[:1500]}")
     try:
-        return loudness_integrada(recorte)
-    except RuntimeError:
-        return default
+        texto = meta.read_text()
     finally:
-        recorte.unlink(missing_ok=True)
+        meta.unlink(missing_ok=True)
+    out = []
+    for m in _RE_MOMENTANEO.finditer(texto):
+        val = m.group(2)
+        if val not in ("-inf", "nan"):
+            out.append((float(m.group(1)), float(val)))
+    return out
+
+
+def _loudness_de_ventanas(wav: Path, ventanas: list[tuple[float, float]],
+                           default: float) -> list[float]:
+    """Loudness aproximado de cada (inicio, fin) en `ventanas`, en UNA pasada sobre `wav`:
+    promedio EN ENERGÍA (no en dB) de los valores momentáneos que caen en cada rango.
+    `default` si una ventana no tiene ningún punto adentro (muy corta para el gate)."""
+    momentaneos = _momentaneos(wav)
+    out = []
+    for ini, fin in ventanas:
+        valores = [db for t, db in momentaneos if ini <= t < fin]
+        if not valores:
+            out.append(default)
+            continue
+        energia = sum(10 ** (v / 10) for v in valores) / len(valores)
+        out.append(10 * math.log10(energia) if energia > 0 else float("-inf"))
+    return out
 
 
 def _voz_lu_mas_cercana(voz_lu_por_indice: dict[int, float], i: int, default: float) -> float:
@@ -317,10 +495,10 @@ def construir_pista(voz_wav: Path, pista: Path, vts: list[tuple[float, float, st
     """
     musica_lu = loudness_integrada(pista)
     voz_lu_global = loudness_integrada(voz_wav)
-    voz_lu_por_indice: dict[int, float] = {
-        i: _loudness_en_ventana(voz_wav, ini, fin, voz_lu_global)
-        for i, (ini, fin, nivel) in enumerate(vts) if nivel == "voz"
-    }
+    indices_voz = [i for i, (_, _, nivel) in enumerate(vts) if nivel == "voz"]
+    ventanas_voz = [(vts[i][0], vts[i][1]) for i in indices_voz]
+    voz_lu_por_indice: dict[int, float] = dict(zip(
+        indices_voz, _loudness_de_ventanas(voz_wav, ventanas_voz, voz_lu_global)))
     ganancias_db = []
     for i, (ini, fin, nivel) in enumerate(vts):
         if nivel == "mute":
@@ -338,10 +516,9 @@ def construir_pista(voz_wav: Path, pista: Path, vts: list[tuple[float, float, st
 def _tiene_audio(path: Path) -> bool:
     """True si `path` tiene al menos un stream de audio (un mp4 sin audio no lo tiene,
     aunque ffprobe lea bien su duración de CONTENEDOR: esa es de video, no de audio)."""
-    out = subprocess.run(
+    out = _run(
         ["ffprobe", "-v", "error", "-select_streams", "a", "-show_entries", "stream=index",
-         "-of", "csv=p=0", str(path)],
-        capture_output=True, text=True)
+         "-of", "csv=p=0", str(path)])
     return out.returncode == 0 and bool(out.stdout.strip())
 
 

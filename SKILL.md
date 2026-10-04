@@ -38,21 +38,28 @@ metadata:
   antes del primer tramo si no hay). `TUT_VAAPI_DEVICE` pisa `/dev/dri/renderD128`. Vacía o con
   mayúsculas/espacios (`""`, ` AUTO `) se normaliza igual que sin definirla. Si VAAPI falla a
   mitad de un tramo, el error sugiere `TUT_ENCODER=software` (nunca mezcla encoders a mitad
-  de un render: rompe G4). Cada llamada a ffmpeg de `editar.py` (incluido `escena.py` vía
-  `encoder.py`) pasa por `editar.run()`, que vigila el PROGRESO, no el tiempo total
+  de un render: rompe G4). Cada llamada a ffmpeg de `editar.py` (incluido `musica.py`, QA
+  04/10/2026) pasa por `editar.run()`, que vigila el PROGRESO, no el tiempo total
   (`TUT_FFMPEG_TIMEOUT`, default 120 s = segundos SIN avance): un render largo que progresa
   nunca falla por tardar; si se cuelga de verdad (deadlock, 0% CPU, sin salida), falla
-  nombrando el comando en vez de colgar el proceso para siempre. Los subprocess de
-  `musica.py` todavía NO pasan por ese vigía (quedan con el timeout por defecto de ffmpeg,
-  es decir ninguno): si uno se cuelga, no hay corte automático.
+  nombrando el comando en vez de colgar el proceso para siempre. `escena.py`
+  (`subprocess.Popen` en el loop de cuadros) y `encoder.py` (`subprocess.run` para probar
+  VAAPI) NO pasan por `editar.run()`: tienen su propio manejo de proceso, sin ese vigía.
 - **Música de fondo** (`editar.py voz`, `musica.py`): `"musica": {"archivo", "debajo_de_la_voz_lu"?,
   "fundido"?}` arriba del guion (ver README → El guion); `"musica": false` en un segmento la apaga
   sólo ahí. `archivo` es relativo a `TUT_ROOT`; la música la pone quien arma el tutorial en
   `TUT_ROOT/musica/` (la skill no la trae, por licencia) y si falta o no se puede leer, aborta
-  antes de generar nada. Ducking en rampa (no en escalón): 18 LU bajo la voz mientras hay voz,
-  10 LU en los silencios (`debajo_de_la_voz_lu` sólo ajusta el primero). El final sigue dando
-  -16 LUFS / TP ≤ -1.5 dBTP igual que sin música. Sin la clave `musica`, el audio sale idéntico
-  al de antes de esta función (G3).
+  antes de generar nada. Ducking en rampa EN dB (no en escalón ni en amplitud lineal, QA
+  04/10/2026): 18 LU bajo la voz mientras hay voz, 10 LU en los silencios
+  (`debajo_de_la_voz_lu` sólo ajusta el primero); ataque rápido, liberación lenta
+  (`ATTACK_S`/`RELEASE_S`, sin bombeo). El final sigue dando -16 LUFS / TP ≤ -1.5 dBTP
+  igual que sin música: `musica.normalizar_dos_pasadas` mide con `loudnorm` de dos pasadas
+  y aplica un limitador de TRUE PEAK aparte (una sola pasada no llega al integrado cuando el
+  TP la restringe, QA 04/10/2026). Música más corta que el total: bucle con una UNIDAD sin
+  costura (el crossfade aplicado una vez, no por vuelta -el costo no crece con la cantidad
+  de vueltas); rechaza con `SystemExit` una música más corta que 2x el crossfade. Sin la clave `musica`
+  el final pasa por las mismas dos pasadas (decisión del 04/10/2026: todo final a -16 LUFS),
+  así que el audio del Hito 1 cambió a propósito; el video no.
 - **Fuente de datos del zoom** (`editar.py zonas`, `zonas.py`): `rec.py` no guarda dónde tipea
   ni dónde clickea (grabó con `-draw_mouse 0`), así que los momentos clave para el zoom
   automático (S7b) salen de **detectar cambios entre los cuadros del CRUDO** (decisión Q5 de
