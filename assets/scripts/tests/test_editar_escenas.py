@@ -65,11 +65,56 @@ def test_una_escena_sin_tipo_falla_diciendo_cual_falta():
         editar.spec_de_escena({"escena": {"titulo": "x"}, "texto": "x"}, 3.0, VOZ)
 
 
+# B8 (QA 04/10/2026): el mensaje listaba los tipos de escena sin "imagen".
+def test_una_escena_sin_tipo_lista_imagen_entre_los_tipos_validos():
+    with pytest.raises(ValueError, match="imagen"):
+        editar.spec_de_escena({"escena": {"titulo": "x"}, "texto": "x"}, 3.0, VOZ)
+
+
 def test_la_escena_del_guion_no_se_modifica():
     # literal propio: comparar contra ESCENA no sirve si otro test ya lo contaminó
     seg = {"escena": {"tipo": "presentacion", "puntos": [{"texto": "Sol", "cue": "el sol"}]}, "texto": "x"}
     editar.spec_de_escena(seg, 4.2, VOZ)
     assert seg["escena"] == {"tipo": "presentacion", "puntos": [{"texto": "Sol", "cue": "el sol"}]}
+
+
+# --- N3 (QA 04/10/2026): "svg" relativo de un guion se resuelve contra ROOT, no contra el ----
+# cwd (build_segment) ni contra el directorio del spec intermedio (escena.py contacto). El
+# spec que deja editar.py escenas/build_segment lo escribe ABSOLUTO: así el paso de contacto
+# documentado en SKILL.md (resolver contra el directorio DEL SPEC) también funciona.
+
+def test_svg_relativo_de_una_escena_imagen_se_resuelve_contra_root(raiz):
+    (raiz / "dibujos").mkdir()
+    (raiz / "dibujos" / "a.svg").write_text("<svg></svg>")
+    escena_imagen = {"tipo": "imagen", "titulo": {"texto": "x"},
+                      "dibujos": [{"id": "a", "svg": "dibujos/a.svg", "cue": 0.1}]}
+
+    spec = editar.spec_de_escena({"escena": escena_imagen, "texto": "x"}, 3.0, VOZ)
+
+    assert spec["dibujos"][0]["svg"] == str((raiz / "dibujos" / "a.svg").resolve())
+
+
+def test_svg_absoluto_de_una_escena_imagen_no_se_toca(raiz):
+    p = raiz / "fuera" / "a.svg"
+    p.parent.mkdir()
+    p.write_text("<svg></svg>")
+    escena_imagen = {"tipo": "imagen", "titulo": {"texto": "x"},
+                      "dibujos": [{"id": "a", "svg": str(p), "cue": 0.1}]}
+
+    spec = editar.spec_de_escena({"escena": escena_imagen, "texto": "x"}, 3.0, VOZ)
+
+    assert spec["dibujos"][0]["svg"] == str(p)
+
+
+def test_la_escena_imagen_del_guion_no_se_modifica_con_el_svg(raiz):
+    (raiz / "dibujos").mkdir()
+    (raiz / "dibujos" / "a.svg").write_text("<svg></svg>")
+    seg = {"escena": {"tipo": "imagen", "dibujos": [{"id": "a", "svg": "dibujos/a.svg", "cue": 0.1}]},
+           "texto": "x"}
+
+    editar.spec_de_escena(seg, 3.0, VOZ)
+
+    assert seg["escena"]["dibujos"][0]["svg"] == "dibujos/a.svg"
 
 
 # --- palabras de la voz, cacheadas -------------------------------------------
