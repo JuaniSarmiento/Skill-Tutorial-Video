@@ -34,8 +34,11 @@ pantalla). Un rótulo va debajo del dibujo que nombra ("de").
   .dibujo { position: absolute; }
   .dibujo svg { width: 100%; height: 100%; display: block; overflow: visible; }
   .rotulo {
+    /* N10 (QA 04/10/2026, mutación "rotulo32"): el tamaño lo fija ROTULO_PX en JS (una sola
+       fuente de verdad, también usada para medir si el texto entra); sin font-size acá, dos
+       literales podían drifear sin que ningún test lo note. */
     position: absolute; transform: translateX(-50%); text-align: center; white-space: pre-line;
-    font-size: 36px; font-weight: 600; line-height: 1.15; color: var(--tenue);
+    font-weight: 600; line-height: 1.15; color: var(--tenue);
   }
 </style>
 <script src="base.js"></script>
@@ -149,11 +152,15 @@ pantalla). Un rótulo va debajo del dibujo que nombra ("de").
       d.rellenos = todos.filter(el => el.classList.contains('lleno'));
       // sólo se puede "dibujar" por trazo lo que realmente pinta un stroke; un <text> no
       // tiene getTotalLength y una forma sin stroke no muestra nada al animar el dash.
-      d.trazos = todos.filter(el => !d.rellenos.includes(el) && el.tagName.toLowerCase() !== 'text'
-                                    && el.getAttribute('stroke') && el.getAttribute('stroke') !== 'none');
+      // N2 (QA 04/10/2026): el estilo COMPUTADO, no el atributo propio — Lucide/Tabler/Font
+      // Awesome ponen stroke/fill en el <svg> raíz (heredado); el <path> hijo no tiene el
+      // atributo, pero sí hereda el stroke por CSS.
+      const tieneTrazo = el => el.tagName.toLowerCase() !== 'text' && getComputedStyle(el).stroke !== 'none';
+      d.trazos = todos.filter(el => !d.rellenos.includes(el) && tieneTrazo(el));
       d.trazos.forEach(el => { el.dataset.largo = el.getTotalLength(); });
-      // B4(a) (QA 03/10/2026): lo que queda (sólo relleno sin convención de .lleno, o
-      // <text>) se revela con fundido + escala con resorte en vez de aparecer de golpe.
+      // N2 (QA 04/10/2026): lo que queda (sólo relleno sin convención de .lleno, o <text>) se
+      // revela con la misma curva ease-out que el trazo (sin overshoot): R-4.2 exige que los
+      // píxeles nunca bajen, y el resorte (con su ~4% de overshoot) los hacía bajar.
       d.otros = todos.filter(el => !d.rellenos.includes(el) && !d.trazos.includes(el));
       d.otros.forEach(el => {
         const caja = el.getBBox();
@@ -167,6 +174,7 @@ pantalla). Un rótulo va debajo del dibujo que nombra ("de").
       const anchoCaja = d ? d.lado : LADO_MAX;
       r.lineas = partirRotulo(r.texto, ROTULO_PX, anchoCaja);
       r.el = crear('div', 'rotulo', document.body, r.lineas.join('\n'));
+      r.el.style.fontSize = ROTULO_PX + 'px';
       r.el.dataset.caja = 'rotulo ' + r.texto;
       r.el.style.left = (d ? d.cx : 960) + 'px';
       r.el.style.top = (d ? d.cy + d.lado / 2 + 16 : 1000) + 'px';
@@ -194,10 +202,12 @@ pantalla). Un rótulo va debajo del dibujo que nombra ("de").
       // completo: se ve el dibujo terminarse y, recién ahí, el relleno lavar encima.
       for (const el of d.rellenos) el.setAttribute('fill-opacity', clamp((x - 0.85) / 0.15).toFixed(3));
       for (const el of d.otros) {
-        const v = Math.max(0, resorte(t - d.t0));
+        // N2 (QA 04/10/2026): misma curva "p" que el trazo (ease-out, monótona, máximo en
+        // t0+entrada); antes usaba resorte() y su overshoot (~4%) hacía bajar los píxeles
+        // al asentarse, violando R-4.2.
         const cx = +el.dataset.cx, cy = +el.dataset.cy, base = el.dataset.base;
         el.setAttribute('transform', `${base ? base + ' ' : ''}` +
-                        `translate(${cx} ${cy}) scale(${v.toFixed(3)}) translate(${-cx} ${-cy})`);
+                        `translate(${cx} ${cy}) scale(${p.toFixed(3)}) translate(${-cx} ${-cy})`);
       }
     }
     for (const r of rotulos) {

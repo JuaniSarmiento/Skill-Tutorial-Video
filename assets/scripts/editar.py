@@ -407,14 +407,25 @@ def spec_de_escena(seg: dict, slot: float, voz_palabras: list[dict]) -> dict:
 
     La voz arranca LEAD segundos después del inicio del slot, así que los tiempos de
     las palabras se corren LEAD. Una cue en segundos ya es relativa al slot.
+
+    N3 (QA 04/10/2026): un "svg" relativo de la escena imagen es relativo a ROOT (donde
+    vive el guion), no al cwd de quien corre editar.py ni al directorio donde después
+    quede escrito el spec intermedio. Se vuelve ABSOLUTO aquí mismo, antes de que el spec
+    siga camino (a build_segment, que renderiza directo, o a `editar.py escenas`, que lo
+    escribe a disco para `escena.py contacto`): así los dos caminos resuelven igual.
     """
     import escena
     spec = seg["escena"]
     if not spec.get("tipo"):
         raise ValueError(f"la escena del segmento {seg.get('texto', '')[:40]!r} no dice su tipo "
-                         "(diagrama, presentacion, datos)")
+                         "(diagrama, presentacion, datos, imagen)")
     corridas = [{**p, "inicio": p["inicio"] + LEAD, "fin": p["fin"] + LEAD} for p in voz_palabras]
-    return escena.resolver_spec({**spec, "duracion": slot}, corridas)
+    spec = escena.resolver_spec({**spec, "duracion": slot}, corridas)
+    for d in spec.get("dibujos", []):
+        ruta = d.get("svg")
+        if ruta and not Path(ruta).is_absolute():
+            d["svg"] = str((ROOT / ruta).resolve())
+    return spec
 
 
 def preparar(vid: str, voz_name: str) -> list[tuple[dict, float, list | None]]:

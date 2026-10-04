@@ -10,6 +10,7 @@ import pytest
 
 pytest.importorskip("playwright")
 import editar  # noqa: E402
+import escena  # noqa: E402
 import palabras  # noqa: E402
 
 pytestmark = pytest.mark.integracion
@@ -57,3 +58,37 @@ def test_imagen_y_voz_arman_un_video_mixto_de_pantalla_y_escena(tmp_path, monkey
     assert int(cuadros) == int(pantalla[5]) + int(escena_[5])
     duracion_audio, = _probe(work / "final-juani.mp4", "a", "duration")
     assert float(duracion_audio) == pytest.approx(int(cuadros) / 30, abs=0.05)
+
+
+# --- N3 (QA 04/10/2026): escenas -> contacto -> imagen con "svg" relativo al guion --------
+# (regresión: contacto resolvía contra el directorio del spec intermedio, editar.py imagen
+# contra el cwd; ninguno de los dos coincide con "donde vive el guion").
+
+def test_escenas_contacto_e_imagen_con_svg_relativo_al_guion(tmp_path, monkeypatch):
+    monkeypatch.setattr(editar, "ROOT", tmp_path)
+    (tmp_path / "dibujos").mkdir()
+    (tmp_path / "dibujos" / "a.svg").write_text(
+        '<svg viewBox="0 0 10 10"><path d="M0 0L10 10" stroke="currentColor" fill="none"/></svg>')
+    (tmp_path / "guion").mkdir()
+    (tmp_path / "guion" / "v09.json").write_text(json.dumps({"segmentos": [
+        {"escena": {"tipo": "imagen", "titulo": {"texto": "x"},
+                    "dibujos": [{"id": "a", "svg": "dibujos/a.svg", "cue": 0.1}]},
+         "texto": "Mirá esto."}]}))
+    wav = tmp_path / "voz.wav"
+    subprocess.run(["ffmpeg", "-loglevel", "error", "-f", "lavfi", "-i", "sine=d=1", str(wav)], check=True)
+    monkeypatch.setattr(editar, "voice_wav", lambda vid, voz, i, texto: wav)
+    monkeypatch.setattr(palabras, "transcribir", lambda a, modelo=None: VOZ)
+
+    # 1) escenas: deja el spec intermedio con el svg YA absoluto
+    rutas = editar.escenas("v09", "argentina")
+    spec_escrito = json.loads(rutas[0].read_text())
+    assert spec_escrito["dibujos"][0]["svg"] == str((tmp_path / "dibujos" / "a.svg").resolve())
+
+    # 2) contacto: resuelve contra el directorio DEL SPEC (videos/v09/escenas/), que no
+    # tiene dibujos/a.svg; si "svg" no fuera absoluto esto fallaba con "no existe el SVG"
+    escena._cli(["contacto", str(rutas[0]), "-o", str(tmp_path / "contacto.png")])
+    assert (tmp_path / "contacto.png").exists()
+
+    # 3) imagen: build_segment -> escena.render sin base_dir (resolvía antes contra el cwd)
+    editar.imagen("v09", "argentina")
+    assert (tmp_path / "videos" / "v09" / "video-argentina.mp4").exists()

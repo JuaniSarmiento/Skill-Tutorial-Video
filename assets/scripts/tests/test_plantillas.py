@@ -494,13 +494,23 @@ def test_imagen_el_rotulo_mide_al_menos_36px(chrome):
     assert min(c["px"] for c in rotulos) >= 36
 
 
+def _rgb_css(hexcolor: str) -> str:
+    h = hexcolor.lstrip("#")
+    r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
+    return f"rgb({r}, {g}, {b})"
+
+
 def test_imagen_el_rotulo_del_dibujo_en_foco_usa_el_color_principal(chrome):
     spec = _imagen(["lampara", "semilla"], [("Idea", "lampara"), ("Crece", "semilla")])
+    brand = escena.cargar_brand(None)
     # "semilla" entra después (cue mayor): es el foco al final.
     colores = _al_final(chrome, "imagen", spec,
                         "() => [...document.querySelectorAll('.rotulo')].map(e => getComputedStyle(e).color)")
     assert len(colores) == 2
-    assert colores[0] != colores[1], "el rótulo del foco tiene que distinguirse del resto"
+    # N10 (QA 04/10/2026, mutación "focotenue"): no alcanza con "distintos" — el del foco
+    # (semilla) tiene que ser puntualmente el color de TEXTO, y el otro (lampara) el tenue.
+    assert colores[0] == _rgb_css(brand["colores"]["tenue"]), "lampara (no-foco) tiene que ser tenue"
+    assert colores[1] == _rgb_css(brand["colores"]["texto"]), "semilla (foco) tiene que ser el color de texto"
 
 
 def test_imagen_con_id_de_dibujo_duplicado_falla_claro(chrome):

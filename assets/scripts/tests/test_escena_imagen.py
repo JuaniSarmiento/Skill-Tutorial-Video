@@ -32,7 +32,7 @@ def test_un_svg_con_href_externo_falla_nombrando_la_ruta(tmp_path):
 
 def test_un_svg_valido_queda_embebido_en_markup(tmp_path):
     p = tmp_path / "bueno.svg"
-    p.write_text('<svg viewBox="0 0 10 10"><path d="M0 0L10 10"/></svg>')
+    p.write_text('<svg viewBox="0 0 10 10"><path d="M0 0L10 10" fill="none"/></svg>')
     spec = {"dibujos": [{"id": "a", "svg": str(p), "cue": 0.1}]}
 
     out = escena.resolver_dibujos(spec)
@@ -43,6 +43,24 @@ def test_un_svg_valido_queda_embebido_en_markup(tmp_path):
 def test_sin_dibujos_no_hace_nada(tmp_path):
     spec = {"titulo": {"texto": "Hola"}}
     assert escena.resolver_dibujos(spec) == spec
+
+
+# --- N1 (QA 04/10/2026): "markup" es un campo que SÓLO genera resolver_dibujos; un spec
+# de usuario que lo traiga de entrada saltea el saneado (sanear_svg) y entra directo a
+# innerHTML. Falla claro, nombrando el dibujo, antes de abrir Chrome.
+
+def test_un_dibujo_con_markup_de_usuario_falla_claro(tmp_path):
+    spec = {"dibujos": [{"id": "a", "cue": 0.1, "markup": "<svg><script>alert(1)</script></svg>"}]}
+    with pytest.raises(ValueError, match="markup"):
+        escena.resolver_dibujos(spec)
+
+
+def test_un_dibujo_con_markup_y_svg_a_la_vez_tambien_falla_claro(tmp_path):
+    p = tmp_path / "bueno.svg"
+    p.write_text('<svg viewBox="0 0 10 10"><path d="M0 0L10 10" stroke="currentColor" fill="none"/></svg>')
+    spec = {"dibujos": [{"id": "a", "svg": str(p), "cue": 0.1, "markup": "<svg></svg>"}]}
+    with pytest.raises(ValueError, match="markup"):
+        escena.resolver_dibujos(spec)
 
 
 def test_resolver_dibujos_no_toca_el_spec_original(tmp_path):
@@ -70,6 +88,10 @@ VECTORES_RECHAZADOS = [
     ("import_css", '<svg><style>@import url(http://evil.example/x.css);</style></svg>'),
     ("font_face", '<svg><style>@font-face{font-family:x;src:url(http://evil.example/f.woff)}</style></svg>'),
     ("fill_url_externo", '<svg><path fill="url(http://evil.example/x)" d="M0 0L1 1"/></svg>'),
+    # N7 (QA 04/10/2026): el chequeo viejo sólo miraba si "url(#" aparecía en ALGÚN lado del
+    # valor; este valor la tiene como substring (".../#url(#a'") pero apunta a una URL externa.
+    ("fill_url_disfrazado_de_interno",
+     '<svg><path fill="url(\'http://evil.example/#url(#a\')" d="M0 0L1 1" stroke="currentColor"/></svg>'),
     ("foreignobject_img_onerror",
      '<svg><foreignObject><img src=x onerror="alert(1)"></foreignObject></svg>'),
     ("foreignobject_iframe", '<svg><foreignObject><iframe src="http://evil.example"></iframe></foreignObject></svg>'),
@@ -80,9 +102,10 @@ VECTORES_RECHAZADOS = [
     ("doctype", '<!DOCTYPE svg [<!ENTITY x "y">]><svg></svg>'),
     ("entity", '<svg><!ENTITY x "y"><text>&x;</text></svg>'),
     ("script_tag", '<svg><script>alert(1)</script></svg>'),
-    ("on_atributo", '<svg><path onclick="alert(1)" d="M0 0L1 1"/></svg>'),
+    ("on_atributo", '<svg fill="none" stroke="currentColor"><path onclick="alert(1)" d="M0 0L1 1"/></svg>'),
     ("smil_animate", '<svg><animate attributeName="x" to="100"/></svg>'),
-    ("style_con_url", '<svg><path style="fill:url(http://evil.example/x)" d="M0 0L1 1"/></svg>'),
+    ("style_con_url",
+     '<svg fill="none" stroke="currentColor"><path style="fill:url(http://evil.example/x)" d="M0 0L1 1"/></svg>'),
 ]
 
 
@@ -90,6 +113,19 @@ VECTORES_RECHAZADOS = [
 def test_vector_de_qa_rechazado_antes_de_abrir_chrome(tmp_path, nombre, contenido):
     spec = _spec_con_svg(tmp_path, contenido)
     with pytest.raises(ValueError, match="malo.svg"):
+        escena.resolver_dibujos(spec)
+
+
+# QA 04/10/2026 (B-1): estos vectores tienen fill heredado para que el rechazo venga del
+# chequeo que dicen probar y no del de "sin 'fill'" (N5), que corre antes.
+@pytest.mark.parametrize("nombre, motivo", [
+    ("on_atributo", "atributo de evento 'onclick'"),
+    ("style_con_url", "atributo 'style'"),
+])
+def test_vector_rechazado_por_su_propio_chequeo(tmp_path, nombre, motivo):
+    contenido = dict(VECTORES_RECHAZADOS)[nombre]
+    spec = _spec_con_svg(tmp_path, contenido)
+    with pytest.raises(ValueError, match=motivo):
         escena.resolver_dibujos(spec)
 
 
@@ -177,8 +213,28 @@ def test_svg_con_text_se_acepta(tmp_path):
     assert "<text" in out["dibujos"][0]["markup"]
 
 
+# --- N5 (QA 04/10/2026): sin "fill" propio ni heredado de un ancestro, el default de ----
+# SVG es negro: invisible (o casi) sobre el fondo casi-negro del brand, y no se recolorea.
+
+def test_path_sin_fill_propio_ni_heredado_falla_claro(tmp_path):
+    contenido = '<svg viewBox="0 0 10 10"><path d="M0 0L1 1" stroke="currentColor"/></svg>'
+    spec = _spec_con_svg(tmp_path, contenido)
+    with pytest.raises(ValueError, match="fill"):
+        escena.resolver_dibujos(spec)
+
+
+def test_path_con_fill_heredado_del_svg_raiz_se_acepta(tmp_path):
+    # convención de los sets tipo Lucide/Tabler: fill/stroke declarados una vez en la raíz.
+    contenido = '<svg viewBox="0 0 10 10" fill="none"><path d="M0 0L1 1" stroke="currentColor"/></svg>'
+    spec = _spec_con_svg(tmp_path, contenido, "bueno.svg")
+
+    out = escena.resolver_dibujos(spec)
+
+    assert "M0 0L1 1" in out["dibujos"][0]["markup"]
+
+
 def test_use_con_href_interno_se_acepta(tmp_path):
-    contenido = ('<svg viewBox="0 0 10 10">'
+    contenido = ('<svg viewBox="0 0 10 10" fill="none">'
                  '<defs><path id="p" d="M0 0L10 10"/></defs>'
                  '<use href="#p" stroke="currentColor"/>'
                  '</svg>')
@@ -187,3 +243,37 @@ def test_use_con_href_interno_se_acepta(tmp_path):
     out = escena.resolver_dibujos(spec)
 
     assert 'href="#p"' in out["dibujos"][0]["markup"]
+
+
+# --- N6 (QA 04/10/2026): Heroicons (y similares) se rechazaban por aria-hidden/data-slot; ----
+# son metadata inerte (no afecta el render), se descartan en silencio en vez de fallar.
+
+def test_aria_hidden_se_descarta_en_silencio(tmp_path):
+    contenido = ('<svg viewBox="0 0 10 10" fill="none" aria-hidden="true">'
+                 '<path d="M0 0L1 1" stroke="currentColor" data-slot="icon"/></svg>')
+    spec = _spec_con_svg(tmp_path, contenido, "bueno.svg")
+
+    out = escena.resolver_dibujos(spec)
+
+    assert "M0 0L1 1" in out["dibujos"][0]["markup"]
+
+
+def test_currentcolor_en_minuscula_se_acepta(tmp_path):
+    # CSS no distingue mayúsculas en los nombres de color/keyword.
+    contenido = '<svg viewBox="0 0 10 10"><path d="M0 0L1 1" fill="currentcolor"/></svg>'
+    spec = _spec_con_svg(tmp_path, contenido, "bueno.svg")
+
+    out = escena.resolver_dibujos(spec)
+
+    assert "M0 0L1 1" in out["dibujos"][0]["markup"]
+
+
+# --- N7 (QA 04/10/2026): url() sólo vale si el valor ENTERO es exactamente "url(#id)" -----
+
+def test_fill_url_de_id_interno_exacto_se_acepta(tmp_path):
+    contenido = '<svg viewBox="0 0 10 10"><path d="M0 0L1 1" fill="url(#clip)"/></svg>'
+    spec = _spec_con_svg(tmp_path, contenido, "bueno.svg")
+
+    out = escena.resolver_dibujos(spec)
+
+    assert "M0 0L1 1" in out["dibujos"][0]["markup"]

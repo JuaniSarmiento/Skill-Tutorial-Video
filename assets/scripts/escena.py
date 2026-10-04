@@ -33,6 +33,7 @@ import tempfile
 import xml.etree.ElementTree as ET
 from contextlib import contextmanager
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 import encoder
 import palabras as _palabras
@@ -136,11 +137,29 @@ ATRIBUTOS_CON_POSIBLE_URL = {"fill", "stroke"}
 # de quedar pegado para siempre al color con el que se dibujó el SVG original.
 COLORES_PERMITIDOS = {"none", "currentColor"}
 DOCTYPE_O_ENTIDAD = re.compile(r"<!\s*(DOCTYPE|ENTITY)", re.IGNORECASE)
+# N7 (QA 04/10/2026): "url(" en algún lado del valor no alcanza (una URL externa puede traer
+# "url(#" como substring, ej. ".../#url(#a"); el valor ENTERO tiene que ser exactamente
+# url(#id), nada antes ni después.
+URL_INTERNA = re.compile(r"^url\(\s*#[^)\s]+\s*\)$")
+# N5 (QA 04/10/2026): sin "fill" (propio o heredado de un ancestro, la convención de los
+# sets tipo Lucide/Tabler de declararlo una vez en el <svg> raíz), el default de SVG es
+# negro: no se recolorea y queda casi invisible sobre el fondo casi-negro del brand.
+# "line" queda afuera: no tiene área, fill no pinta nada.
+ELEMENTOS_CON_FILL_OBLIGATORIO = {"path", "circle", "ellipse", "rect", "polyline", "polygon", "text"}
 
 
 def _local(tag: str) -> str:
     """"{namespace}tag" o "ns:tag" -> "tag", en minúscula."""
     return tag.rsplit("}", 1)[-1].rsplit(":", 1)[-1].lower()
+
+
+def _con_fill_heredado(el, heredado=False):
+    """(elemento, ¿declara "fill" él o algún ancestro?), en recorrido profundo."""
+    propio = any(_local(a) == "fill" for a in el.attrib)
+    heredado = heredado or propio
+    yield el, heredado
+    for hijo in el:
+        yield from _con_fill_heredado(hijo, heredado)
 
 
 def sanear_svg(contenido: str, ruta) -> str:
@@ -155,12 +174,21 @@ def sanear_svg(contenido: str, ruta) -> str:
     except ET.ParseError as e:
         raise ValueError(f"SVG {ruta!r}: no es XML válido ({e})") from e
 
-    for el in raiz.iter():
+    for el, fill_heredado in _con_fill_heredado(raiz):
         nombre = _local(el.tag)
         if nombre not in ELEMENTOS_PERMITIDOS:
             raise ValueError(f"SVG {ruta!r}: elemento {nombre!r} no permitido (sólo dibujo vectorial, Q8)")
+        if nombre in ELEMENTOS_CON_FILL_OBLIGATORIO and not fill_heredado:
+            raise ValueError(
+                f"SVG {ruta!r}: elemento {nombre!r} sin 'fill' propio ni heredado de un ancestro; "
+                'el default de SVG es negro. Declará fill="currentColor" o fill="none" '
+                "(puede ir una sola vez en el <svg> raíz)")
         for attr, valor in el.attrib.items():
             nombre_attr = _local(attr)
+            # N6 (QA 04/10/2026): metadata inerte (no afecta el render ni corre nada) de
+            # sets como Heroicons (aria-hidden, data-slot); se descarta en silencio.
+            if nombre_attr.startswith("aria-") or nombre_attr.startswith("data-"):
+                continue
             if nombre_attr.startswith("on"):
                 raise ValueError(f"SVG {ruta!r}: elemento {nombre!r} con atributo de evento {attr!r} no permitido")
             if nombre_attr not in ATRIBUTOS_PERMITIDOS:
@@ -170,11 +198,14 @@ def sanear_svg(contenido: str, ruta) -> str:
                     raise ValueError(
                         f"SVG {ruta!r}: elemento {nombre!r} con href {valor!r}; "
                         "sólo <use href=\"#id\"> interno (sin red, Q8)")
-            if nombre_attr in ATRIBUTOS_CON_POSIBLE_URL and "url(" in valor and "url(#" not in valor:
-                raise ValueError(f"SVG {ruta!r}: elemento {nombre!r} con {attr}={valor!r}; "
-                                 "url() sólo puede referenciar un #id interno")
-            if (nombre_attr in ATRIBUTOS_CON_POSIBLE_URL and "url(" not in valor
-                    and valor not in COLORES_PERMITIDOS):
+            if nombre_attr in ATRIBUTOS_CON_POSIBLE_URL and "url(" in valor.lower():
+                if not URL_INTERNA.match(valor.strip()):
+                    raise ValueError(f"SVG {ruta!r}: elemento {nombre!r} con {attr}={valor!r}; "
+                                     "url() sólo puede referenciar un #id interno (formato url(#id))")
+            # N6: "currentcolor"/"none" en minúscula también son válidos (CSS no distingue
+            # mayúsculas en keywords).
+            elif (nombre_attr in ATRIBUTOS_CON_POSIBLE_URL
+                    and valor.lower() not in {c.lower() for c in COLORES_PERMITIDOS}):
                 raise ValueError(
                     f"SVG {ruta!r}: elemento {nombre!r} con {attr}={valor!r}; "
                     'usá "currentColor" (se recolorea al brand) o "none", nunca un color fijo')
@@ -197,6 +228,12 @@ def resolver_dibujos(spec: dict, base_dir=None) -> dict:
     base_dir = Path(base_dir) if base_dir is not None else Path.cwd()
     out = copy.deepcopy(spec)
     for d in out.get("dibujos", []):
+        # N1 (QA 04/10/2026): "markup" lo genera ESTA función (sanear_svg); un spec de
+        # usuario que ya lo traiga saltearía el saneado y entraría directo a innerHTML.
+        if "markup" in d:
+            raise ValueError(
+                f"dibujo {d.get('id', '?')!r}: 'markup' no es un campo del spec (sólo 'svg'); "
+                "lo genera resolver_dibujos a partir del SVG saneado")
         ruta = d.get("svg")
         if not ruta:
             continue
@@ -283,6 +320,9 @@ def avisar_si_falta_la_fuente(page, fuente) -> bool:
 # camino que un error de JS (page.on("pageerror")) y sale como ContratoError.
 # B6 (QA 03/10/2026): HTMLCanvasElement no es el único con getContext; OffscreenCanvas (que
 # puede pedir 'webgl' igual, sin estar en el DOM) la saltea si no se cubre también.
+# N8 (QA 04/10/2026): un Worker tiene su propio scope global (su propio OffscreenCanvas, sin
+# el parche de este hilo); ninguna plantilla necesita Worker/SharedWorker, así que se
+# bloquean directamente en vez de perseguir el WebGL dentro de cada scope posible.
 GUARDIA_WEBGL = """(function () {
   function bloquear(proto) {
     const orig = proto.getContext;
@@ -294,6 +334,9 @@ GUARDIA_WEBGL = """(function () {
   }
   bloquear(HTMLCanvasElement.prototype);
   if (typeof OffscreenCanvas !== 'undefined') bloquear(OffscreenCanvas.prototype);
+  window.Worker = function () { throw new Error('Worker no permitido: esta skill no usa workers'); };
+  if (typeof SharedWorker !== 'undefined')
+    window.SharedWorker = function () { throw new Error('SharedWorker no permitido: esta skill no usa workers'); };
 })();"""
 
 
@@ -310,14 +353,26 @@ def pagina_de_escena(browser, plantilla, spec: dict, brand: dict):
     errores = []
     page.on("pageerror", lambda e: errores.append(str(e)))
 
+    # N9 (QA 04/10/2026): "sólo file://" dejaba pasar CUALQUIER archivo local, no sólo los de
+    # la propia escena; file:///etc/hostname pasaba igual que base.css. Las raíces permitidas
+    # son el directorio de la plantilla (sus recursos: base.css, base.js, fuentes) y
+    # assets/escenas/ (si la plantilla vive afuera, ej. una pasada por ruta). Los SVG de los
+    # dibujos van embebidos en el spec (innerHTML), no se piden por red.
+    raices_permitidas = {ESCENAS.resolve(), Path(plantilla).resolve().parent}
+
+    def _archivo_permitido(url: str) -> bool:
+        ruta = Path(unquote(urlparse(url).path)).resolve()
+        return any(ruta == r or ruta.is_relative_to(r) for r in raices_permitidas)
+
     def _bloquear_red(route):
         """B1, defensa en profundidad: el saneado de resolver_dibujos es la primera barrera;
         esta es la segunda, para todas las plantillas. Nada sale al mundo (XHR/fetch/img/CSS):
-        sólo file:// de la propia escena. Un intento de red falla el render con ContratoError
-        en vez de pasar en silencio (antes un `catch` de la plantilla se lo tragaba).
+        sólo file:// dentro del directorio de la plantilla o de assets/escenas/. Un intento de
+        red falla el render con ContratoError en vez de pasar en silencio (antes un `catch` de
+        la plantilla se lo tragaba).
         """
         url = route.request.url
-        if url.startswith("file://"):
+        if url.startswith("file://") and _archivo_permitido(url):
             route.continue_()
         else:
             errores.append(f"intento de red bloqueado ({route.request.method} {url})")
