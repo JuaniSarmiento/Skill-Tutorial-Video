@@ -159,10 +159,13 @@ Un JSON por video. Cada segmento toma un tramo del crudo y le pone un texto:
 | `tipo: "titulo"` | placa generada, sin video |
 | `escena` | en vez de `inicio`/`fin`: una escena animada (`presentacion`, `diagrama`, `datos`, `imagen`) cuyos elementos entran en la palabra que los nombra. Ver `SKILL.md` → Escenas |
 | `musica` (en un segmento) | `false` apaga la música de fondo sólo en ese tramo (queda por debajo de -60 dBFS) |
+| `sfx` (en un segmento) | `[{"archivo", "cue", "ganancia_db"?}]`: efectos de sonido sobre una palabra, incluso en tramos de pantalla. Ver abajo |
 | `transicion` | Arriba: default para todos los cambios de tramo; en un segmento: transición **de entrada** de ese segmento. `"corte"` (default) \| `"fundido"` \| `"barrido"`. Sólo se aplica si uno de los dos lados es una escena (pantalla→pantalla siempre corte seco). Ver `SKILL.md` → Transiciones |
 | `rol` (en un segmento) | `gancho`, `analogia`, `ejemplo` o `repaso`: estructura de clase de profe. Opcional; sin él, `editar.py revisar` sólo avisa. Ver `SKILL.md` → Director |
 
 **Música de fondo**: arriba del guion (no por segmento), `"musica": {"archivo": "musica/fondo.mp3", "debajo_de_la_voz_lu": 18, "fundido": 2}`. `archivo` es relativo a `TUT_ROOT` — la música la pone quien arma el tutorial en `TUT_ROOT/musica/`, la skill no la incluye (por licencia). Si falta o no se puede leer, `editar.py voz` aborta antes de escribir nada. La música queda 18 LU por debajo de la voz mientras hay voz y 10 LU en los silencios (ducking en rampa, no en escalón), y el final sigue dando -16 LUFS / TP ≤ -1.5 dBTP igual que sin música. Música más corta que el video: bucle. Más larga: recorte con fundido de 2 s (ajustable con `fundido`). Sin la clave `musica`, el guion se comporta exactamente igual que antes de que existiera esta función.
+
+**Efectos de sonido**: en un segmento, `"sfx": [{"archivo": "pop", "cue": "base de datos"}]`. `archivo` es el nombre de un sonido generado por la skill (`pop`, `click`, `whoosh`, `ding` — sin licencia: se generan con ffmpeg, ver `SKILL.md`) o una ruta propia relativa a `TUT_ROOT`; si falta, aborta igual que la música. `cue` es la frase que nombra el momento (funciona en escenas y también en tramos de pantalla) o un número de segundos **desde el inicio del slot** (no desde que arranca la voz); fuera del slot, o una cue que no se dice, abortan nombrando el segmento. `ganancia_db` (opcional) sube o baja el volumen del efecto, que por defecto ya sale discreto, por debajo de la voz. Usalo en el dato clave o el remate de una idea, nunca en cada frase. Sin la clave `sfx`, el guion se comporta exactamente igual que antes de que existiera esta función.
 
 El guion es lo único que vale la pena versionar: `raw/` y `videos/` pesan y se regeneran.
 

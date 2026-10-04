@@ -60,6 +60,23 @@ metadata:
   de vueltas); rechaza con `SystemExit` una música más corta que 2x el crossfade. Sin la clave `musica`
   el final pasa por las mismas dos pasadas (decisión del 04/10/2026: todo final a -16 LUFS),
   así que el audio del Hito 1 cambió a propósito; el video no.
+- **Efectos de sonido** (`editar.py voz`, `sfx.py`): `"sfx": [{"archivo", "cue", "ganancia_db"?}]`
+  en un segmento (ver README → El guion). `archivo` es el nombre de un sonido generado (`pop`,
+  `click`, `whoosh`, `ding`; decisión Q1 de Juani, `docs/explicador/HITO2.md`: sin licencia, se
+  generan con ffmpeg lavfi, reproducibles) o una ruta propia relativa a `TUT_ROOT`, resuelta igual
+  que `musica.resolver_archivo` (si falta, aborta antes de escribir nada, con su ruta absoluta).
+  `cue` es una frase (se resuelve por `palabras.py`, igual que en una escena, incluso en un tramo
+  de pantalla -R-3.2-) o un número de segundos **contado desde el inicio del slot**, no desde el
+  arranque de la voz; fuera de `[0, slot)` aborta nombrando el segmento. Una cue de texto que no
+  se dice aborta con el segmento, `sfx` y la cue, reusando el mensaje de `palabras.resolver_cue`
+  ("no se dice en la voz. Se oyó: ..."). Los sonidos generados ya traen fundido en los dos bordes
+  (sin click) y un nivel discreto por debajo de la voz; `ganancia_db` suma o resta dB sobre ese
+  nivel. La mezcla entra ANTES de `musica.normalizar_dos_pasadas` (no después): así el limitador
+  de TRUE PEAK final ve también los sfx y R-2.3 (-16 LUFS / TP ≤ -1.5 dBTP) sigue cumpliéndose con
+  efectos (R-3.5). Sin la clave `sfx` en ningún segmento, no se genera ni se toca ningún archivo
+  de sfx (G1-G4 no se mueven).
+  - **Guía del Director**: un sfx marca el dato clave o el remate de una idea, no cada frase.
+    Dos o tres por video alcanzan; uno en cada oración cansa y deja de significar nada.
 - **Fuente de datos del zoom** (`editar.py zonas`, `zonas.py`): `rec.py` no guarda dónde tipea
   ni dónde clickea (grabó con `-draw_mouse 0`), así que los momentos clave para el zoom
   automático (S7b) salen de **detectar cambios entre los cuadros del CRUDO** (decisión Q5 de
