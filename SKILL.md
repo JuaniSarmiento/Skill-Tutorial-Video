@@ -173,31 +173,37 @@ recorre de verdad — R-5.8; no alcanza con nombrarla en un comentario):
   sin `t` o sin `duracion` es "no corrió" nombrando el archivo, nunca un traceback.
 - **D3**: ningún silencio de la voz (`voz-<voz>.wav`, no el final, que con música no tiene
   silencio) dura más de 0.9 s, con un umbral de sensibilidad estricto en -40dB (una voz floja
-  pero real no es silencio). **Con una voz de `FISH_LENTAS`** (`argentina`, `profe`, `joven`,
-  `mendoza`) el pipeline deja 1.3 s (`LEAD` + la "cola" de esas voces, en `preparar()`) de
-  silencio de diseño en CADA borde entre segmentos, así que D3 los marca todos — ver
-  "Decisión pendiente" más abajo.
+  pero real no es silencio) y sin mirar el returncode de ffmpeg para confundir "corrió y no
+  encontró nada" con "no pudo correr" (un wav vacío o corrupto es "no corrió", con la causa).
+  El pipeline deja LEAD (0.3s) + cola (`TAIL`, 0.5s, igual para TODAS las voces desde la
+  decisión de Juani del 03/10/2026 — antes 1.0s para `FISH_LENTAS` y 0.6s para las rápidas) =
+  0.8s de silencio de diseño en cada borde entre segmentos; como 0.8s < 0.9s, D3 no lo confunde
+  con un silencio real.
 - **D4**: si el guion declara `rol` en algún segmento, el primero es `gancho`, el último
   `repaso`, y hay al menos una `analogia` y un `ejemplo`; sin ningún `rol`, una sola línea
   avisa que el guion no los declara. Un rol que no es ninguno de los cuatro válidos
   (`gancho`, `analogia`, `ejemplo`, `repaso`) avisa "rol desconocido" con la lista de válidos
   y no cuenta como ninguno de ellos; uno que sólo difiere en mayúsculas o tildes (`Analogía`)
-  se normaliza con un aviso aparte.
+  se normaliza con un aviso aparte (ese aviso no cuenta como hallazgo para `--estricto`); uno
+  que no es texto (p.ej. `1`, guion mal armado) se informa como "rol inválido", nunca un
+  traceback.
 
 `revisar` informa los hallazgos pero sale con 0 igual; sólo con `--estricto` sale con 1 si
-encontró alguno (Q10, docs/explicador/HITO2.md). Esa política vive en una sola función,
-`_estricto_falla`: hoy sólo mira si hubo hallazgos, nunca si algún chequeo "no corrió"
-(**decisión pendiente de Juani**: si `--estricto` también debería fallar en ese caso).
+encontró algún hallazgo real, O SI ALGÚN CHEQUEO NO CORRIÓ (decisión de Juani, 03/10/2026).
+Esa política vive en una sola función, `_estricto_falla`.
 
 Un nombre de voz sin NINGÚN artefacto (ni `video-<voz>.mp4`, ni `voz-<voz>.wav`, ni
-`slots-<voz>.json`) habiendo artefactos de OTRA voz es casi siempre un nombre tipeado mal:
-`revisar` sale con error, listando las voces que sí tienen artefactos. Si no hay artefactos de
-ninguna voz (un `vNN` recién creado), sigue de largo como siempre. Un `vNN` inexistente, sin
-argumentos, o un flag que no es `--estricto` dan un mensaje claro con el uso, nunca traceback.
+`slots-<voz>.json`, ni la carpeta `<voz>/` de wavs importados) habiendo artefactos de OTRA voz
+es casi siempre un nombre tipeado mal: `revisar` sale con error, listando las voces que sí
+tienen artefactos. Si no hay artefactos de ninguna voz (un `vNN` recién creado), sigue de largo
+como siempre. Un `vNN` inexistente, un guion con JSON inválido o sin `"segmentos"`, sin
+argumentos, demasiados argumentos, o un flag que no es `--estricto` (incluido uno corto como
+`-e`) dan un mensaje claro con el uso, nunca traceback.
 
-**Decisión pendiente de Juani**: con una voz de `FISH_LENTAS`, D3 marca como silencio TODOS los
-bordes entre segmentos (1.3 s de silencio de diseño, no un problema del guion). Hoy D3 queda
-así a propósito, sin resolver si debería ignorar ese silencio "de diseño" para esas voces.
+Un spec de escena (`videos/<vNN>/escenas/NN.json`) queda atado, al escribirlo `escenas()`, a la
+voz y al CONTENIDO del segmento del guion (un hash). Si el guion cambió, si el spec es de otra
+voz, si el archivo no existe, o si es JSON inválido, D2 no lo mide y lo dice (nombrando el
+archivo), para cada índice de escena de hoy — nunca se saltea una escena sin spec en silencio.
 
 ## Critical Patterns
 
