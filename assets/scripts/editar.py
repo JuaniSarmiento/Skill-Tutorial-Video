@@ -605,21 +605,34 @@ N_CAMBIO_VISUAL = 6.0
 
 
 def _freezes(video: Path, n: float) -> list[tuple[float, float]]:
-    """D1: [(inicio, fin)] de los tramos de `video` sin cambio visual de >= n segundos."""
+    """D1: [(inicio, fin)] de los tramos de `video` sin cambio visual de MÁS de n
+    segundos (B9: criterio estricto, igual que D2).
+
+    B1: si el video queda congelado hasta el final, ffmpeg imprime `freeze_start`
+    sin su `freeze_end` (nunca "descongela"); ese tramo cierra en la duración del
+    video en vez de descartarse.
+    """
     res = subprocess.run(
         ["ffmpeg", "-nostats", "-i", str(video), "-vf", f"freezedetect=n=-60dB:d={n:.3f}", "-f", "null", "-"],
         capture_output=True, text=True)
     inicios = [float(m) for m in re.findall(r"freeze_start:\s*([\d.]+)", res.stderr)]
     fines = [float(m) for m in re.findall(r"freeze_end:\s*([\d.]+)", res.stderr)]
-    return list(zip(inicios, fines))
+    if len(inicios) > len(fines):
+        fines = fines + [duration(video)] * (len(inicios) - len(fines))
+    return [(i, f) for i, f in zip(inicios, fines) if f - i > n]
 
 
 def _huecos_escena(spec: dict, n: float) -> list[tuple[float, float]]:
     """D2: [(desde, hasta)] entre dos entradas de elementos (o la última y el final)
-    con más de n segundos, calculado desde el spec YA RESUELTO (con "t"), sin render."""
+    con más de n segundos, calculado desde el spec YA RESUELTO (con "t"), sin render.
+
+    B6: el hueco también se mide desde 0 hasta la primera entrada, así que una
+    escena sin ninguna cue (sólo título) más larga que n es, entera, un hallazgo.
+    B9: mismo criterio de borde que D1 (estrictamente MÁS de n, no "n o más").
+    """
     import escena
     tiempos = sorted(e["t"] for e in escena._con_cue(spec, []))
-    puntos = [*tiempos, spec["duracion"]]
+    puntos = [0.0, *tiempos, spec["duracion"]]
     return [(a, b) for a, b in zip(puntos, puntos[1:]) if b - a > n]
 
 
@@ -631,6 +644,40 @@ def _silencios(wav: Path, d: float = 0.9) -> list[tuple[float, float]]:
     inicios = [float(m) for m in re.findall(r"silence_start:\s*([\d.]+)", res.stderr)]
     fines = [float(m) for m in re.findall(r"silence_end:\s*([\d.]+)", res.stderr)]
     return list(zip(inicios, fines))
+
+
+def _specs_escena_vigentes(g: dict, voz_name: str, work: Path) -> tuple[list[Path], list[str]]:
+    """B5: de los specs en `escenas/`, los que valen para medir con el guion y la
+    voz ACTUALES: sólo los que corresponden (por índice de segmento) a una escena
+    del guion de hoy, y cuya "duracion" coincide con el slot medido en
+    `slots-<voz>.json` (si ese artefacto existe). `escenas/NN.json` no lleva la
+    voz en el nombre (otros comandos como `contacto`/`imagen` leen ese directorio
+    tal cual), así que un spec desactualizado o de otra voz se detecta por el slot,
+    no por el nombre de archivo.
+
+    Devuelve (vigentes, viejos): `viejos` son los nombres de archivo que había que
+    ignorar porque no corresponden a la voz pedida.
+    """
+    escenas_dir = work / "escenas"
+    indices = [i for i, seg in enumerate(g["segmentos"]) if es_escena(seg)]
+    slots_path = work / f"slots-{voz_name}.json"
+    slots = json.loads(slots_path.read_text()) if slots_path.exists() else None
+    vigentes: list[Path] = []
+    viejos: list[str] = []
+    for i in indices:
+        ruta = escenas_dir / f"{i:02d}.json"
+        if not ruta.exists():
+            continue
+        if slots is not None and i < len(slots):
+            try:
+                dur = json.loads(ruta.read_text()).get("duracion")
+            except json.JSONDecodeError:
+                dur = None
+            if dur is None or abs(dur - slots[i]) > 0.01:
+                viejos.append(ruta.name)
+                continue
+        vigentes.append(ruta)
+    return vigentes, viejos
 
 
 def _hallazgos_roles(segmentos: list[dict]) -> list[str]:
@@ -669,15 +716,26 @@ def revisar(vid: str, voz_name: str = "argentina", n: float = N_CAMBIO_VISUAL) -
         no_corrio.append(f"tiempo muerto: no corrió, falta {video} (correr 'editar.py imagen {vid} {voz_name}')")
 
     escenas_dir = work / "escenas"
-    specs = sorted(escenas_dir.glob("*.json")) if escenas_dir.exists() else []
-    if specs:
-        for ruta in specs:
-            spec = json.loads(ruta.read_text())
-            for desde, hasta in _huecos_escena(spec, n):
-                hallazgos.append(f"{ruta.name}: {desde:.1f}s–{hasta:.1f}s sin elemento nuevo (> {n:.0f}s)")
-    elif any(es_escena(s) for s in g["segmentos"]):
-        no_corrio.append(f"cambio visual en escenas: no corrió, faltan los specs resueltos en {escenas_dir} "
-                         f"(correr 'editar.py escenas {vid} {voz_name}')")
+    if any(es_escena(s) for s in g["segmentos"]):
+        if not escenas_dir.exists():
+            no_corrio.append(f"cambio visual en escenas: no corrió, faltan los specs resueltos en {escenas_dir} "
+                             f"(correr 'editar.py escenas {vid} {voz_name}')")
+        else:
+            vigentes, viejos = _specs_escena_vigentes(g, voz_name, work)
+            for ruta in vigentes:
+                try:
+                    spec = json.loads(ruta.read_text())
+                    huecos = _huecos_escena(spec, n)
+                except KeyError as e:
+                    no_corrio.append(f"cambio visual en escenas: no corrió para {ruta.name}, "
+                                     f"falta {e} en el spec (correr 'editar.py escenas {vid} {voz_name}')")
+                    continue
+                for desde, hasta in huecos:
+                    hallazgos.append(f"{ruta.name}: {desde:.1f}s–{hasta:.1f}s sin elemento nuevo (> {n:.0f}s)")
+            if viejos:
+                no_corrio.append("cambio visual en escenas: no corrió para " + ", ".join(viejos) +
+                                 f", no corresponden a la voz {voz_name!r} (desactualizados: correr "
+                                 f"'editar.py escenas {vid} {voz_name}')")
 
     voz_wav = work / f"voz-{voz_name}.wav"
     if voz_wav.exists():
