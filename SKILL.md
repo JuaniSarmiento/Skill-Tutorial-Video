@@ -134,6 +134,44 @@ pueden mezclar con segmentos de pantalla en el mismo guion. Ejemplo completo, si
 - **`av<19`**: la faster-whisper actual rompe con `av` 19 (`metadata_errors`). Va pineado en
   los comandos de abajo.
 
+## Director
+
+Guía para escribir el guion como lo armaría quien edita videos de profesión, y los chequeos
+que `editar.py revisar vNN [voz] [--estricto]` corre para medir que se cumplió. `revisar` sólo
+lee: nunca genera ni modifica el guion ni los videos, y si falta el artefacto que un chequeo
+necesita lo dice en vez de omitirlo en silencio.
+
+- **Estructura de clase de profe** (`rol` en cada segmento, opcional): `gancho` abre,
+  `repaso` cierra, y en el medio hay al menos una `analogia` y un `ejemplo`. Sin ningún `rol`
+  declarado, `revisar` no exige nada: avisa que el guion no los declara y sigue.
+- **Un plano no dura más de N = 6 s sin que pase algo nuevo en pantalla.** Si la voz sigue
+  hablando pero la imagen no cambia (una terminal quieta, una escena sin una entrada nueva),
+  cortá el tramo, agregá un `zoom`, o movelo a otra escena.
+- **Qué escena usar cuándo** (tabla completa en Escenas, más arriba): `presentacion` para abrir
+  o cerrar una idea con un título; `diagrama` para relaciones y flujo (nodos, flechas); `datos`
+  para comparar números; `imagen` para una metáfora dibujada; pantalla grabada para mostrar una
+  herramienta de verdad. Una escena sin nada que entre después del título es tiempo muerto,
+  igual que una terminal quieta.
+- **Cada elemento entra en la palabra que lo nombra** (`cue`), nunca "cerca". El texto del
+  segmento tiene que nombrar lo que el elemento muestra en el momento en que entra (ver
+  resolución de cues en Escenas, más arriba).
+
+**Reglas que mide `revisar`** (cada una con su chequeo en `editar.py`, R-5.8):
+
+- **D1**: ningún tramo de `video-<voz>.mp4` queda más de N = 6 s sin cambio visual
+  (`freezedetect`).
+- **D2**: en una escena, ninguna entrada de elemento (ni la última y el final) queda a más de
+  N = 6 s de la anterior, calculado desde el spec ya resuelto
+  (`videos/<vNN>/escenas/*.json`), sin renderizar.
+- **D3**: ningún silencio de la voz (`voz-<voz>.wav`, no el final, que con música no tiene
+  silencio) dura más de 0.9 s.
+- **D4**: si el guion declara `rol` en algún segmento, el primero es `gancho`, el último
+  `repaso`, y hay al menos una `analogia` y un `ejemplo`; sin ningún `rol`, una sola línea
+  avisa que el guion no los declara.
+
+`revisar` informa los hallazgos pero sale con 0 igual; sólo con `--estricto` sale con 1 si
+encontró alguno (Q10, docs/explicador/HITO2.md).
+
 ## Critical Patterns
 
 **Bajo Wayland (COSMIC, GNOME moderno): la skill NO funciona directo**
