@@ -292,6 +292,41 @@ def test_diagrama_con_muchos_nodos_o_texto_largo_entra_sin_pisar_flechas(chrome,
     assert min(_al_final(chrome, "diagrama", spec, PX_NODOS)) >= PISO_PX
 
 
+# Mejora de diseño (visto en la hoja de contacto del video real): con 2-3 nodos de texto
+# corto el tope de 54 px quedaba igual que con 6 nodos, y los nodos ocupaban una franja
+# chica a media altura en vez de crecer para usar el área. A partir de 4 nodos el tope
+# de siempre (54 px) sigue sin cambios.
+
+def test_diagrama_con_tres_nodos_y_texto_corto_crece_mas_alla_del_tope_viejo(chrome):
+    spec = _cadena(["Capital", "Interés", "Suma"], flecha="genera")
+    cajas = _al_final(chrome, "diagrama", spec, CAJAS)
+    assert _choques(cajas) == []
+    assert min(_al_final(chrome, "diagrama", spec, PX_NODOS)) > 54
+
+
+def test_diagrama_con_tres_nodos_y_texto_ancho_no_pisa_aunque_no_llegue_al_tope(chrome):
+    # con textos más anchos (los del video real: "Tu capital"/"Intereses"/"Capital nuevo")
+    # el ancho disponible no alcanza para crecer mucho más allá del tope viejo: sigue
+    # en 50 px, igual que antes del cambio. No es una regresión, es el límite físico del
+    # ancho de fila; lo que importa es que sigue sin pisarse ni bajar del piso legible.
+    spec = _cadena(["Tu capital", "Intereses", "Capital nuevo"], flecha="genera")
+    cajas = _al_final(chrome, "diagrama", spec, CAJAS)
+    assert _choques(cajas) == []
+    assert min(_al_final(chrome, "diagrama", spec, PX_NODOS)) >= 50
+
+
+def test_diagrama_con_dos_nodos_tambien_crece(chrome):
+    spec = _cadena(["Capital", "Interés"])
+    cajas = _al_final(chrome, "diagrama", spec, CAJAS)
+    assert _choques(cajas) == []
+    assert min(_al_final(chrome, "diagrama", spec, PX_NODOS)) > 54
+
+
+def test_diagrama_con_cuatro_nodos_no_crece_mas_alla_del_tope_de_siempre(chrome):
+    spec = _cadena(["Capital", "Intereses", "Capital nuevo", "Reinversión"])
+    assert max(_al_final(chrome, "diagrama", spec, PX_NODOS)) <= 54
+
+
 LINEAS = """() => [...document.querySelectorAll('svg line')].map(l =>
     ['x1', 'y1', 'x2', 'y2'].map(k => +l.getAttribute(k)))"""
 
