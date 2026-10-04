@@ -197,6 +197,12 @@ def resolver_dibujos(spec: dict, base_dir=None) -> dict:
     base_dir = Path(base_dir) if base_dir is not None else Path.cwd()
     out = copy.deepcopy(spec)
     for d in out.get("dibujos", []):
+        # N1 (QA 04/10/2026): "markup" lo genera ESTA función (sanear_svg); un spec de
+        # usuario que ya lo traiga saltearía el saneado y entraría directo a innerHTML.
+        if "markup" in d:
+            raise ValueError(
+                f"dibujo {d.get('id', '?')!r}: 'markup' no es un campo del spec (sólo 'svg'); "
+                "lo genera resolver_dibujos a partir del SVG saneado")
         ruta = d.get("svg")
         if not ruta:
             continue

@@ -45,6 +45,24 @@ def test_sin_dibujos_no_hace_nada(tmp_path):
     assert escena.resolver_dibujos(spec) == spec
 
 
+# --- N1 (QA 04/10/2026): "markup" es un campo que SÓLO genera resolver_dibujos; un spec
+# de usuario que lo traiga de entrada saltea el saneado (sanear_svg) y entra directo a
+# innerHTML. Falla claro, nombrando el dibujo, antes de abrir Chrome.
+
+def test_un_dibujo_con_markup_de_usuario_falla_claro(tmp_path):
+    spec = {"dibujos": [{"id": "a", "cue": 0.1, "markup": "<svg><script>alert(1)</script></svg>"}]}
+    with pytest.raises(ValueError, match="markup"):
+        escena.resolver_dibujos(spec)
+
+
+def test_un_dibujo_con_markup_y_svg_a_la_vez_tambien_falla_claro(tmp_path):
+    p = tmp_path / "bueno.svg"
+    p.write_text('<svg viewBox="0 0 10 10"><path d="M0 0L10 10" stroke="currentColor" fill="none"/></svg>')
+    spec = {"dibujos": [{"id": "a", "svg": str(p), "cue": 0.1, "markup": "<svg></svg>"}]}
+    with pytest.raises(ValueError, match="markup"):
+        escena.resolver_dibujos(spec)
+
+
 def test_resolver_dibujos_no_toca_el_spec_original(tmp_path):
     p = tmp_path / "bueno.svg"
     p.write_text("<svg></svg>")
