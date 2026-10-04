@@ -136,6 +136,10 @@ ATRIBUTOS_CON_POSIBLE_URL = {"fill", "stroke"}
 # de quedar pegado para siempre al color con el que se dibujó el SVG original.
 COLORES_PERMITIDOS = {"none", "currentColor"}
 DOCTYPE_O_ENTIDAD = re.compile(r"<!\s*(DOCTYPE|ENTITY)", re.IGNORECASE)
+# N7 (QA 04/10/2026): "url(" en algún lado del valor no alcanza (una URL externa puede traer
+# "url(#" como substring, ej. ".../#url(#a"); el valor ENTERO tiene que ser exactamente
+# url(#id), nada antes ni después.
+URL_INTERNA = re.compile(r"^url\(\s*#[^)\s]+\s*\)$")
 # N5 (QA 04/10/2026): sin "fill" (propio o heredado de un ancestro, la convención de los
 # sets tipo Lucide/Tabler de declararlo una vez en el <svg> raíz), el default de SVG es
 # negro: no se recolorea y queda casi invisible sobre el fondo casi-negro del brand.
@@ -193,12 +197,13 @@ def sanear_svg(contenido: str, ruta) -> str:
                     raise ValueError(
                         f"SVG {ruta!r}: elemento {nombre!r} con href {valor!r}; "
                         "sólo <use href=\"#id\"> interno (sin red, Q8)")
-            if nombre_attr in ATRIBUTOS_CON_POSIBLE_URL and "url(" in valor and "url(#" not in valor:
-                raise ValueError(f"SVG {ruta!r}: elemento {nombre!r} con {attr}={valor!r}; "
-                                 "url() sólo puede referenciar un #id interno")
+            if nombre_attr in ATRIBUTOS_CON_POSIBLE_URL and "url(" in valor.lower():
+                if not URL_INTERNA.match(valor.strip()):
+                    raise ValueError(f"SVG {ruta!r}: elemento {nombre!r} con {attr}={valor!r}; "
+                                     "url() sólo puede referenciar un #id interno (formato url(#id))")
             # N6: "currentcolor"/"none" en minúscula también son válidos (CSS no distingue
             # mayúsculas en keywords).
-            if (nombre_attr in ATRIBUTOS_CON_POSIBLE_URL and "url(" not in valor
+            elif (nombre_attr in ATRIBUTOS_CON_POSIBLE_URL
                     and valor.lower() not in {c.lower() for c in COLORES_PERMITIDOS}):
                 raise ValueError(
                     f"SVG {ruta!r}: elemento {nombre!r} con {attr}={valor!r}; "

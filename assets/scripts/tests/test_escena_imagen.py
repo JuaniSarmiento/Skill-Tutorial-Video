@@ -88,6 +88,10 @@ VECTORES_RECHAZADOS = [
     ("import_css", '<svg><style>@import url(http://evil.example/x.css);</style></svg>'),
     ("font_face", '<svg><style>@font-face{font-family:x;src:url(http://evil.example/f.woff)}</style></svg>'),
     ("fill_url_externo", '<svg><path fill="url(http://evil.example/x)" d="M0 0L1 1"/></svg>'),
+    # N7 (QA 04/10/2026): el chequeo viejo sólo miraba si "url(#" aparecía en ALGÚN lado del
+    # valor; este valor la tiene como substring (".../#url(#a'") pero apunta a una URL externa.
+    ("fill_url_disfrazado_de_interno",
+     '<svg><path fill="url(\'http://evil.example/#url(#a\')" d="M0 0L1 1" stroke="currentColor"/></svg>'),
     ("foreignobject_img_onerror",
      '<svg><foreignObject><img src=x onerror="alert(1)"></foreignObject></svg>'),
     ("foreignobject_iframe", '<svg><foreignObject><iframe src="http://evil.example"></iframe></foreignObject></svg>'),
@@ -243,6 +247,17 @@ def test_aria_hidden_se_descarta_en_silencio(tmp_path):
 def test_currentcolor_en_minuscula_se_acepta(tmp_path):
     # CSS no distingue mayúsculas en los nombres de color/keyword.
     contenido = '<svg viewBox="0 0 10 10"><path d="M0 0L1 1" fill="currentcolor"/></svg>'
+    spec = _spec_con_svg(tmp_path, contenido, "bueno.svg")
+
+    out = escena.resolver_dibujos(spec)
+
+    assert "M0 0L1 1" in out["dibujos"][0]["markup"]
+
+
+# --- N7 (QA 04/10/2026): url() sólo vale si el valor ENTERO es exactamente "url(#id)" -----
+
+def test_fill_url_de_id_interno_exacto_se_acepta(tmp_path):
+    contenido = '<svg viewBox="0 0 10 10"><path d="M0 0L1 1" fill="url(#clip)"/></svg>'
     spec = _spec_con_svg(tmp_path, contenido, "bueno.svg")
 
     out = escena.resolver_dibujos(spec)
