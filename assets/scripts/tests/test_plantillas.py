@@ -129,6 +129,36 @@ def test_los_puntos_quedan_centrados_bajo_el_titulo_y_no_amontonados_arriba(chro
     assert abs((arriba + abajo) / 2 - 670) <= 40, (arriba, abajo)
 
 
+# Mejora de diseño (visto en el video real, final-argentina.mp4): una portada con
+# subtítulo reservaba el lugar del subtítulo en el alto de la cabecera desde el
+# arranque (aunque todavía no hubiera entrado por su cue), así que mientras el
+# subtítulo no aparecía el kicker+título+barra quedaban pegados arriba con media
+# pantalla vacía debajo. El subtítulo tiene que entrar SIN correr el centrado de lo
+# que ya está a la vista.
+
+def test_la_portada_con_subtitulo_queda_centrada_antes_de_que_aparezca_el_subtitulo(chrome):
+    spec = {"kicker": "Interés compuesto", "titulo": {"texto": "Ahorrar 10 años le gana a ahorrar 30"},
+            "subtitulo": {"texto": "Si arrancás antes", "cue": 4.0}, "duracion": 5.0}
+    with escena.pagina_de_escena(chrome, escena.ruta_plantilla("presentacion"), spec,
+                                 escena.cargar_brand(None)) as (page, d):
+        page.evaluate("t => window.seek(t)", 1.0)  # antes de la cue del subtítulo (4.0)
+        info = page.evaluate("""() => {
+            const k = document.querySelector('.kicker');
+            const b = document.querySelector('.barra');
+            return {top: k.getBoundingClientRect().top, bottom: b.getBoundingClientRect().bottom};
+        }""")
+    centro = (info["top"] + info["bottom"]) / 2
+    assert abs(centro - 540) <= 40, info
+
+
+def test_la_portada_sin_puntos_es_mas_grande_que_una_cabecera_comun(chrome):
+    spec = {"kicker": "Interés compuesto", "titulo": {"texto": "Ahorrar 10 años le gana a ahorrar 30"},
+            "duracion": 3.0}
+    px = _al_final(chrome, "presentacion", spec,
+                   "() => parseFloat(getComputedStyle(document.querySelector('.titulo')).fontSize)")
+    assert px > 76, "tiene que ser más grande que el título de una cabecera común (76 px)"
+
+
 # --- casos de borde: lo que muestra la escena tiene que ser el dato ----------
 
 def _al_final(chrome, tipo, spec, js):
@@ -290,6 +320,41 @@ def _cadena(textos, flecha="rinde"):
 def test_diagrama_con_muchos_nodos_o_texto_largo_entra_sin_pisar_flechas(chrome, spec):
     assert _choques(_al_final(chrome, "diagrama", spec, CAJAS)) == []
     assert min(_al_final(chrome, "diagrama", spec, PX_NODOS)) >= PISO_PX
+
+
+# Mejora de diseño (visto en la hoja de contacto del video real): con 2-3 nodos de texto
+# corto el tope de 54 px quedaba igual que con 6 nodos, y los nodos ocupaban una franja
+# chica a media altura en vez de crecer para usar el área. A partir de 4 nodos el tope
+# de siempre (54 px) sigue sin cambios.
+
+def test_diagrama_con_tres_nodos_y_texto_corto_crece_mas_alla_del_tope_viejo(chrome):
+    spec = _cadena(["Capital", "Interés", "Suma"], flecha="genera")
+    cajas = _al_final(chrome, "diagrama", spec, CAJAS)
+    assert _choques(cajas) == []
+    assert min(_al_final(chrome, "diagrama", spec, PX_NODOS)) > 54
+
+
+def test_diagrama_con_tres_nodos_y_texto_ancho_no_pisa_aunque_no_llegue_al_tope(chrome):
+    # con textos más anchos (los del video real: "Tu capital"/"Intereses"/"Capital nuevo")
+    # el ancho disponible no alcanza para crecer mucho más allá del tope viejo: sigue
+    # en 50 px, igual que antes del cambio. No es una regresión, es el límite físico del
+    # ancho de fila; lo que importa es que sigue sin pisarse ni bajar del piso legible.
+    spec = _cadena(["Tu capital", "Intereses", "Capital nuevo"], flecha="genera")
+    cajas = _al_final(chrome, "diagrama", spec, CAJAS)
+    assert _choques(cajas) == []
+    assert min(_al_final(chrome, "diagrama", spec, PX_NODOS)) >= 50
+
+
+def test_diagrama_con_dos_nodos_tambien_crece(chrome):
+    spec = _cadena(["Capital", "Interés"])
+    cajas = _al_final(chrome, "diagrama", spec, CAJAS)
+    assert _choques(cajas) == []
+    assert min(_al_final(chrome, "diagrama", spec, PX_NODOS)) > 54
+
+
+def test_diagrama_con_cuatro_nodos_no_crece_mas_alla_del_tope_de_siempre(chrome):
+    spec = _cadena(["Capital", "Intereses", "Capital nuevo", "Reinversión"])
+    assert max(_al_final(chrome, "diagrama", spec, PX_NODOS)) <= 54
 
 
 LINEAS = """() => [...document.querySelectorAll('svg line')].map(l =>

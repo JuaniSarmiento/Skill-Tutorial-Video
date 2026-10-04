@@ -9,10 +9,13 @@ spec:
    "flechas": [{"de": "c", "a": "i", "texto": "rinde", "cue": "rinde"}, ...]}
 
 Por defecto los nodos van en una fila, con el espacio entre ellos calculado para que
-la etiqueta de cada flecha entre sin tocar a nadie. Si no entran en una fila a 36 px,
-van en dos filas en "S" (la segunda de derecha a izquierda, así la flecha que las une
-baja derecho); si tampoco entran a 24 px, la escena falla en vez de pisar textos. Un
-texto de nodo largo se parte en renglones. Para otra forma, cada nodo acepta "x" e "y"
+la etiqueta de cada flecha entre sin tocar a nadie. Con 2-3 nodos el tamaño arranca
+en 92 px (en vez del tope normal de 54) para que un diagrama chico use el área en vez
+de quedar en una franja a media altura; con 4 o más nodos el tope sigue siendo 54. Si
+no entran en una fila a 36 px, van en dos filas en "S" (la segunda de derecha a
+izquierda, así la flecha que las une baja derecho); si tampoco entran a 24 px, la
+escena falla en vez de pisar textos. Un texto de nodo largo se parte en renglones.
+Para otra forma, cada nodo acepta "x" e "y"
 (centro, en fracción de pantalla: 0.5 = medio), acotados para que el nodo no se salga
 ni suba hasta el título o el kicker (queda debajo de la cabecera y del área del diagrama).
 El último elemento que entró es el foco y lleva el color de acento; el resto, neutro.
@@ -44,6 +47,7 @@ El último elemento que entró es el foco y lleva el color de acento; el resto, 
   }
   const AREA = { x0: 140, x1: 1780, y0: 340, y1: 1000 };
   const PISO = 24, UNA_FILA = 36;   // px: piso legible, y el mínimo antes de pasar a dos filas
+  const TOPE = 54, TOPE_POCOS = 92, POCOS = 3;   // con 2-3 nodos el tope crece para usar el área
   const MAX_TXT = 560, ENTRE_FILAS = 150;
   const NS = 'http://www.w3.org/2000/svg';
   let dibujarCab;
@@ -83,9 +87,10 @@ El último elemento que entró es el foco y lleva el color de acento; el resto, 
 
   // Tamaños y posiciones: una sola vez, con las fuentes ya cargadas.
   function layout() {
-    if (!nodos.length) return 54;
+    if (!nodos.length) return TOPE;
+    const tope = nodos.length <= POCOS ? TOPE_POCOS : TOPE;
     if (nodos.every(n => n.x != null && n.y != null)) {
-      const px = 54;
+      const px = TOPE;
       // techo: AREA.y0, que ya está debajo de la cabecera medida
       nodos.forEach(n => {
         Object.assign(n, medida(n, px));
@@ -96,9 +101,9 @@ El último elemento que entró es el foco y lleva el color de acento; el resto, 
     }
     const mitad = Math.ceil(nodos.length / 2);
     const intentos = [];
-    for (let px = 54; px >= UNA_FILA; px -= 2) intentos.push([px, [nodos]]);
+    for (let px = tope; px >= UNA_FILA; px -= 2) intentos.push([px, [nodos]]);
     if (nodos.length > 1)   // la segunda fila va de derecha a izquierda: se guarda en el orden en que se ve
-      for (let px = 54; px >= PISO; px -= 2) intentos.push([px, [nodos.slice(0, mitad), nodos.slice(mitad).reverse()]]);
+      for (let px = tope; px >= PISO; px -= 2) intentos.push([px, [nodos.slice(0, mitad), nodos.slice(mitad).reverse()]]);
     for (const [px, filas] of intentos) {
       nodos.forEach(n => Object.assign(n, medida(n, px)));
       const alto = filas.reduce((s, R) => s + altoFila(R), 0) + (filas.length - 1) * ENTRE_FILAS;
