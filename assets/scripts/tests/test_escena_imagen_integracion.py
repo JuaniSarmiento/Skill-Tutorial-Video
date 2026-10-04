@@ -187,3 +187,41 @@ def test_svg_sin_viewbox_y_sin_contenido_medible_falla_nombrando_el_dibujo(chrom
     with pytest.raises(escena.ContratoError, match="viewBox"):
         with escena.pagina_de_escena(chrome, escena.ruta_plantilla("imagen"), spec, brand) as (page, d):
             escena._cuadro(page, d - 0.05)
+
+
+# --- B4(a): formas fuera de la convención (sólo relleno, <text>) se revelan ----
+# progresivo, no de golpe (QA 03/10/2026)
+
+def _dibujo_con_cue(tmp_path, svg_contenido, cue=1.0, duracion=3.0):
+    svg = tmp_path / "forma.svg"
+    svg.write_text(svg_contenido)
+    brand = escena.cargar_brand(None)
+    spec = escena.resolver_dibujos({"titulo": {"texto": "Una idea"}, "duracion": duracion,
+                                    "dibujos": [{"id": "a", "svg": str(svg), "cue": cue}]})
+    return brand, spec
+
+
+def test_una_forma_solo_con_relleno_se_revela_progresivo_no_de_golpe(chrome, tmp_path):
+    brand, spec = _dibujo_con_cue(
+        tmp_path, '<svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="80" fill="currentColor"/></svg>')
+    entrada = brand["movimiento"]["entrada"]
+    with escena.pagina_de_escena(chrome, escena.ruta_plantilla("imagen"), spec, brand) as (page, _):
+        escena._cuadro(page, 1.0 + entrada * 0.15)
+        temprano = _pixeles(page, "dibujo a", _fondo_rgb(brand))
+        escena._cuadro(page, 1.0 + entrada)
+        maximo = _pixeles(page, "dibujo a", _fondo_rgb(brand))
+    assert 0 < temprano < maximo * 0.7, (temprano, maximo)
+
+
+def test_un_text_tambien_se_revela_progresivo_no_de_golpe(chrome, tmp_path):
+    brand, spec = _dibujo_con_cue(
+        tmp_path,
+        '<svg viewBox="0 0 200 200">'
+        '<text x="10" y="150" font-size="140" fill="currentColor">OK</text></svg>')
+    entrada = brand["movimiento"]["entrada"]
+    with escena.pagina_de_escena(chrome, escena.ruta_plantilla("imagen"), spec, brand) as (page, _):
+        escena._cuadro(page, 1.0 + entrada * 0.15)
+        temprano = _pixeles(page, "dibujo a", _fondo_rgb(brand))
+        escena._cuadro(page, 1.0 + entrada)
+        maximo = _pixeles(page, "dibujo a", _fondo_rgb(brand))
+    assert 0 < temprano < maximo * 0.7, (temprano, maximo)
