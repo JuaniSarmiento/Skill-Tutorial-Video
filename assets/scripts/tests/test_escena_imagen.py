@@ -65,6 +65,7 @@ def _spec_con_svg(tmp_path, contenido, nombre="malo.svg"):
 
 VECTORES_RECHAZADOS = [
     ("mayusculas", '<svg><image href="HTTP://evil.example/x.png"/></svg>'),
+    ("sin_comillas", '<svg><use href=http://evil.example/x></svg>'),
     ("entidad_numerica", '<svg><use href="&#104;ttp://evil.example/x"/></svg>'),
     ("import_css", '<svg><style>@import url(http://evil.example/x.css);</style></svg>'),
     ("font_face", '<svg><style>@font-face{font-family:x;src:url(http://evil.example/f.woff)}</style></svg>'),
