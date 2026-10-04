@@ -66,14 +66,28 @@ TAIL = 0.5  # margen después de la voz
 # (-c:a aac le agrega TP de más después, hasta ~0.7dB medido con música picuda): más
 # abajo que el -1.5 de R-2.3 para que el final MEDIDO (post-encode) siga cumpliéndolo.
 TP_OBJETIVO_CON_MUSICA = -2.0
+# QA 04/10/2026 (BLOCKING ronda 3): el TP que se le pide a loudnorm en SUS DOS pasadas (no
+# el objetivo final): deliberadamente laxo, así no es loudnorm el que frena la ganancia
+# antes de llegar al integrado (ver musica.normalizar_dos_pasadas). El TP real queda
+# garantizado por el limitador de TRUE PEAK aparte, apuntando a TP_OBJETIVO_CON_MUSICA.
+MARGEN_TP_LOUDNORM = -1.0
+# -ar explícito en la salida con música: sin esto, el sample rate que loudnorm usa
+# internamente para sobremuestrear (al medir TP) se cuela a la salida (medido: 96000Hz).
+SR_SALIDA_CON_MUSICA = 48000
 
 
 def _timeout_default() -> float:
     return float(os.environ.get("TUT_FFMPEG_TIMEOUT", "120"))
 
 
-def run(cmd: list[str], timeout: float | None = None) -> str:
+def run(cmd: list[str], timeout: float | None = None, devolver_stderr: bool = False):
     """Corre `cmd` y devuelve stdout; falla (RuntimeError) si el proceso no termina bien.
+
+    QA 04/10/2026 (NOTE, ronda 3): `devolver_stderr=True` devuelve `(stdout, stderr)` en
+    vez de sólo `stdout` (default `False`, igual que antes para todo el código existente).
+    Hace falta para que musica.py pueda pasar TODOS sus subprocess por este vigía: varios
+    de sus filtros (ebur128, loudnorm) escriben el resultado en stderr aun cuando el
+    proceso termina bien, y antes de esto no había forma de leerlo pasando por `run()`.
 
     B2 (QA 03/10/2026): `timeout` (default `TUT_FFMPEG_TIMEOUT`) ya NO es un límite total
     -eso cortaba tramos largos que iban progresando bien, como un screen recording de 20
@@ -88,7 +102,11 @@ def run(cmd: list[str], timeout: float | None = None) -> str:
     es_ffmpeg = bool(cmd) and Path(cmd[0]).name == "ffmpeg"
     cmd_run = [cmd[0], "-progress", "pipe:1", *cmd[1:]] if es_ffmpeg else list(cmd)
 
-    proc = subprocess.Popen(cmd_run, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    # B2 (QA 04/10/2026): errors="replace" -sin esto, un byte que no es UTF-8 válido en
+    # stderr/stdout mata el hilo lector (UnicodeDecodeError silencioso) y el error real
+    # que ese proceso iba a reportar se pierde sin dejar causa.
+    proc = subprocess.Popen(cmd_run, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                            errors="replace")
     salida: dict[str, list[str]] = {"out": [], "err": []}
     estado = {"ultimo": time.monotonic()}
     bloqueo = threading.Lock()
@@ -131,6 +149,8 @@ def run(cmd: list[str], timeout: float | None = None) -> str:
         # dejar que el usuario mezcle encoders a mitad de un render (rompe G4).
         sugerencia = ("\n(usaba h264_vaapi: probá TUT_ENCODER=software)" if "h264_vaapi" in cmd else "")
         raise RuntimeError(f"falló: {' '.join(cmd)}\n{''.join(salida['err'])[-2000:]}{sugerencia}")
+    if devolver_stderr:
+        return "".join(salida["out"]), "".join(salida["err"])
     return "".join(salida["out"])
 
 
@@ -573,15 +593,27 @@ def voz(vid: str, name: str) -> None:
         vts = musica.ventanas(slots, voces)
         musica_out = work / f"musica-{name}.wav"
         musica.construir_pista(wav_out, cruda, vts, musica_g.get("debajo_de_la_voz_lu", 18), musica_out)
-        # N2 (QA 03/10/2026): loudnorm mide el TP ANTES del encode; el AAC de -c:a aac le
-        # agrega TP de más (medido: hasta ~0.7dB con música picuda), así que pedirle
-        # TP=-1.5 a loudnorm no alcanza para que el final MEDIDO cumpla R-2.3 (TP<=-1.5).
-        # Apuntando más abajo (-2.0) queda margen para lo que el encoder agrega después.
-        run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(video), "-i", str(wav_out), "-i", str(musica_out),
-             "-filter_complex", "[1:a][2:a]amix=inputs=2:duration=longest:normalize=0[amix];"
-                                 f"[amix]loudnorm=I=-16:TP={TP_OBJETIVO_CON_MUSICA},apad[aout]",
-             "-map", "0:v", "-map", "[aout]", "-c:v", "copy", "-c:a", "aac", "-b:a", "160k",
-             "-t", f"{duration(video):.6f}", str(final)])
+        # QA 04/10/2026 (BLOCKING ronda 3, R-2.3): loudnorm de UNA pasada no llega al
+        # integrado cuando el TP restringe la ganancia (medido: I entre -17.1 y -20.2
+        # según la música). Se mezcla primero sin loudnorm, y se normaliza con
+        # musica.normalizar_dos_pasadas (dos pasadas + limitador de TRUE PEAK aparte),
+        # apuntando bien abajo del -1.5 de R-2.3 para que el final MEDIDO (post-encode
+        # AAC, que agrega TP de más) lo siga cumpliendo.
+        mezcla = work / f"mezcla-{name}.wav"
+        # "apad" sin límite genera silencio INDEFINIDAMENTE (QA 04/10/2026: sin el "-t" de
+        # abajo, este wav intermedio crece sin fin hasta llenar el disco): acá se trunca
+        # a la misma duración que el mux final de más abajo.
+        run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(wav_out), "-i", str(musica_out),
+             "-filter_complex", "[0:a][1:a]amix=inputs=2:duration=longest:normalize=0,apad[aout]",
+             "-map", "[aout]", "-t", f"{duration(video):.6f}", str(mezcla)])
+        normalizada = work / f"normalizada-{name}.wav"
+        musica.normalizar_dos_pasadas(mezcla, normalizada, objetivo_i=-16.0,
+                                       margen_tp=MARGEN_TP_LOUDNORM,
+                                       limite_tp_final=TP_OBJETIVO_CON_MUSICA,
+                                       sr=SR_SALIDA_CON_MUSICA)
+        run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(video), "-i", str(normalizada),
+             "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "aac", "-b:a", "160k",
+             "-ar", str(SR_SALIDA_CON_MUSICA), "-t", f"{duration(video):.6f}", str(final)])
     print(f"{vid}: {final.name} {duration(final):.1f}s")
 
 

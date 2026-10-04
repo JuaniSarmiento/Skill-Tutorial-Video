@@ -93,15 +93,61 @@ def test_run_que_se_cuelga_borra_el_mp4_parcial_si_el_comando_es_ffmpeg(tmp_path
     assert not salida.exists()
 
 
+# --- QA 04/10/2026 (NOTE, ronda 3): musica.py necesita leer stderr (ebur128/loudnorm lo --
+# escriben ahí) para poder pasar TODOS sus subprocess por run() con vigía.
+
+def test_run_con_devolver_stderr_da_una_tupla_stdout_stderr():
+    out = editar.run(["python3", "-c", "import sys; print('hola'); print('chau', file=sys.stderr)"],
+                      timeout=5, devolver_stderr=True)
+
+    assert out == ("hola\n", "chau\n")
+
+
+def test_run_sin_devolver_stderr_sigue_devolviendo_solo_stdout_como_antes():
+    out = editar.run(["echo", "hola"], timeout=5)
+
+    assert out == "hola\n"
+
+
+# --- QA 04/10/2026 (NOTE, ronda 3): stderr que no es UTF-8 vállido no puede matar el hilo lector --
+
+def test_run_con_stderr_no_utf8_no_tira_unicodedecodeerror(tmp_path):
+    # un stream de stderr con bytes que no son UTF-8 válido mataba el hilo lector
+    # (UnicodeDecodeError silencioso, sin traza): el error real quedaba sin causa.
+    falso_cmd = tmp_path / "falso_cmd.py"
+    falso_cmd.write_text(
+        "#!/usr/bin/env python3\n"
+        "import sys\n"
+        "sys.stderr.buffer.write(b'linea con byte invalido: \\xff\\xfe\\n')\n"
+        "sys.stderr.buffer.flush()\n"
+        "sys.exit(1)\n")
+    falso_cmd.chmod(0o755)
+
+    with pytest.raises(RuntimeError) as exc:
+        editar.run(["python3", str(falso_cmd)], timeout=5)
+
+    # tiene que llegar la CAUSA real (el texto decodificable de esa línea de stderr), no
+    # perderla porque el hilo lector murió al toparse con el byte inválido.
+    assert "linea con byte invalido" in str(exc.value), exc.value
+
+
 def test_run_con_ffmpeg_real_callado_por_loglevel_error_pero_progresando_no_falla(tmp_path):
     # con -loglevel error, ffmpeg no escribe nada a stderr mientras todo va bien: sin el
     # -progress pipe:1 que run() le agrega, un render activo (CPU alto, sin colgarse) se
     # vería "sin avance" y el vigía lo mataría por error. Esto prueba que no pasa: un
-    # encode con filtro pesado que tarda más de 1s sin cortarse por el timeout de 1s.
+    # encode con filtro pesado que tarda más que el timeout "sin avance" sin cortarse.
+    #
+    # QA 04/10/2026 (NOTE, ronda 3): con timeout=1.0 esto era flaky (1/11, medido por QA):
+    # bajo carga del sistema, el intervalo entre actualizaciones de "-progress" (una por
+    # cuadro, con boxblur+veryslow) a veces supera 1.0s, y el vigía lo corta por error -eso
+    # NO es el comportamiento que el test quiere ejercitar, es ruido de timing. El timeout
+    # del vigía sube a 5.0s (margen de sobra incluso bajo carga); lo que el test prueba
+    # sigue intacto: el render total (medido, bastante más de 5s con este filtro) tiene
+    # que terminar bien de todas formas.
     salida = tmp_path / "pesado.mp4"
 
     editar.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi",
                 "-i", "testsrc=s=640x480:r=30:d=3", "-vf", "boxblur=20:5",
-                "-c:v", "libx264", "-preset", "veryslow", str(salida)], timeout=1.0)
+                "-c:v", "libx264", "-preset", "veryslow", str(salida)], timeout=5.0)
 
     assert salida.exists()

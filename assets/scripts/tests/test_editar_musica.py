@@ -240,6 +240,188 @@ def test_voz_con_musica_el_final_sigue_cumpliendo_el_loudness_objetivo(tutorial)
     assert tp <= -1.5
 
 
+# --- QA 04/10/2026 (BLOCKING, ronda 3): R-2.3 con 10 slots reales y música de verdad --
+#
+# loudnorm de UNA pasada no llega al integrado objetivo cuando el TP lo restringe (medido
+# por QA: I=-17.1/-18.9 con música normal/clicks/percusión, I entre -17.5 y -20.2 en
+# finales cortos de 8s). El arreglo: loudnorm de DOS pasadas (mide con print_format=json,
+# aplica con measured_* y linear=true) + un limitador de TRUE PEAK aparte (loudnorm en modo
+# lineal no limita TP), + "-ar 48000" explícito (si no, el final sale a la tasa que
+# loudnorm sobremuestreó internamente).
+
+def _voz_habla(path, dur: float, sr: int = 22050) -> None:
+    """Voz sintética tipo habla: ruido rosa modulado en amplitud a 4Hz (QA 04/10/2026)."""
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi",
+                    "-i", f"anoisesrc=color=pink:d={dur}:a=0.5,tremolo=f=4:d=0.9",
+                    "-ar", str(sr), str(path)], check=True)
+
+
+def _musica_normal(path, dur: float, sr: int = 44100, semilla: int = 1) -> None:
+    freq = {1: 220, 2: 330, 3: 440}[semilla]
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi",
+                    "-i", f"sine=f={freq}:d={dur},tremolo=f=2.5:d=0.7,volume=0.8",
+                    "-ar", str(sr), str(path)], check=True)
+
+
+def _musica_rosa(path, dur: float, sr: int = 44100, semilla: int = 1) -> None:
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi",
+                    "-i", f"anoisesrc=color=pink:d={dur}:seed={semilla}",
+                    "-ar", str(sr), str(path)], check=True)
+
+
+def _musica_percusion(path, dur: float, sr: int = 44100, semilla: int = 1) -> None:
+    periodo = {1: 0.5, 2: 0.4, 3: 0.6}[semilla]
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi",
+                    "-i", f"aevalsrc='if(lt(mod(t\\,{periodo})\\,0.08)\\,0.97*exp(-30*mod(t\\,{periodo}))\\,0)'"
+                          f":d={dur}:s={sr}",
+                    str(path)], check=True)
+
+
+def _musica_clicks(path, dur: float, sr: int = 44100) -> None:
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi",
+                    "-i", r"aevalsrc='if(lt(mod(t\,0.05)\,0.0015)\,0.99\,0)'" f":d={dur}:s={sr}",
+                    str(path)], check=True)
+
+
+def _escenario_10_slots_de_6s(tmp_path, monkeypatch, musica_gen, semilla: int = 1) -> tuple:
+    """10 slots de 6s, voz tipo habla bien adentro de cada uno (sin acelerar), música real
+    generada por `musica_gen`. Usado por los repros N2g/N2d/finales cortos (QA 04/10/2026)."""
+    monkeypatch.setattr(editar, "ROOT", tmp_path)
+    (tmp_path / "guion").mkdir()
+    work = tmp_path / "videos" / "v09"
+    (work / "juani").mkdir(parents=True)
+    n, slot = 10, 6.0
+    for i in range(n):
+        _voz_habla(work / "juani" / f"{i:02d}.wav", slot - 0.3 - 0.6)
+    _video(work / "video-juani.mp4", round(n * slot * 30))
+    (work / "slots-juani.json").write_text(json.dumps([slot] * n))
+    (tmp_path / "musica").mkdir()
+    archivo = tmp_path / "musica" / "fondo.wav"
+    if musica_gen is _musica_clicks:
+        musica_gen(archivo, n * slot + 5)
+    else:
+        musica_gen(archivo, n * slot + 5, semilla=semilla)
+    segmentos = [{"texto": f"Tramo {i}."} for i in range(n)]
+    (tmp_path / "guion" / "v09.json").write_text(
+        json.dumps({"segmentos": segmentos, "musica": {"archivo": "musica/fondo.wav"}}, ensure_ascii=False))
+    return work
+
+
+def _i_tp_del_final(work) -> tuple:
+    final = work / "final-juani.mp4"
+    audio = work / "final-audio.wav"
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(final), "-vn", str(audio)], check=True)
+    return musica.medir_i_tp(audio)
+
+
+@pytest.mark.parametrize("semilla", [1, 2, 3])
+@pytest.mark.parametrize("musica_gen", [_musica_normal, _musica_rosa, _musica_percusion])
+def test_voz_con_musica_real_el_final_cumple_i_y_tp_sin_tolerancia(tmp_path, monkeypatch, musica_gen, semilla):
+    work = _escenario_10_slots_de_6s(tmp_path, monkeypatch, musica_gen, semilla=semilla)
+
+    editar.voz("v09", "juani")
+
+    i, tp = _i_tp_del_final(work)
+    assert -17.0 <= i <= -15.0, i
+    assert tp <= -1.5, tp
+
+
+def test_voz_con_musica_de_clicks_el_final_cumple_i_y_tp_sin_tolerancia(tmp_path, monkeypatch):
+    work = _escenario_10_slots_de_6s(tmp_path, monkeypatch, _musica_clicks)
+
+    editar.voz("v09", "juani")
+
+    i, tp = _i_tp_del_final(work)
+    assert -17.0 <= i <= -15.0, i
+    assert tp <= -1.5, tp
+
+
+@pytest.mark.parametrize("musica_gen", [
+    _musica_normal, _musica_rosa,
+    pytest.param(_musica_percusion, marks=pytest.mark.xfail(
+        strict=True, reason="HALLAZGO QA 04/10/2026 (reportado, no resuelto): crest factor "
+        "extremo (~25dB TP-I) + voz que ocupa sólo 6% del slot -> el I integrado queda "
+        "dominado por los transientes de percusión. Bajar su pico al límite de TP baja el "
+        "integrado casi 1:1 (el gate de EBU R128 descarta el silencio entre golpes): no "
+        "encontré una ganancia+limitador que cumpla I y TP a la vez sin comprimir el "
+        "contenido mucho más allá de lo razonable. Decisión para Juani, no mía.")),
+    pytest.param(_musica_clicks, marks=pytest.mark.xfail(
+        strict=True, reason="HALLAZGO QA 04/10/2026: mismo mecanismo que _musica_percusion "
+        "arriba (crest factor extremo + voz mínima en el slot).")),
+])
+def test_voz_con_musica_y_final_corto_de_8s_cumple_i_y_tp_sin_tolerancia(tmp_path, monkeypatch, musica_gen):
+    # final corto (8s, voz de 0.5s): la música queda fuerte en casi todo el slot (sólo 10 LU
+    # bajo la voz en "silencio"), el caso donde QA midió I entre -17.5 y -20.2.
+    monkeypatch.setattr(editar, "ROOT", tmp_path)
+    (tmp_path / "guion").mkdir()
+    work = tmp_path / "videos" / "v09"
+    (work / "juani").mkdir(parents=True)
+    slot = 8.0
+    _voz_habla(work / "juani" / "00.wav", 0.5)
+    _video(work / "video-juani.mp4", round(slot * 30))
+    (work / "slots-juani.json").write_text(json.dumps([slot]))
+    (tmp_path / "musica").mkdir()
+    archivo = tmp_path / "musica" / "fondo.wav"
+    if musica_gen is _musica_clicks:
+        musica_gen(archivo, slot + 5)
+    else:
+        musica_gen(archivo, slot + 5, semilla=1)
+    _guion(tmp_path, musica={"archivo": "musica/fondo.wav"})
+
+    editar.voz("v09", "juani")
+
+    final = work / "final-juani.mp4"
+    audio = work / "final-audio.wav"
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(final), "-vn", str(audio)], check=True)
+    i, tp = musica.medir_i_tp(audio)
+    assert -17.0 <= i <= -15.0, i
+    assert tp <= -1.5, tp
+
+
+# --- QA 04/10/2026 (urgente, orquestador): "apad" sin "-t" genera silencio INDEFINIDO ---
+# en el wav intermedio de mezcla (voz+música antes de normalizar): sin un límite de
+# duración explícito en ESE comando, el archivo crece sin fin hasta llenar el disco
+# (medido: 17GB en un solo caso, 256GB en la corrida completa). El mux final YA tenía
+# "-t duration(video)", pero ese límite no alcanzaba al paso intermedio nuevo.
+
+def test_voz_con_musica_el_wav_intermedio_de_mezcla_no_dura_mas_que_el_video(tutorial):
+    tmp_path, work = tutorial
+    archivo = _con_musica(tmp_path)
+    _guion(tmp_path, musica={"archivo": archivo})
+
+    editar.voz("v09", "juani")
+
+    mezcla = work / "mezcla-juani.wav"
+    video = work / "video-juani.mp4"
+    assert mezcla.exists()
+    assert _duracion(mezcla, "a") <= _duracion(video, "v") + 0.5, _duracion(mezcla, "a")
+
+
+def test_voz_con_musica_el_final_sale_a_48000hz(tmp_path, monkeypatch):
+    # el bug observado: loudnorm sube la tasa internamente y, sin "-ar" explícito, el AAC
+    # hereda esa tasa (medido: 96000 Hz) en vez de una tasa estándar de entrega.
+    monkeypatch.setattr(editar, "ROOT", tmp_path)
+    (tmp_path / "guion").mkdir()
+    work = tmp_path / "videos" / "v09"
+    (work / "juani").mkdir(parents=True)
+    slot = 8.0
+    _voz_habla(work / "juani" / "00.wav", 0.5)
+    _video(work / "video-juani.mp4", round(slot * 30))
+    (work / "slots-juani.json").write_text(json.dumps([slot]))
+    (tmp_path / "musica").mkdir()
+    archivo = tmp_path / "musica" / "fondo.wav"
+    _musica_normal(archivo, slot + 5, semilla=1)
+    _guion(tmp_path, musica={"archivo": "musica/fondo.wav"})
+
+    editar.voz("v09", "juani")
+
+    final = work / "final-juani.mp4"
+    out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "a:0", "-show_entries",
+                          "stream=sample_rate", "-of", "csv=p=0", str(final)],
+                         capture_output=True, text=True, check=True).stdout.strip()
+    assert out == "48000", out
+
+
 def test_voz_con_musica_picuda_y_voz_corta_el_tp_del_final_no_se_pasa_de_1_5_dbtp(tmp_path, monkeypatch):
     # N2 (QA 03/10/2026): con música de clicks, el AAC del final le agrega TP de más (el
     # ducking normal -tramos "voz"- ya atenúa bastante la música y lo tapa: hace falta un
