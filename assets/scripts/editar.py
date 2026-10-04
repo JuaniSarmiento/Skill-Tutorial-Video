@@ -582,10 +582,23 @@ def voz(vid: str, name: str) -> None:
     # completa con silencio (apad) hasta el largo del video.
     video = work / f"video-{name}.mp4"
     if musica_g is None:
-        # sin "musica" en el guion: EXACTAMENTE el comando de antes del Hito 2 (G3).
-        run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(video), "-i", str(wav_out), "-map", "0:v", "-map", "1:a",
-             "-c:v", "copy", "-c:a", "aac", "-b:a", "160k", "-af", "loudnorm=I=-16:TP=-1.5,apad",
-             "-t", f"{duration(video):.6f}", str(final)])
+        # QA 04/10/2026 (decisión del orquestador, ronda 3): el mismo camino de dos pasadas
+        # + limitador de TP que con música, también sin ella -antes, loudnorm de una pasada
+        # normalizaba por el contenido CON voz, y un slot largo con muy poca voz medía
+        # I=-10.3 (voz 0.5s en un slot de 8s): muy por arriba de -16±1. Esto cambia el
+        # AUDIO a propósito respecto de antes del Hito 2 (no el video: G3 pasa a ser sólo
+        # framemd5, ver tests/fixtures/s0/ y su docstring).
+        acotada = work / f"voz-acotada-{name}.wav"
+        run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(wav_out), "-af", "apad",
+             "-t", f"{duration(video):.6f}", str(acotada)])
+        normalizada = work / f"normalizada-{name}.wav"
+        musica.normalizar_dos_pasadas(acotada, normalizada, objetivo_i=-16.0,
+                                       margen_tp=MARGEN_TP_LOUDNORM,
+                                       limite_tp_final=TP_OBJETIVO_CON_MUSICA,
+                                       sr=SR_SALIDA_CON_MUSICA)
+        run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(video), "-i", str(normalizada),
+             "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "aac", "-b:a", "160k",
+             "-ar", str(SR_SALIDA_CON_MUSICA), "-t", f"{duration(video):.6f}", str(final)])
     else:
         total = sum(slots)
         cruda = work / f"musica-cruda-{name}.wav"

@@ -437,6 +437,35 @@ def test_voz_con_musica_el_final_sale_a_48000hz(tmp_path, monkeypatch):
     assert out == "48000", out
 
 
+# --- QA 04/10/2026 (decisión del orquestador, ronda 3): el camino SIN música también ---
+# pasa por loudnorm de dos pasadas + limitador de TP (igual que con música): sin esto, un
+# slot largo con muy poca voz medía I=-10.3 (muy por arriba de -16±1), porque loudnorm de
+# una pasada normaliza por el contenido con voz, no por el silencio que lo rodea.
+
+def test_voz_sin_musica_con_poca_voz_en_un_slot_largo_tambien_cumple_i_y_tp(tmp_path, monkeypatch):
+    monkeypatch.setattr(editar, "ROOT", tmp_path)
+    (tmp_path / "guion").mkdir()
+    work = tmp_path / "videos" / "v09"
+    (work / "juani").mkdir(parents=True)
+    slot = 8.0
+    _wav(work / "juani" / "00.wav", 0.5)  # voz de 0.5s en un slot de 8s: casi todo silencio
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=s=320x180:r=30",
+                    "-frames:v", str(round(slot * 30)), "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                    str(work / "video-juani.mp4")], check=True)
+    (work / "slots-juani.json").write_text(json.dumps([slot]))
+    (tmp_path / "guion" / "v09.json").write_text(
+        json.dumps({"segmentos": [{"texto": "Tramo 0."}]}, ensure_ascii=False))  # sin "musica"
+
+    editar.voz("v09", "juani")
+
+    final = work / "final-juani.mp4"
+    audio = work / "final-audio.wav"
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(final), "-vn", str(audio)], check=True)
+    i, tp = musica.medir_i_tp(audio)
+    assert -17.0 <= i <= -15.0, i
+    assert tp <= -1.5, tp
+
+
 def test_voz_con_musica_picuda_y_voz_corta_el_tp_del_final_no_se_pasa_de_1_5_dbtp(tmp_path, monkeypatch):
     # N2 (QA 03/10/2026): con música de clicks, el AAC del final le agrega TP de más (el
     # ducking normal -tramos "voz"- ya atenúa bastante la música y lo tapa: hace falta un
