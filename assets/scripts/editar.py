@@ -17,6 +17,7 @@ uso:
   editar.py voz     <vNN> <voz>      genera videos/<vNN>/voz-<voz>.wav y final-<voz>.mp4 (+ .srt)
   editar.py exportar <vNN>           exporta textos por segmento para generar voces fuera (Colab)
   editar.py escenas <vNN> [voz]      deja videos/<vNN>/escenas/NN.json listos para la hoja de contacto (no renderiza)
+  editar.py revisar <vNN> [voz] [--estricto]   el director: mide tiempo muerto, silencios y roles (sección Director en SKILL.md). Sólo lee: no genera ni modifica nada. Sin --estricto sale siempre con 0; con --estricto sale con 1 si hay hallazgos
 
 Un segmento con "escena": {"tipo": "diagrama|presentacion|datos", ...} no se corta del crudo:
 se renderiza con el motor de escenas (escena.py) y dura su slot, igual que los demás. Con
@@ -25,6 +26,7 @@ voces: argentina (PRINCIPAL: Fish, femenina argentina, speed 0.80, la mas expres
 """
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -592,6 +594,112 @@ def exportar(vid: str) -> None:
     print(out)
 
 
+# --- revisar: el director (S5 del Hito 2, docs/explicador/HITO2.md) ---------------
+#
+# Mide lo que la sección "Director" de SKILL.md le pide al guion y al render. Sólo
+# lee: nunca genera voces, specs ni videos. Si el artefacto que un chequeo necesita
+# no está, lo dice (R-5.6) en vez de omitirlo en silencio.
+
+# D1/D2 (SKILL.md → Director), Q10: N por defecto del tiempo sin cambio visual.
+N_CAMBIO_VISUAL = 6.0
+
+
+def _freezes(video: Path, n: float) -> list[tuple[float, float]]:
+    """D1: [(inicio, fin)] de los tramos de `video` sin cambio visual de >= n segundos."""
+    res = subprocess.run(
+        ["ffmpeg", "-nostats", "-i", str(video), "-vf", f"freezedetect=n=-60dB:d={n:.3f}", "-f", "null", "-"],
+        capture_output=True, text=True)
+    inicios = [float(m) for m in re.findall(r"freeze_start:\s*([\d.]+)", res.stderr)]
+    fines = [float(m) for m in re.findall(r"freeze_end:\s*([\d.]+)", res.stderr)]
+    return list(zip(inicios, fines))
+
+
+def _huecos_escena(spec: dict, n: float) -> list[tuple[float, float]]:
+    """D2: [(desde, hasta)] entre dos entradas de elementos (o la última y el final)
+    con más de n segundos, calculado desde el spec YA RESUELTO (con "t"), sin render."""
+    import escena
+    tiempos = sorted(e["t"] for e in escena._con_cue(spec, []))
+    puntos = [*tiempos, spec["duracion"]]
+    return [(a, b) for a, b in zip(puntos, puntos[1:]) if b - a > n]
+
+
+def _silencios(wav: Path, d: float = 0.9) -> list[tuple[float, float]]:
+    """D3: [(inicio, fin)] de los silencios de `wav` de >= d segundos."""
+    res = subprocess.run(
+        ["ffmpeg", "-nostats", "-i", str(wav), "-af", f"silencedetect=noise=-40dB:d={d:.3f}", "-f", "null", "-"],
+        capture_output=True, text=True)
+    inicios = [float(m) for m in re.findall(r"silence_start:\s*([\d.]+)", res.stderr)]
+    fines = [float(m) for m in re.findall(r"silence_end:\s*([\d.]+)", res.stderr)]
+    return list(zip(inicios, fines))
+
+
+def _hallazgos_roles(segmentos: list[dict]) -> list[str]:
+    """D4: estructura de clase de profe (gancho, analogía, ejemplo, repaso)."""
+    roles = [s.get("rol") for s in segmentos]
+    if not any(roles):
+        return ["el guion no declara roles"]
+    hallazgos = []
+    if roles[0] != "gancho":
+        hallazgos.append(f"el primer segmento no es 'gancho' (rol={roles[0]!r})")
+    if roles[-1] != "repaso":
+        hallazgos.append(f"el último segmento no es 'repaso' (rol={roles[-1]!r})")
+    if "analogia" not in roles:
+        hallazgos.append("no hay ningún segmento con rol 'analogia'")
+    if "ejemplo" not in roles:
+        hallazgos.append("no hay ningún segmento con rol 'ejemplo'")
+    return hallazgos
+
+
+def revisar(vid: str, voz_name: str = "argentina", n: float = N_CAMBIO_VISUAL) -> tuple[list[str], list[str]]:
+    """(hallazgos, no_corrio) de revisar el guion y lo ya renderizado de `vid`/`voz_name`.
+
+    `hallazgos` son los problemas que encontró un chequeo que sí pudo correr;
+    `no_corrio` dice, de los que no pudieron, cuál y por qué (R-5.6).
+    """
+    g = load(vid)
+    work = ROOT / "videos" / vid
+    hallazgos: list[str] = []
+    no_corrio: list[str] = []
+
+    video = work / f"video-{voz_name}.mp4"
+    if video.exists():
+        for inicio, fin in _freezes(video, n):
+            hallazgos.append(f"tiempo muerto: {inicio:.1f}s–{fin:.1f}s sin cambio visual (> {n:.0f}s) en {video.name}")
+    else:
+        no_corrio.append(f"tiempo muerto: no corrió, falta {video} (correr 'editar.py imagen {vid} {voz_name}')")
+
+    escenas_dir = work / "escenas"
+    specs = sorted(escenas_dir.glob("*.json")) if escenas_dir.exists() else []
+    if specs:
+        for ruta in specs:
+            spec = json.loads(ruta.read_text())
+            for desde, hasta in _huecos_escena(spec, n):
+                hallazgos.append(f"{ruta.name}: {desde:.1f}s–{hasta:.1f}s sin elemento nuevo (> {n:.0f}s)")
+    elif any(es_escena(s) for s in g["segmentos"]):
+        no_corrio.append(f"cambio visual en escenas: no corrió, faltan los specs resueltos en {escenas_dir} "
+                         f"(correr 'editar.py escenas {vid} {voz_name}')")
+
+    voz_wav = work / f"voz-{voz_name}.wav"
+    if voz_wav.exists():
+        for inicio, fin in _silencios(voz_wav, 0.9):
+            hallazgos.append(f"silencio: {inicio:.1f}s–{fin:.1f}s en la voz (> 0.9s) en {voz_wav.name}")
+    else:
+        no_corrio.append(f"silencios: no corrió, falta {voz_wav} (correr 'editar.py voz {vid} {voz_name}')")
+
+    hallazgos.extend(_hallazgos_roles(g["segmentos"]))
+
+    return hallazgos, no_corrio
+
+
+def informe_revisar(vid: str, voz_name: str, hallazgos: list[str], no_corrio: list[str]) -> str:
+    lineas = [f"director: {vid} ({voz_name})"]
+    lineas += [f"  - {h}" for h in hallazgos] if hallazgos else ["  sin hallazgos"]
+    if no_corrio:
+        lineas.append("chequeos que no corrieron:")
+        lineas += [f"  - {c}" for c in no_corrio]
+    return "\n".join(lineas)
+
+
 if __name__ == "__main__":
     accion, vid = sys.argv[1], sys.argv[2]
     if accion == "imagen":
@@ -607,5 +715,13 @@ if __name__ == "__main__":
         else:   # ruta absoluta: el comando se copia y se corre desde la raíz del tutorial
             print(f"hoja de contacto: uv run --with playwright python {Path(__file__).resolve().parent / 'escena.py'} contacto "
                   + " ".join(str(r) for r in rutas) + f" -o {ROOT / 'videos' / vid / 'contacto.png'}")
+    elif accion == "revisar":
+        estricto = "--estricto" in sys.argv
+        posicionales = [a for a in sys.argv[3:] if not a.startswith("--")]
+        voz_name = posicionales[0] if posicionales else "argentina"
+        hallazgos, no_corrio = revisar(vid, voz_name)
+        print(informe_revisar(vid, voz_name, hallazgos, no_corrio))
+        if estricto and hallazgos:
+            sys.exit(1)
     else:
         sys.exit(__doc__)
