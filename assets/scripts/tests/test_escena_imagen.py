@@ -102,9 +102,10 @@ VECTORES_RECHAZADOS = [
     ("doctype", '<!DOCTYPE svg [<!ENTITY x "y">]><svg></svg>'),
     ("entity", '<svg><!ENTITY x "y"><text>&x;</text></svg>'),
     ("script_tag", '<svg><script>alert(1)</script></svg>'),
-    ("on_atributo", '<svg><path onclick="alert(1)" d="M0 0L1 1"/></svg>'),
+    ("on_atributo", '<svg fill="none" stroke="currentColor"><path onclick="alert(1)" d="M0 0L1 1"/></svg>'),
     ("smil_animate", '<svg><animate attributeName="x" to="100"/></svg>'),
-    ("style_con_url", '<svg><path style="fill:url(http://evil.example/x)" d="M0 0L1 1"/></svg>'),
+    ("style_con_url",
+     '<svg fill="none" stroke="currentColor"><path style="fill:url(http://evil.example/x)" d="M0 0L1 1"/></svg>'),
 ]
 
 
@@ -112,6 +113,19 @@ VECTORES_RECHAZADOS = [
 def test_vector_de_qa_rechazado_antes_de_abrir_chrome(tmp_path, nombre, contenido):
     spec = _spec_con_svg(tmp_path, contenido)
     with pytest.raises(ValueError, match="malo.svg"):
+        escena.resolver_dibujos(spec)
+
+
+# QA 04/10/2026 (B-1): estos vectores tienen fill heredado para que el rechazo venga del
+# chequeo que dicen probar y no del de "sin 'fill'" (N5), que corre antes.
+@pytest.mark.parametrize("nombre, motivo", [
+    ("on_atributo", "atributo de evento 'onclick'"),
+    ("style_con_url", "atributo 'style'"),
+])
+def test_vector_rechazado_por_su_propio_chequeo(tmp_path, nombre, motivo):
+    contenido = dict(VECTORES_RECHAZADOS)[nombre]
+    spec = _spec_con_svg(tmp_path, contenido)
+    with pytest.raises(ValueError, match=motivo):
         escena.resolver_dibujos(spec)
 
 
