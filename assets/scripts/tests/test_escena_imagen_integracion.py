@@ -297,9 +297,14 @@ def test_el_relleno_no_entra_hasta_que_el_trazo_esta_casi_completo(chrome):
     with escena.pagina_de_escena(chrome, escena.ruta_plantilla("imagen"), spec, brand) as (page, _):
         escena._cuadro(page, 1.0 + entrada * 0.3)
         temprano = page.evaluate(FILL_OPACITY)
+        # N10 (QA 04/10/2026, mutación "rellenomitad"): a 30% el umbral viejo (0.5) y el real
+        # (0.85) dan lo mismo (0); a 60% el umbral viejo YA dejaría ver relleno y el real no.
+        escena._cuadro(page, 1.0 + entrada * 0.6)
+        medio = page.evaluate(FILL_OPACITY)
         escena._cuadro(page, 1.0 + entrada)
         final = page.evaluate(FILL_OPACITY)
     assert temprano == 0, "a 30% del tiempo de entrada el relleno todavía no tiene que verse"
+    assert medio == 0, "a 60% del tiempo de entrada el relleno TODAVÍA no tiene que verse (arranca en 85%)"
     assert final == 1
 
 

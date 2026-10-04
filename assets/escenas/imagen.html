@@ -34,8 +34,11 @@ pantalla). Un rótulo va debajo del dibujo que nombra ("de").
   .dibujo { position: absolute; }
   .dibujo svg { width: 100%; height: 100%; display: block; overflow: visible; }
   .rotulo {
+    /* N10 (QA 04/10/2026, mutación "rotulo32"): el tamaño lo fija ROTULO_PX en JS (una sola
+       fuente de verdad, también usada para medir si el texto entra); sin font-size acá, dos
+       literales podían drifear sin que ningún test lo note. */
     position: absolute; transform: translateX(-50%); text-align: center; white-space: pre-line;
-    font-size: 36px; font-weight: 600; line-height: 1.15; color: var(--tenue);
+    font-weight: 600; line-height: 1.15; color: var(--tenue);
   }
 </style>
 <script src="base.js"></script>
@@ -171,6 +174,7 @@ pantalla). Un rótulo va debajo del dibujo que nombra ("de").
       const anchoCaja = d ? d.lado : LADO_MAX;
       r.lineas = partirRotulo(r.texto, ROTULO_PX, anchoCaja);
       r.el = crear('div', 'rotulo', document.body, r.lineas.join('\n'));
+      r.el.style.fontSize = ROTULO_PX + 'px';
       r.el.dataset.caja = 'rotulo ' + r.texto;
       r.el.style.left = (d ? d.cx : 960) + 'px';
       r.el.style.top = (d ? d.cy + d.lado / 2 + 16 : 1000) + 'px';
