@@ -446,3 +446,67 @@ def test_aplicar_ducking_al_salir_de_mute_la_rampa_de_subida_arranca_despues_del
 
     # 10ms ANTES del borde (1.5s): todavía tiene que estar callada.
     assert _dbfs_pico_en(out, 1.48, 1.50) < -60
+
+
+# --- J1 (QA 03/10/2026): ataque rápido, liberación lenta (sin bombeo) -------------------
+
+def _tiempo_y_db(puntos: list[tuple[float, float]], i: int) -> tuple[float, float]:
+    t, nivel = puntos[i]
+    import math
+
+    return t, 20 * math.log10(nivel) if nivel > 0 else float("-inf")
+
+
+def test_puntos_envolvente_la_liberacion_es_mas_lenta_que_el_ataque_y_no_pasa_20db_por_s():
+    # bajando (voz entra, "ataque"): rápido, como antes. vts = [voz, silencio]: el único
+    # cambio (índice 0) es una SUBIDA (silencio queda más arriba que voz), o sea que acá se
+    # ejercita la liberación.
+    vts = [(0.0, 2.0, "voz"), (2.0, 4.0, "silencio")]
+    ganancias_db = [-18.0, -10.0]  # 8dB, la misma distancia que el default real (18 vs 10 LU)
+
+    puntos = musica._puntos_envolvente(vts, ganancias_db, ramp=musica.ATTACK_S,
+                                        ramp_release=musica.RELEASE_S)
+
+    # puntos: [(0, voz), (lo, voz), (hi, silencio), (4, silencio)] -> la rampa es [1]->[2]
+    t_lo, db_lo = _tiempo_y_db(puntos, 1)
+    t_hi, db_hi = _tiempo_y_db(puntos, 2)
+    duracion_rampa = t_hi - t_lo
+    pendiente = (db_hi - db_lo) / duracion_rampa
+
+    assert duracion_rampa == pytest.approx(musica.RELEASE_S, abs=1e-6)
+    assert pendiente <= 20.0, pendiente
+
+
+def test_puntos_envolvente_el_ataque_sigue_siendo_rapido_entre_100_y_200ms():
+    # triangula con el caso contrario: BAJANDO (voz entra, silencio -> voz) tiene que
+    # seguir siendo rápido (ATTACK_S), no la liberación lenta.
+    vts = [(0.0, 2.0, "silencio"), (2.0, 4.0, "voz")]
+    ganancias_db = [-10.0, -18.0]  # bajando: silencio (más arriba) -> voz (más abajo)
+
+    puntos = musica._puntos_envolvente(vts, ganancias_db, ramp=musica.ATTACK_S,
+                                        ramp_release=musica.RELEASE_S)
+
+    t_lo, _ = _tiempo_y_db(puntos, 1)
+    t_hi, _ = _tiempo_y_db(puntos, 2)
+    assert 0.1 <= t_hi - t_lo <= 0.2
+
+
+def test_sin_huecos_cortos_un_hueco_de_0_4s_entre_frases_no_dispara_la_subida():
+    # un hueco de 0.4s (< UMBRAL_HUECO_S=0.8) entre dos tramos de voz no tiene que dejar
+    # que la música suba a nivel de silencio: se queda en el nivel más atenuado del vecino.
+    vts = [(0.0, 2.0, "voz"), (2.0, 2.4, "silencio"), (2.4, 4.0, "voz")]
+    ganancias_db = [-18.0, -10.0, -18.0]
+
+    sin_huecos = musica._sin_huecos_cortos(vts, ganancias_db, musica.UMBRAL_HUECO_S)
+
+    assert sin_huecos[1] == -18.0, sin_huecos
+
+
+def test_sin_huecos_cortos_un_hueco_largo_si_deja_subir():
+    # triangula: un hueco de 1.0s (>= UMBRAL_HUECO_S) es un silencio de verdad, sí sube.
+    vts = [(0.0, 2.0, "voz"), (2.0, 3.0, "silencio"), (3.0, 5.0, "voz")]
+    ganancias_db = [-18.0, -10.0, -18.0]
+
+    sin_huecos = musica._sin_huecos_cortos(vts, ganancias_db, musica.UMBRAL_HUECO_S)
+
+    assert sin_huecos[1] == -10.0, sin_huecos

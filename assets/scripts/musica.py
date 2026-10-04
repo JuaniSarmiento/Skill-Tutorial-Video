@@ -15,6 +15,15 @@ SILENCIO_LU = 10   # Q3: 10 LU bajo la voz en los silencios (fijo, no configurab
 MUTE_DB = -90      # "musica": false en un segmento: de sobra por debajo de -60 dBFS (R-2.5)
 SR_ENVOLVENTE = 1000  # Hz de la envolvente de ganancia (B1, QA): de sobra para rampas >= 50ms
 
+# J1 (QA 03/10/2026): un ducking profesional baja rápido y sube lento ("attack"/"release"
+# de un compresor): antes los dos lados usaban la misma rampa (150ms), y liberar tan rápido
+# como atacar se oye como un bombeo. ATTACK_S queda en el rango 100-200ms; RELEASE_S en
+# 400-800ms. Además, un hueco CORTO entre frases (silencio < UMBRAL_HUECO_S) no dispara la
+# subida a nivel de silencio: la música se queda atenuada hasta que el hueco es de verdad.
+ATTACK_S = 0.15
+RELEASE_S = 0.6
+UMBRAL_HUECO_S = 0.8
+
 _RE_INTEGRADA = re.compile(r"Integrated loudness:\s*\n\s*I:\s*(-?\d+\.?\d*) LUFS")
 
 
@@ -74,14 +83,20 @@ def ventanas(slots: list[float], voces: list[tuple[float, float] | None]) -> lis
 
 
 def _puntos_envolvente(vts: list[tuple[float, float, str]], ganancias_db: list[float],
-                        ramp: float) -> list[tuple[float, float]]:
+                        ramp: float, ramp_release: float | None = None) -> list[tuple[float, float]]:
     """[(t, nivel_lineal)] que describe la envolvente como curva lineal a tramos: constante en
     cada meseta, en rampa (no en escalón) entre niveles vecinos. `ramp` segundos centrados en
     cada cambio, recortados si alguna de las dos ventanas vecinas es más chica que eso.
 
     `ganancias_db` trae una ganancia POR VENTANA (no por nombre de nivel): dos ventanas
     "voz" pueden pedir ganancias distintas si la voz sonaba distinto en cada una (N1, QA).
+
+    J1 (QA 03/10/2026): `ramp` es el ataque (música bajando) y `ramp_release` la liberación
+    (música subiendo); si no se da `ramp_release`, se usa `ramp` para los dos lados (como
+    antes de J1, simétrico). Las transiciones hacia/desde "mute" siguen usando `ramp` nada
+    más (N5): son un corte deliberado, no la "respiración" voz/silencio que J1 ataca.
     """
+    ramp_release = ramp if ramp_release is None else ramp_release
     niveles = [10 ** (g / 20) for g in ganancias_db]
     puntos = [(vts[0][0], niveles[0])]
     for i in range(len(vts) - 1):
@@ -103,7 +118,10 @@ def _puntos_envolvente(vts: list[tuple[float, float, str]], ganancias_db: list[f
             r = max(min(ramp, ancho_der), 0.0)
             lo, hi = b, b + r
         else:
-            r = max(min(ramp, ancho_izq, ancho_der), 0.0)
+            # J1: subiendo (despues > antes) usa la liberación lenta; bajando, el ataque
+            # rápido. Igual que antes si ramp_release == ramp (simétrico).
+            r_dir = ramp_release if despues > antes else ramp
+            r = max(min(r_dir, ancho_izq, ancho_der), 0.0)
             lo, hi = b - r / 2, b + r / 2
         if r <= 0:
             puntos.append((b, antes))
@@ -150,8 +168,25 @@ def _formato(path: Path) -> tuple[int, int]:
     return int(sr), int(canales)
 
 
+def _sin_huecos_cortos(vts: list[tuple[float, float, str]], ganancias_db: list[float],
+                        umbral: float) -> list[float]:
+    """Una ventana "silencio" más corta que `umbral` no deja que la música suba: se queda
+    en la ganancia más atenuada de sus vecinas (J1, QA 03/10/2026: un hueco corto entre dos
+    frases no es un silencio "de verdad", y subir y volver a bajar ahí es bombeo).
+    """
+    out = list(ganancias_db)
+    for i, (ini, fin, nivel) in enumerate(vts):
+        if nivel != "silencio" or fin - ini >= umbral:
+            continue
+        vecinas = [out[j] for j in (i - 1, i + 1) if 0 <= j < len(vts)]
+        if vecinas:
+            out[i] = min(vecinas)
+    return out
+
+
 def aplicar_ducking(pista: Path, vts: list[tuple[float, float, str]],
-                     ganancia_db: "dict[str, float] | list[float]", out: Path, ramp: float = 0.15) -> None:
+                     ganancia_db: "dict[str, float] | list[float]", out: Path, ramp: float = 0.15,
+                     ramp_release: float | None = None) -> None:
     """Aplica la envolvente de ganancia (por ventana, en rampa) a `pista` y la deja en `out`.
 
     `ganancia_db` acepta un dict {nivel: dB} (la misma ganancia para todas las ventanas de
@@ -164,10 +199,15 @@ def aplicar_ducking(pista: Path, vts: list[tuple[float, float, str]],
     args" (con 32 andaba). Acá la envolvente se genera como SEÑAL -un wav de muestras
     calculadas en Python, sin ninguna expresión- y se aplica multiplicando sample a sample
     (`amultiply`): la profundidad del filtergraph no depende de la cantidad de segmentos.
+
+    J1 (QA 03/10/2026): un hueco "silencio" corto (< UMBRAL_HUECO_S) entre dos tramos de
+    voz no dispara la subida a nivel de silencio (bombeo); `ramp_release`, si se da, hace
+    la liberación (subir) más lenta que el ataque (bajar) `ramp`.
     """
     ganancias = ([ganancia_db[nivel] for _, _, nivel in vts] if isinstance(ganancia_db, dict)
                  else list(ganancia_db))
-    puntos = _puntos_envolvente(vts, ganancias, ramp)
+    ganancias = _sin_huecos_cortos(vts, ganancias, UMBRAL_HUECO_S)
+    puntos = _puntos_envolvente(vts, ganancias, ramp, ramp_release)
     muestras, escala = _muestras_envolvente(puntos, SR_ENVOLVENTE)
     envolvente = out.with_name(f"{out.stem}.envolvente.wav")
     with wave.open(str(envolvente), "wb") as w:
@@ -291,7 +331,8 @@ def construir_pista(voz_wav: Path, pista: Path, vts: list[tuple[float, float, st
             voz_lu = _voz_lu_mas_cercana(voz_lu_por_indice, i, voz_lu_global)
         objetivo = debajo_de_la_voz_lu if nivel == "voz" else SILENCIO_LU
         ganancias_db.append((voz_lu - objetivo) - musica_lu)
-    aplicar_ducking(pista, vts, ganancias_db, out)
+    # J1 (QA): acá, en el camino real, el ataque es rápido y la liberación lenta.
+    aplicar_ducking(pista, vts, ganancias_db, out, ramp=ATTACK_S, ramp_release=RELEASE_S)
 
 
 def _tiene_audio(path: Path) -> bool:
