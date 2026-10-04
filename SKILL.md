@@ -196,6 +196,51 @@ pueden mezclar con segmentos de pantalla en el mismo guion. Ejemplo completo, si
 - **`av<19`**: la faster-whisper actual rompe con `av` 19 (`metadata_errors`). Va pineado en
   los comandos de abajo.
 
+## Transiciones
+
+`"transicion"` en el guion (S6 del Hito 2, `docs/explicador/HITO2.md`): **arriba** del guion es
+el default para todos los cambios de tramo; **en un segmento** es la transición **de entrada**
+de ESE segmento (la que pasa entre él y el anterior). Un string es taquigrafía de su objeto
+(`"transicion": "barrido"` ≡ `{"tipo": "barrido"}`). Sin la clave en ningún lado: `corte` (seco,
+el comportamiento de siempre). Tipos: `corte` | `fundido` | `barrido`; cualquier otro valor
+aborta antes de generar nada, listando los tres válidos.
+
+- **Decisión de Juani (Q4)**: hay transición sólo si **al menos uno de los dos lados es una
+  escena** (`"escena"` en el segmento); pantalla→pantalla queda siempre en corte seco, sin
+  importar lo que diga el guion (un recorte de pantalla grabada no tiene "forma" que fundir o
+  barrer; una escena sí). El primer segmento no tiene tramo anterior: si declara su propia
+  `"transicion"` se avisa y se ignora.
+- **Pasa DENTRO del slot, nunca lo mueve** (hallazgo 2 de HITO2.md: una superposición tipo
+  `xfade` desincroniza la voz, porque el video se arma con `concat -c copy` y la voz suma
+  slots). La mitad de la duración se pinta en los ÚLTIMOS segundos del `seg/NN.mp4` saliente y
+  la otra mitad en los PRIMEROS del entrante, cada uno reencodeado en su propio archivo: G1
+  (cuadros = Σ round(slot×30)) y G2 (el `.srt` y el arranque de la voz) quedan intactos.
+- **Duración**: la que pida el guion (`"duracion"` en el objeto de transición, en segundos) o,
+  si no, `brand.json` → `movimiento.entrada` (la misma noción de "cuánto tarda en entrar algo"
+  que usan las escenas). Si el slot más corto de los dos lados no entra 3 veces en esa duración,
+  se acorta a slot/3 con un aviso (nunca en silencio).
+- **`barrido`**: una franja del color de **acento** del brand que, en la mitad saliente, crece
+  desde el borde izquierdo hasta cubrir toda la pantalla justo en el corte, y en la mitad
+  entrante arranca cubriendo del todo y se achica hasta desaparecer — comparten el mismo
+  instante de cobertura total en el corte, así que se ve como un solo barrido continuo, no dos
+  mitades independientes. Easing ease-out cúbico (`1-(1-p)^3`, la misma curva que `base.js` usa
+  para la entrada de los elementos de una escena): "comparte forma con las escenas".
+  - **Gotcha medido (ffmpeg 6.1.1)**: `drawbox` NO reevalúa `w`/`x` por cuadro aunque la
+    expresión use `t` (queda congelada en el primer valor, calculado con `t` indefinido); y
+    `w=0` significa "ancho completo" para `drawbox`, no "nada". Por eso el barrido se maneja
+    cuadro a cuadro con un script de `sendcmd` (un comando `w` por cuadro, calculado en Python)
+    en vez de una expresión continua, y "sin barrido" se representa como 1px (no 0).
+- **`fundido`**: fundido A UN COLOR del brand (el **fondo**, no el acento: una pantalla "en
+  blanco" entre dos tramos, no un flash de acento en cada corte), con el filtro nativo `fade` de
+  ffmpeg — no es un cross-dissolve: cada tramo vive en su propio `seg/NN.mp4` (`concat -c copy`)
+  y no tiene acceso a los píxeles del otro lado del corte.
+- **R-6.5**: si la primera cue de la escena ENTRANTE cae dentro de la ventana de la transición,
+  avisa (no aborta: la escena sigue siendo válida, nace con su primer elemento tapado un
+  instante).
+- **G4**: el reencode de la transición pasa por `encoder.vf()`/`encoder.cv_args()`, igual que
+  `build_segment`, así que respeta `TUT_ENCODER` y todos los tramos siguen compartiendo códec,
+  tamaño, pix_fmt y fps.
+
 ## Director
 
 Guía para escribir el guion como lo armaría quien edita videos de profesión, y los chequeos
@@ -217,6 +262,14 @@ necesita lo dice en vez de omitirlo en silencio.
 - **Cada elemento entra en la palabra que lo nombra** (`cue`), nunca "cerca". El texto del
   segmento tiene que nombrar lo que el elemento muestra en el momento en que entra (ver
   resolución de cues en Escenas, más arriba).
+- **Qué transición usar cuándo** (formato completo en Transiciones, más arriba; recordá Q4:
+  sólo entre pantalla y escena, nunca pantalla→pantalla): `corte` (el default, sin declarar
+  nada) para la mayoría de los cambios — una transición en cada corte cansa, no edita;
+  `barrido` para marcar un cambio de TEMA (de la pantalla grabada a la metáfora que lo explica,
+  o viceversa), porque el acento que atraviesa la pantalla dice "ahora cambiamos de plano de
+  verdad"; `fundido` para un respiro más calmo, por ejemplo entre el cierre de una idea
+  (`presentacion` con `rol: repaso`) y el inicio de la siguiente (`gancho`), donde un corte seco
+  o un barrido se sentirían apurados.
 
 **Reglas que mide `revisar`** (cada una es una clave de `editar.CHEQUEOS`, que `revisar()`
 recorre de verdad — R-5.8; no alcanza con nombrarla en un comentario):
