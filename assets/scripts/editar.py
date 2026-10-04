@@ -504,13 +504,24 @@ def imagen(vid: str, voz_name: str = "argentina") -> None:
     falta = crudo_faltante(g)
     if falta:
         sys.exit(f"  ABORTADO: el segmento {falta[0]:02d} apunta a un crudo que no existe: {falta[1]}")
+    import transiciones
+    try:
+        transiciones.validar(g)  # R-6.7: tipo de transición desconocido, antes de generar nada
+    except transiciones.TransicionError as e:
+        sys.exit(f"  ABORTADO: {e}")
     work = ROOT / "videos" / vid
     (work / "seg").mkdir(parents=True, exist_ok=True)
-    slots = []
-    for i, (seg, slot, pal) in enumerate(preparar(vid, voz_name)):
-        slots.append(slot)
+    tramos = list(preparar(vid, voz_name))
+    slots = [slot for _, slot, _ in tramos]
+    for i, (seg, slot, pal) in enumerate(tramos):
         build_segment(vid, raw, seg, slot, work / "seg" / f"{i:02d}.mp4", pal)
     (work / f"slots-{voz_name}.json").write_text(json.dumps(slots))
+    # G3: sin "transicion" en ningún lado del guion, ni se mira brand.json ni se toca
+    # un solo byte de los seg/NN.mp4 ya armados (sale igual que antes del Hito 2).
+    if len(tramos) > 1 and (g.get("transicion") or any(s.get("transicion") for s in g["segmentos"])):
+        import escena
+        brand = escena.cargar_brand(ROOT / "brand.json" if (ROOT / "brand.json").exists() else None)
+        transiciones.aplicar_todas(work / "seg", g, tramos, brand)
     lst = work / "seg" / "lista.txt"
     lst.write_text("".join(f"file '{i:02d}.mp4'\n" for i in range(len(slots))))
     run(["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", str(lst), "-c", "copy", str(work / f"video-{voz_name}.mp4")])
