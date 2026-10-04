@@ -25,6 +25,7 @@ se renderiza con el motor de escenas (escena.py) y dura su slot, igual que los d
 escenas, editar.py corre con: uv run --with playwright --with faster-whisper --with "av<19" python editar.py ...
 voces: argentina (PRINCIPAL: Fish, femenina argentina, speed 0.80, la mas expresiva medida) | joven (Fish, "Narrador Joven argentino") | profe (Fish, Profesora Argentina, la mas plana) | daniela (Piper local) | juani (wavs importados en videos/<vNN>/juani/NN.wav) | elevenlabs (API, key en ~/.config/elevenlabs/api_key) | fish (Fish Audio, Profesora Argentina, key en ~/.config/fish/api_key)
 """
+import hashlib
 import json
 import os
 import re
@@ -32,6 +33,7 @@ import subprocess
 import sys
 import threading
 import time
+import unicodedata
 import wave
 from pathlib import Path
 
@@ -428,6 +430,17 @@ def spec_de_escena(seg: dict, slot: float, voz_palabras: list[dict]) -> dict:
     return spec
 
 
+def _cola(voz_name: str) -> float:
+    """Margen después de la voz: TAIL (0.5s) para TODAS las voces (decisión de
+    Juani, 03/10/2026). Antes era 1.0s para las voces de FISH_LENTAS y 0.6s para
+    las rápidas; con TAIL el hueco entre segmentos (LEAD + cola = 0.3 + 0.5 =
+    0.8s) queda bajo el umbral de D3 (0.9s), así que D3 ya no confunde ese
+    silencio de diseño con uno real. Única fuente de esta cuenta: `preparar()` y
+    el test de la decisión 2 (D3/FISH_LENTAS) la usan a través de esta función,
+    no de un número copiado a mano."""
+    return TAIL
+
+
 def preparar(vid: str, voz_name: str) -> list[tuple[dict, float, list | None]]:
     """Genera (o reusa) la voz de cada segmento y mide su slot: [(seg, slot, palabras)].
 
@@ -438,8 +451,7 @@ def preparar(vid: str, voz_name: str) -> list[tuple[dict, float, list | None]]:
     for i, seg in enumerate(load(vid)["segmentos"]):
         wav = voice_wav(vid, voz_name, i, seg["texto"])
         voice = duration(wav)
-        cola = 0.6 if FISH_SPEED.get(voz_name, 0.8) >= 1.0 else (1.0 if voz_name in FISH_LENTAS else TAIL)
-        slot = round(max(seg.get("min", 0), voice + LEAD + cola), 2)
+        slot = round(max(seg.get("min", 0), voice + LEAD + _cola(voz_name)), 2)
         tramos.append((seg, slot, palabras_de_voz(wav) if es_escena(seg) else None))
         print(f"  seg {i:02d}: voz {voice:5.1f}s -> slot {slot:5.1f}s")
     return tramos
@@ -456,7 +468,10 @@ def escenas(vid: str, voz_name: str = "argentina") -> list[Path]:
     for i, (seg, slot, pal) in enumerate(preparar(vid, voz_name)):
         if es_escena(seg):
             r = out / f"{i:02d}.json"
-            r.write_text(json.dumps(spec_de_escena(seg, slot, pal), ensure_ascii=False, indent=1))
+            # _voz/_segmento_hash (NOTE 2/3a, revisar): atan el spec a esta voz y a
+            # este segmento del guion, para que `revisar` sepa si sigue valiendo.
+            spec = {**spec_de_escena(seg, slot, pal), "_voz": voz_name, "_segmento_hash": _hash_segmento(seg)}
+            r.write_text(json.dumps(spec, ensure_ascii=False, indent=1))
             rutas.append(r)
     return rutas
 
@@ -672,22 +687,90 @@ def exportar(vid: str) -> None:
 N_CAMBIO_VISUAL = 6.0
 
 
+class RevisarError(Exception):
+    """Error claro de `revisar` (B3a/B8): se informa sin traceback y sale != 0."""
+
+
+class ChequeoError(Exception):
+    """NOTE 1: un chequeo (D1/D3) no pudo correr sobre el artefacto que tenía
+    (ffmpeg devolvió un código de error, p.ej. video/wav vacío o corrupto). Nunca
+    se confunde con "corrió y no encontró nada": `revisar()` la convierte en un
+    'no corrió' con la causa."""
+
+
+FLAGS_REVISAR = ("--estricto",)
+USO_REVISAR = "uso: editar.py revisar <vNN> [voz] [--estricto]"
+
+
+def _estricto_falla(hallazgos: list[str], no_corrio: list[str]) -> bool:
+    """B3c (DECISIÓN de Juani, 03/10/2026): `--estricto` sale con 1 si hay algún
+    hallazgo real O si algún chequeo no corrió (`no_corrio` no vacío). Toda la
+    política vive acá: cambiarla es una línea.
+
+    NOTE 10: un aviso de normalización ("aviso: ...", D4) no es un hallazgo real
+    (el rol era válido, sólo venía con mayúsculas o tildes distintas) y no cuenta
+    acá, aunque `informe_revisar` lo siga mostrando bajo "hallazgos"."""
+    return any(not h.startswith("aviso: ") for h in hallazgos) or bool(no_corrio)
+
+
+# carpetas de trabajo que NO son el nombre de una voz (NOTE 3b)
+_DIRS_RESERVADOS = {"escenas", "seg"}
+
+
+def _voces_con_artefactos(work: Path) -> set[str]:
+    """Nombres de voz para los que existe al menos un artefacto en `work`
+    (video-<voz>.mp4, voz-<voz>.wav, slots-<voz>.json, o la carpeta <voz>/ de wavs
+    importados — NOTE 3b, p.ej. "juani"). B3a: sirve para avisar de un nombre de
+    voz tipeado mal cuando sí hay artefactos de otra voz."""
+    voces = set()
+    for ruta in work.glob("video-*.mp4"):
+        voces.add(ruta.stem.removeprefix("video-"))
+    for ruta in work.glob("voz-*.wav"):
+        voces.add(ruta.stem.removeprefix("voz-"))
+    for ruta in work.glob("slots-*.json"):
+        voces.add(ruta.stem.removeprefix("slots-"))
+    if work.is_dir():
+        for ruta in work.iterdir():
+            if ruta.is_dir() and ruta.name not in _DIRS_RESERVADOS:
+                voces.add(ruta.name)
+    return voces
+
+
 def _freezes(video: Path, n: float) -> list[tuple[float, float]]:
-    """D1: [(inicio, fin)] de los tramos de `video` sin cambio visual de >= n segundos."""
+    """D1: [(inicio, fin)] de los tramos de `video` sin cambio visual de MÁS de n
+    segundos (B9: criterio estricto, igual que D2).
+
+    B1: si el video queda congelado hasta el final, ffmpeg imprime `freeze_start`
+    sin su `freeze_end` (nunca "descongela"); ese tramo cierra en la duración del
+    video en vez de descartarse.
+    """
     res = subprocess.run(
         ["ffmpeg", "-nostats", "-i", str(video), "-vf", f"freezedetect=n=-60dB:d={n:.3f}", "-f", "null", "-"],
         capture_output=True, text=True)
+    if res.returncode != 0:  # NOTE 1: video vacío/corrupto, no "sin congelados"
+        causa = res.stderr.strip().splitlines()[-1] if res.stderr.strip() else f"código {res.returncode}"
+        raise ChequeoError(causa)
     inicios = [float(m) for m in re.findall(r"freeze_start:\s*([\d.]+)", res.stderr)]
     fines = [float(m) for m in re.findall(r"freeze_end:\s*([\d.]+)", res.stderr)]
-    return list(zip(inicios, fines))
+    if len(inicios) > len(fines):
+        fines = fines + [duration(video)] * (len(inicios) - len(fines))
+    return [(i, f) for i, f in zip(inicios, fines) if f - i > n]
 
 
 def _huecos_escena(spec: dict, n: float) -> list[tuple[float, float]]:
     """D2: [(desde, hasta)] entre dos entradas de elementos (o la última y el final)
-    con más de n segundos, calculado desde el spec YA RESUELTO (con "t"), sin render."""
+    con más de n segundos, calculado desde el spec YA RESUELTO (con "t"), sin render.
+
+    B6: el hueco también se mide desde 0 hasta la primera entrada, así que una
+    escena sin ninguna cue (sólo título) más larga que n es, entera, un hallazgo.
+    B9: mismo criterio de borde que D1 (estrictamente MÁS de n, no "n o más").
+    """
     import escena
+    duracion = spec["duracion"]
+    if not isinstance(duracion, (int, float)) or isinstance(duracion, bool):
+        raise ValueError(f"'duracion' no es un número (vino {duracion!r})")
     tiempos = sorted(e["t"] for e in escena._con_cue(spec, []))
-    puntos = [*tiempos, spec["duracion"]]
+    puntos = [0.0, *tiempos, duracion]
     return [(a, b) for a, b in zip(puntos, puntos[1:]) if b - a > n]
 
 
@@ -696,17 +779,102 @@ def _silencios(wav: Path, d: float = 0.9) -> list[tuple[float, float]]:
     res = subprocess.run(
         ["ffmpeg", "-nostats", "-i", str(wav), "-af", f"silencedetect=noise=-40dB:d={d:.3f}", "-f", "null", "-"],
         capture_output=True, text=True)
+    if res.returncode != 0:  # NOTE 1: wav vacío/corrupto, no "sin silencios"
+        causa = res.stderr.strip().splitlines()[-1] if res.stderr.strip() else f"código {res.returncode}"
+        raise ChequeoError(causa)
     inicios = [float(m) for m in re.findall(r"silence_start:\s*([\d.]+)", res.stderr)]
     fines = [float(m) for m in re.findall(r"silence_end:\s*([\d.]+)", res.stderr)]
     return list(zip(inicios, fines))
 
 
+def _hash_segmento(seg: dict) -> str:
+    """Identifica el CONTENIDO de un segmento de escena del guion (NOTE 2): si el
+    segmento cambia, el hash cambia, sin importar qué pasó con los slots. `escenas()`
+    lo guarda en el spec que escribe; `_specs_escena_vigentes` lo vuelve a calcular
+    sobre el guion de HOY para comparar."""
+    return hashlib.sha256(json.dumps(seg, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:16]
+
+
+def _specs_escena_vigentes(g: dict, voz_name: str, work: Path) -> tuple[list[Path], list[str]]:
+    """B5/B5-bis: de los índices de escena del guion de HOY, cuáles specs en
+    `escenas/` sirven para medir con la voz pedida.
+
+    Un spec sirve si: existe, es JSON válido, se generó para ESTA voz (`_voz`,
+    etiqueta que deja `escenas()`) y coincide con el segmento de HOY (`_segmento_hash`,
+    NOTE 2: ya no depende de `slots-<voz>.json`, que además lo escribe `imagen`, no
+    `escenas` — NOTE 4). Un índice de escena SIN spec en absoluto no se saltea en
+    silencio (B5-bis): se informa igual, con el nombre que le faltó.
+
+    Devuelve (vigentes, problemas): `problemas` son razones ya armadas con el
+    nombre del archivo (o el que debería existir), para cada índice de escena que
+    no se pudo usar.
+    """
+    escenas_dir = work / "escenas"
+    indices = [i for i, seg in enumerate(g["segmentos"]) if es_escena(seg)]
+    vigentes: list[Path] = []
+    problemas: list[str] = []
+    for i in indices:
+        seg = g["segmentos"][i]
+        nombre = f"{i:02d}.json"
+        ruta = escenas_dir / nombre
+        if not ruta.exists():
+            problemas.append(f"{nombre}: falta el spec")
+            continue
+        try:
+            spec = json.loads(ruta.read_text())
+        except json.JSONDecodeError:
+            problemas.append(f"{nombre}: JSON inválido")
+            continue
+        if spec.get("_voz") != voz_name:
+            problemas.append(f"{nombre}: no corresponde a la voz {voz_name!r} "
+                             f"(generado para {spec.get('_voz')!r})")
+            continue
+        if spec.get("_segmento_hash") != _hash_segmento(seg):
+            problemas.append(f"{nombre}: desactualizado (el guion cambió)")
+            continue
+        vigentes.append(ruta)
+    return vigentes, problemas
+
+
+ROLES_VALIDOS = ("gancho", "analogia", "ejemplo", "repaso")
+
+
+def _normalizar_rol(rol: str) -> str:
+    """B7: minúsculas y sin tildes, para que 'Analogía' valga como 'analogia'."""
+    sin_tildes = unicodedata.normalize("NFKD", rol.strip().lower())
+    return "".join(c for c in sin_tildes if not unicodedata.combining(c))
+
+
 def _hallazgos_roles(segmentos: list[dict]) -> list[str]:
-    """D4: estructura de clase de profe (gancho, analogía, ejemplo, repaso)."""
-    roles = [s.get("rol") for s in segmentos]
-    if not any(roles):
+    """D4: estructura de clase de profe (gancho, analogía, ejemplo, repaso).
+
+    B7: un rol que no es ninguno de los válidos avisa con su nombre y la lista de
+    válidos (y no cuenta como ninguno de ellos); uno que sólo difiere en mayúsculas
+    o tildes se normaliza con un aviso aparte.
+    """
+    crudos = [s.get("rol") for s in segmentos]
+    if not any(crudos):
         return ["el guion no declara roles"]
     hallazgos = []
+    roles = []
+    for crudo in crudos:
+        if crudo is None:
+            roles.append(None)
+            continue
+        if not isinstance(crudo, str):  # NOTE 5: p.ej. "rol": 1 en un guion mal armado
+            hallazgos.append(f"rol inválido (no es texto): {crudo!r}")
+            roles.append(None)
+            continue
+        normalizado = _normalizar_rol(crudo)
+        if normalizado != crudo:
+            # NOTE 10: esto es un AVISO, no un hallazgo real; el prefijo "aviso: "
+            # es lo que _estricto_falla usa para no contarlo.
+            hallazgos.append(f"aviso: rol {crudo!r} normalizado a {normalizado!r} (sin tildes/mayúsculas)")
+        if normalizado not in ROLES_VALIDOS:
+            hallazgos.append(f"rol desconocido {normalizado!r} (válidos: {', '.join(ROLES_VALIDOS)})")
+            roles.append(None)
+        else:
+            roles.append(normalizado)
     if roles[0] != "gancho":
         hallazgos.append(f"el primer segmento no es 'gancho' (rol={roles[0]!r})")
     if roles[-1] != "repaso":
@@ -718,43 +886,93 @@ def _hallazgos_roles(segmentos: list[dict]) -> list[str]:
     return hallazgos
 
 
+# R-5.8: cada regla Dn de la sección "Director" (SKILL.md) tiene acá su chequeo de
+# verdad. `revisar()` llama a cada uno A TRAVÉS de este registro (no por su nombre
+# de función directamente): test_docs_director.py lo comprueba reemplazando cada
+# entrada por un espía, así que no basta con que el ID aparezca en un comentario.
+CHEQUEOS = {
+    "D1": _freezes,
+    "D2": _huecos_escena,
+    "D3": _silencios,
+    "D4": _hallazgos_roles,
+}
+
+
 def revisar(vid: str, voz_name: str = "argentina", n: float = N_CAMBIO_VISUAL) -> tuple[list[str], list[str]]:
     """(hallazgos, no_corrio) de revisar el guion y lo ya renderizado de `vid`/`voz_name`.
 
     `hallazgos` son los problemas que encontró un chequeo que sí pudo correr;
     `no_corrio` dice, de los que no pudieron, cuál y por qué (R-5.6).
     """
-    g = load(vid)
+    # NOTE 5/6: el guion inexistente, con JSON roto, o sin "segmentos" es un error
+    # claro de revisar() mismo (no de quien hizo el subprocess de ffmpeg), así el
+    # CLI (NOTE 6) puede acotar su except a ESTE motivo y no a cualquier
+    # FileNotFoundError (p.ej. si falta el binario de ffmpeg).
+    try:
+        g = load(vid)
+    except FileNotFoundError:
+        raise RevisarError(f"no existe {vid} (falta guion/{vid}.json)") from None
+    except json.JSONDecodeError as e:
+        raise RevisarError(f"el guion de {vid} tiene JSON inválido: {e}") from None
+    if "segmentos" not in g:
+        raise RevisarError(f"el guion de {vid} no tiene 'segmentos'")
     work = ROOT / "videos" / vid
     hallazgos: list[str] = []
     no_corrio: list[str] = []
 
+    # B3a: si NINGÚN artefacto de `voz_name` existe pero sí hay de otra voz, es casi
+    # siempre un nombre tipeado mal: error claro en vez de "no corrió" en silencio
+    # para cada chequeo. Si no hay artefactos de NINGUNA voz (vNN recién creado),
+    # sigue de largo: ahí no hay con qué comparar.
+    voces = _voces_con_artefactos(work)
+    if voces and voz_name not in voces:
+        raise RevisarError(f"no hay ningún artefacto para la voz {voz_name!r} en {vid}; "
+                           f"voces con artefactos: {', '.join(sorted(voces))}")
+
     video = work / f"video-{voz_name}.mp4"
     if video.exists():
-        for inicio, fin in _freezes(video, n):
-            hallazgos.append(f"tiempo muerto: {inicio:.1f}s–{fin:.1f}s sin cambio visual (> {n:.0f}s) en {video.name}")
+        try:
+            for inicio, fin in CHEQUEOS["D1"](video, n):
+                hallazgos.append(f"tiempo muerto: {inicio:.1f}s–{fin:.1f}s sin cambio visual (> {n:.0f}s) en {video.name}")
+        except ChequeoError as e:
+            no_corrio.append(f"tiempo muerto: no corrió, {video.name} parece vacío o corrupto ({e})")
     else:
         no_corrio.append(f"tiempo muerto: no corrió, falta {video} (correr 'editar.py imagen {vid} {voz_name}')")
 
     escenas_dir = work / "escenas"
-    specs = sorted(escenas_dir.glob("*.json")) if escenas_dir.exists() else []
-    if specs:
-        for ruta in specs:
-            spec = json.loads(ruta.read_text())
-            for desde, hasta in _huecos_escena(spec, n):
-                hallazgos.append(f"{ruta.name}: {desde:.1f}s–{hasta:.1f}s sin elemento nuevo (> {n:.0f}s)")
-    elif any(es_escena(s) for s in g["segmentos"]):
-        no_corrio.append(f"cambio visual en escenas: no corrió, faltan los specs resueltos en {escenas_dir} "
-                         f"(correr 'editar.py escenas {vid} {voz_name}')")
+    if any(es_escena(s) for s in g["segmentos"]):
+        if not escenas_dir.exists():
+            no_corrio.append(f"cambio visual en escenas: no corrió, faltan los specs resueltos en {escenas_dir} "
+                             f"(correr 'editar.py escenas {vid} {voz_name}')")
+        else:
+            vigentes, problemas = _specs_escena_vigentes(g, voz_name, work)
+            for ruta in vigentes:
+                try:
+                    spec = json.loads(ruta.read_text())
+                    huecos = CHEQUEOS["D2"](spec, n)
+                except (KeyError, ValueError) as e:
+                    no_corrio.append(f"cambio visual en escenas: no corrió para {ruta.name}, "
+                                     f"{e} (correr 'editar.py escenas {vid} {voz_name}')")
+                    continue
+                for desde, hasta in huecos:
+                    hallazgos.append(f"{ruta.name}: {desde:.1f}s–{hasta:.1f}s sin elemento nuevo (> {n:.0f}s)")
+            # B5-bis: cada problema (spec faltante, JSON inválido, de otra voz,
+            # desactualizado) se informa, no se saltea en silencio.
+            for problema in problemas:
+                no_corrio.append(f"cambio visual en escenas: no corrió para {problema} "
+                                 f"(correr 'editar.py escenas {vid} {voz_name}')")
 
     voz_wav = work / f"voz-{voz_name}.wav"
     if voz_wav.exists():
-        for inicio, fin in _silencios(voz_wav, 0.9):
-            hallazgos.append(f"silencio: {inicio:.1f}s–{fin:.1f}s en la voz (> 0.9s) en {voz_wav.name}")
+        try:
+            for inicio, fin in CHEQUEOS["D3"](voz_wav, 0.9):
+                hallazgos.append(f"silencio: {inicio:.1f}s–{fin:.1f}s en la voz (> 0.9s) en {voz_wav.name}")
+        except ChequeoError as e:
+            no_corrio.append(f"silencios: no corrió, {voz_wav.name} parece vacío o corrupto ({e})")
     else:
         no_corrio.append(f"silencios: no corrió, falta {voz_wav} (correr 'editar.py voz {vid} {voz_name}')")
 
-    hallazgos.extend(_hallazgos_roles(g["segmentos"]))
+    hallazgos.extend(CHEQUEOS["D4"](g["segmentos"]))
 
     return hallazgos, no_corrio
 
@@ -768,8 +986,49 @@ def informe_revisar(vid: str, voz_name: str, hallazgos: list[str], no_corrio: li
     return "\n".join(lineas)
 
 
+def _dispatch_revisar(args: list[str]) -> int:
+    """CLI de 'revisar' (B8): separa flags de posicionales sin importar el orden
+    (B8: '--estricto' puede ir antes del vNN) y da mensajes claros con el uso en
+    vez de traceback ante vNN faltante, sin argumentos, o un flag desconocido
+    (B3b: no se ignora en silencio)."""
+    # NOTE 6: CUALQUIER token con "-" adelante es un flag (no sólo "--algo"), así
+    # "-e" no se cuela como si fuera el vNN o la voz.
+    flags = [a for a in args if a.startswith("-")]
+    desconocidos = [f for f in flags if f not in FLAGS_REVISAR]
+    if desconocidos:
+        print(f"editar.py revisar: flag desconocido {desconocidos[0]!r} (válidos: {', '.join(FLAGS_REVISAR)})",
+              file=sys.stderr)
+        print(USO_REVISAR, file=sys.stderr)
+        return 2
+    posicionales = [a for a in args if not a.startswith("-")]
+    if not posicionales:
+        print("editar.py revisar: falta <vNN>", file=sys.stderr)
+        print(USO_REVISAR, file=sys.stderr)
+        return 2
+    if len(posicionales) > 2:  # NOTE 6: "revisar v09 argentina extra" no se ignora
+        print(f"editar.py revisar: demasiados argumentos ({', '.join(posicionales[2:])!r})",
+              file=sys.stderr)
+        print(USO_REVISAR, file=sys.stderr)
+        return 2
+    vid = posicionales[0]
+    voz_name = posicionales[1] if len(posicionales) > 1 else "argentina"
+    estricto = "--estricto" in flags
+    try:
+        hallazgos, no_corrio = revisar(vid, voz_name)
+    except RevisarError as e:
+        print(f"editar.py revisar: {e}", file=sys.stderr)
+        return 2
+    print(informe_revisar(vid, voz_name, hallazgos, no_corrio))
+    return 1 if estricto and _estricto_falla(hallazgos, no_corrio) else 0
+
+
 if __name__ == "__main__":
-    accion, vid = sys.argv[1], sys.argv[2]
+    if len(sys.argv) < 2:
+        sys.exit(__doc__)
+    accion = sys.argv[1]
+    if accion == "revisar":
+        sys.exit(_dispatch_revisar(sys.argv[2:]))
+    vid = sys.argv[2]
     if accion == "imagen":
         imagen(vid, sys.argv[3] if len(sys.argv) > 3 else "argentina")
     elif accion == "voz":
@@ -789,13 +1048,5 @@ if __name__ == "__main__":
             print(f"{vid}: no hay segmentos de pantalla para analizar")
         else:
             print(f"{vid}: {len(rutas)} segmento(s) de pantalla analizados -> " + ", ".join(str(r) for r in rutas))
-    elif accion == "revisar":
-        estricto = "--estricto" in sys.argv
-        posicionales = [a for a in sys.argv[3:] if not a.startswith("--")]
-        voz_name = posicionales[0] if posicionales else "argentina"
-        hallazgos, no_corrio = revisar(vid, voz_name)
-        print(informe_revisar(vid, voz_name, hallazgos, no_corrio))
-        if estricto and hallazgos:
-            sys.exit(1)
     else:
         sys.exit(__doc__)

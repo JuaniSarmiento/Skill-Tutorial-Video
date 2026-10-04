@@ -211,21 +211,54 @@ necesita lo dice en vez de omitirlo en silencio.
   segmento tiene que nombrar lo que el elemento muestra en el momento en que entra (ver
   resolución de cues en Escenas, más arriba).
 
-**Reglas que mide `revisar`** (cada una con su chequeo en `editar.py`, R-5.8):
+**Reglas que mide `revisar`** (cada una es una clave de `editar.CHEQUEOS`, que `revisar()`
+recorre de verdad — R-5.8; no alcanza con nombrarla en un comentario):
 
-- **D1**: ningún tramo de `video-<voz>.mp4` queda más de N = 6 s sin cambio visual
-  (`freezedetect`).
-- **D2**: en una escena, ninguna entrada de elemento (ni la última y el final) queda a más de
-  N = 6 s de la anterior, calculado desde el spec ya resuelto
-  (`videos/<vNN>/escenas/*.json`), sin renderizar.
+- **D1**: ningún tramo de `video-<voz>.mp4` queda MÁS de N = 6 s sin cambio visual
+  (`freezedetect`, con su umbral de sensibilidad estricto en -60dB: un cambio sutil pero real
+  no es "congelado"). Un video que queda congelado hasta el final (`freeze_start` sin
+  `freeze_end`) cierra en la duración del video, no se descarta.
+- **D2**: en una escena, ninguna entrada de elemento queda a MÁS de N = 6 s de la anterior,
+  contando también desde el segundo 0 hasta la primera entrada (una escena sin ninguna cue,
+  sólo el título, es tiempo muerto entero) y desde la última entrada hasta el final; calculado
+  desde el spec ya resuelto (`videos/<vNN>/escenas/*.json`), sin renderizar. Mismo criterio de
+  borde que D1 (estrictamente MÁS de N, nunca "N o más"). Sólo mide los specs que corresponden
+  a una escena del guion de HOY y cuya duración coincide con `slots-<voz>.json` de la voz
+  pedida: un spec viejo o de otra voz se ignora (se avisa, no se mide), y un spec con una cue
+  sin `t` o sin `duracion` es "no corrió" nombrando el archivo, nunca un traceback.
 - **D3**: ningún silencio de la voz (`voz-<voz>.wav`, no el final, que con música no tiene
-  silencio) dura más de 0.9 s.
+  silencio) dura más de 0.9 s, con un umbral de sensibilidad estricto en -40dB (una voz floja
+  pero real no es silencio) y sin mirar el returncode de ffmpeg para confundir "corrió y no
+  encontró nada" con "no pudo correr" (un wav vacío o corrupto es "no corrió", con la causa).
+  El pipeline deja LEAD (0.3s) + cola (`TAIL`, 0.5s, igual para TODAS las voces desde la
+  decisión de Juani del 03/10/2026 — antes 1.0s para `FISH_LENTAS` y 0.6s para las rápidas) =
+  0.8s de silencio de diseño en cada borde entre segmentos; como 0.8s < 0.9s, D3 no lo confunde
+  con un silencio real.
 - **D4**: si el guion declara `rol` en algún segmento, el primero es `gancho`, el último
   `repaso`, y hay al menos una `analogia` y un `ejemplo`; sin ningún `rol`, una sola línea
-  avisa que el guion no los declara.
+  avisa que el guion no los declara. Un rol que no es ninguno de los cuatro válidos
+  (`gancho`, `analogia`, `ejemplo`, `repaso`) avisa "rol desconocido" con la lista de válidos
+  y no cuenta como ninguno de ellos; uno que sólo difiere en mayúsculas o tildes (`Analogía`)
+  se normaliza con un aviso aparte (ese aviso no cuenta como hallazgo para `--estricto`); uno
+  que no es texto (p.ej. `1`, guion mal armado) se informa como "rol inválido", nunca un
+  traceback.
 
 `revisar` informa los hallazgos pero sale con 0 igual; sólo con `--estricto` sale con 1 si
-encontró alguno (Q10, docs/explicador/HITO2.md).
+encontró algún hallazgo real, O SI ALGÚN CHEQUEO NO CORRIÓ (decisión de Juani, 03/10/2026).
+Esa política vive en una sola función, `_estricto_falla`.
+
+Un nombre de voz sin NINGÚN artefacto (ni `video-<voz>.mp4`, ni `voz-<voz>.wav`, ni
+`slots-<voz>.json`, ni la carpeta `<voz>/` de wavs importados) habiendo artefactos de OTRA voz
+es casi siempre un nombre tipeado mal: `revisar` sale con error, listando las voces que sí
+tienen artefactos. Si no hay artefactos de ninguna voz (un `vNN` recién creado), sigue de largo
+como siempre. Un `vNN` inexistente, un guion con JSON inválido o sin `"segmentos"`, sin
+argumentos, demasiados argumentos, o un flag que no es `--estricto` (incluido uno corto como
+`-e`) dan un mensaje claro con el uso, nunca traceback.
+
+Un spec de escena (`videos/<vNN>/escenas/NN.json`) queda atado, al escribirlo `escenas()`, a la
+voz y al CONTENIDO del segmento del guion (un hash). Si el guion cambió, si el spec es de otra
+voz, si el archivo no existe, o si es JSON inválido, D2 no lo mide y lo dice (nombrando el
+archivo), para cada índice de escena de hoy — nunca se saltea una escena sin spec en silencio.
 
 ## Critical Patterns
 
