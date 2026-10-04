@@ -1,0 +1,8 @@
+<!-- Bola de nieve enorme al pie de la ladera (el resultado). Escrito a mano para esta skill,
+     sin licencia de terceros (Q8). Misma convención de recoloreado que lampara.svg. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <path d="M10 184 L190 184" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round"/>
+  <circle cx="100" cy="102" r="76" fill="none" stroke="currentColor" stroke-width="10"/>
+  <path d="M22 184 Q30 168 44 172 M156 172 Q170 168 178 184" fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round"/>
+  <path class="lleno" fill="currentColor" d="M50 98 Q52 58 92 44 Q66 66 64 100 Z"/>
+</svg>

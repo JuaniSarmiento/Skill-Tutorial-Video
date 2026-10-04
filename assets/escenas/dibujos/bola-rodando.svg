@@ -1,0 +1,8 @@
+<!-- Bola de nieve rodando cuesta abajo (el tiempo trabajando). Escrito a mano para esta
+     skill, sin licencia de terceros (Q8). Misma convención de recoloreado que lampara.svg. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <path d="M14 96 L186 176" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round"/>
+  <circle cx="120" cy="104" r="38" fill="none" stroke="currentColor" stroke-width="10"/>
+  <path d="M30 56 L64 70 M22 80 L56 92 M44 34 L72 48" fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round"/>
+  <path class="lleno" fill="currentColor" d="M98 98 Q100 80 120 76 Q106 86 106 100 Z"/>
+</svg>
