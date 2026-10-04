@@ -591,23 +591,54 @@ def zonas(vid: str) -> list[Path]:
     cada segmento de pantalla (S7a del Hito 2, docs/explicador/HITO2.md, decisión Q5):
     sirven de fuente para el zoom automático de S7b. Sólo lee el crudo: no genera voces
     ni toca ningún video. Los títulos y las escenas no usan crudo, así que no se analizan.
+
+    N2 (QA): aborta con un mensaje claro (sin traceback) si el guion no existe, si falta
+    el crudo de un segmento de pantalla (`crudo_faltante`), o si a un segmento le falta
+    `inicio`/`fin` o tiene `inicio >= fin` -nombrando siempre el segmento-. Si `fin` cae
+    más allá de la duración real del crudo, es un aviso (se analiza hasta donde haya
+    crudo), no un abort. Los `NN.json` de índices que ya no son de pantalla (guion
+    editado) se borran al regenerar.
     """
     import zonas as zonas_mod
+    ruta_guion = ROOT / "guion" / f"{vid}.json"
+    if not ruta_guion.exists():
+        sys.exit(f"ABORTADO: no existe el guion de {vid} ({ruta_guion})")
     g = load(vid)
+    falta = crudo_faltante(g)
+    if falta:
+        sys.exit(f"ABORTADO: el segmento {falta[0]:02d} apunta a un crudo que no existe: {falta[1]}")
     raw_g = ROOT / g["raw"] if g.get("raw") else None
     out = ROOT / "videos" / vid / "zonas"
     out.mkdir(parents=True, exist_ok=True)
+    indices_pantalla = set()
     rutas = []
     for i, seg in enumerate(g["segmentos"]):
         if seg.get("tipo") == "titulo" or es_escena(seg):
             continue
+        indices_pantalla.add(i)
         raw = ROOT / seg["raw"] if seg.get("raw") else raw_g
         if raw is None or not raw.exists():
-            continue
-        momentos = zonas_mod.detectar_momentos(raw, seg["inicio"], seg["fin"])
+            continue  # ya lo hubiera abortado crudo_faltante; por las dudas, no se cae
+        if "inicio" not in seg or "fin" not in seg:
+            sys.exit(f"ABORTADO: el segmento {i:02d} no tiene 'inicio' y/o 'fin'")
+        inicio, fin = seg["inicio"], seg["fin"]
+        if inicio >= fin:
+            sys.exit(f"ABORTADO: el segmento {i:02d} tiene inicio ({inicio}) >= fin ({fin})")
+        dur = duration(raw)
+        if fin > dur:
+            print(f"  AVISO segmento {i:02d}: fin ({fin}) va más allá de la duración del "
+                  f"crudo ({dur:.1f}s); se analiza hasta ahí")
+        momentos = zonas_mod.detectar_momentos(raw, inicio, fin)
         r = out / f"{i:02d}.json"
         r.write_text(json.dumps(momentos, ensure_ascii=False, indent=1))
         rutas.append(r)
+    for viejo in out.glob("*.json"):
+        try:
+            idx = int(viejo.stem)
+        except ValueError:
+            continue
+        if idx not in indices_pantalla:
+            viejo.unlink()
     return rutas
 
 
