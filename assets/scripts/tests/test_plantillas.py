@@ -472,6 +472,26 @@ def test_imagen_con_dos_posiciones_separadas_no_falla(chrome):
     assert _choques(cajas) == []
 
 
+# Mejora de diseño (QA 03/10/2026): el rótulo era lo más chico de las cuatro plantillas
+# (32 px, diagrama/datos 36 px) y siempre tenue, incluso el del dibujo en foco.
+
+def test_imagen_el_rotulo_mide_al_menos_36px(chrome):
+    spec = _imagen(["lampara", "semilla"], [("Idea", "lampara"), ("Crece", "semilla")])
+    cajas = _al_final(chrome, "imagen", spec, CAJAS)
+    rotulos = [c for c in cajas if c["n"].startswith("rotulo")]
+    assert len(rotulos) == 2
+    assert min(c["px"] for c in rotulos) >= 36
+
+
+def test_imagen_el_rotulo_del_dibujo_en_foco_usa_el_color_principal(chrome):
+    spec = _imagen(["lampara", "semilla"], [("Idea", "lampara"), ("Crece", "semilla")])
+    # "semilla" entra después (cue mayor): es el foco al final.
+    colores = _al_final(chrome, "imagen", spec,
+                        "() => [...document.querySelectorAll('.rotulo')].map(e => getComputedStyle(e).color)")
+    assert len(colores) == 2
+    assert colores[0] != colores[1], "el rótulo del foco tiene que distinguirse del resto"
+
+
 def test_imagen_con_id_de_dibujo_duplicado_falla_claro(chrome):
     # B7 (QA 03/10/2026): dos dibujos con el mismo id se pisaban en silencio en porId.
     spec = _imagen(["lampara", "semilla"])
