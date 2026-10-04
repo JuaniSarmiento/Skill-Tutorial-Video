@@ -110,12 +110,17 @@ pueden mezclar con segmentos de pantalla en el mismo guion. Ejemplo completo, si
     los píxeles del dibujo en foco.
   - **Que se dibuje, no que aparezca**: el trazo avanza con `stroke-dasharray`/`stroke-dashoffset`
     en función de `t` (ease-out, sin overshoot: los píxeles no-fondo del recuadro nunca bajan de
-    un cuadro al siguiente) y el relleno `.lleno` entra después, en el último 15 % de
+    un cuadro al siguiente, R-4.2) y el relleno `.lleno` entra después, en el último 15 % de
     `movimiento.entrada` del brand (cuando el trazo ya está prácticamente completo, no a mitad
-    de camino). Un SVG externo fuera de esta convención (forma sólo con relleno, `<text>`) se
-    revela con fundido + escala con resorte en vez de aparecer de golpe; sin `viewBox` se calcula
-    desde el bbox del contenido, o falla claro si no hay nada medible; un color fijo (`#fff`,
-    `rgb()`, nombres) en `fill`/`stroke` falla claro en vez de quedar pegado para siempre.
+    de camino). Si tiene o hereda `stroke` (el caso de los sets tipo Lucide/Tabler/Font Awesome,
+    que lo ponen en el `<svg>` raíz, no en cada `<path>`) se dibuja por trazo igual: la detección
+    mira el estilo COMPUTADO, no el atributo propio del elemento. Un SVG externo fuera de esta
+    convención (forma sólo con relleno, `<text>`) se revela con la MISMA curva ease-out (escala
+    0→1, sin overshoot) en vez de aparecer de golpe — no con resorte: el resorte tiene un ~4 % de
+    overshoot que hace bajar los píxeles al asentarse, y R-4.2 exige que nunca bajen. Sin
+    `viewBox` se calcula desde el bbox del contenido, o falla claro si no hay nada medible; un
+    color fijo (`#fff`, `rgb()`, nombres) en `fill`/`stroke` falla claro en vez de quedar pegado
+    para siempre.
   - Sin posición (`x`/`y`) van en una sola fila, cuadrados, espaciados (como máximo 8 a 160 px de
     lado); con muchos dibujos, textos de rótulo largos, `x`/`y` puesto en sólo algunos dibujos, o
     dos posiciones que se pisan, igual que las otras plantillas, falla claro en vez de pisar.

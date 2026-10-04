@@ -213,6 +213,61 @@ def test_una_forma_solo_con_relleno_se_revela_progresivo_no_de_golpe(chrome, tmp
     assert 0 < temprano < maximo * 0.7, (temprano, maximo)
 
 
+# N2 (QA 04/10/2026, repro circulo.svg): el revelado con resorte (overshoot ~4%) de las
+# formas "otros" viola R-4.2: los píxeles no-fondo bajan varios cuadros, con el máximo bien
+# antes de t0+entrada. El revelado tiene que ser monótono (nunca bajar), con el máximo
+# recién en t0+entrada, igual que el trazo.
+
+def test_una_forma_solo_con_relleno_nunca_baja_de_un_cuadro_al_siguiente(chrome, tmp_path):
+    brand, spec = _dibujo_con_cue(
+        tmp_path, '<svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="80" fill="currentColor"/></svg>')
+    entrada = brand["movimiento"]["entrada"]
+    tiempos = [1.0 + f * entrada for f in (0.0, 0.15, 0.35, 0.55, 0.75, 1.0, 1.3)]
+    conteos = []
+    with escena.pagina_de_escena(chrome, escena.ruta_plantilla("imagen"), spec, brand) as (page, _):
+        for t in tiempos:
+            escena._cuadro(page, t)
+            conteos.append(_pixeles(page, "dibujo a", _fondo_rgb(brand)))
+    for antes, despues in zip(conteos, conteos[1:]):
+        assert despues >= antes, conteos
+    assert conteos[-2] == conteos[-1], "el máximo tiene que caer en t0+entrada y mantenerse, no antes"
+
+
+def test_un_text_nunca_baja_de_un_cuadro_al_siguiente(chrome, tmp_path):
+    brand, spec = _dibujo_con_cue(
+        tmp_path, '<svg viewBox="0 0 200 200"><text x="10" y="150" font-size="140" '
+                  'fill="currentColor">OK</text></svg>')
+    entrada = brand["movimiento"]["entrada"]
+    tiempos = [1.0 + f * entrada for f in (0.0, 0.15, 0.35, 0.55, 0.75, 1.0, 1.3)]
+    conteos = []
+    with escena.pagina_de_escena(chrome, escena.ruta_plantilla("imagen"), spec, brand) as (page, _):
+        for t in tiempos:
+            escena._cuadro(page, t)
+            conteos.append(_pixeles(page, "dibujo a", _fondo_rgb(brand)))
+    for antes, despues in zip(conteos, conteos[1:]):
+        assert despues >= antes, conteos
+
+
+# N2 (QA 04/10/2026): sets típicos (Lucide/Tabler/Font Awesome) ponen stroke/fill en el
+# <svg> raíz, heredado por el <path>; getAttribute('stroke') del <path> da null y el
+# ícono caía en "otros" (revelado por escala) en vez de dibujarse por trazo.
+
+LUCIDE_ICONO = ('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
+                'stroke-linecap="round" stroke-linejoin="round">'
+                '<path d="M4 4 L20 4 L20 20 L4 20 Z"/></svg>')
+
+
+def test_un_icono_tipo_lucide_se_dibuja_por_trazo_heredado_no_por_escala(chrome, tmp_path):
+    brand, spec = _dibujo_con_cue(tmp_path, LUCIDE_ICONO)
+    entrada = brand["movimiento"]["entrada"]
+    with escena.pagina_de_escena(chrome, escena.ruta_plantilla("imagen"), spec, brand) as (page, _):
+        escena._cuadro(page, 1.0 + entrada * 0.5)
+        tiene_dasharray = page.evaluate(
+            "() => !!document.querySelector('[data-caja=\"dibujo a\"] path').getAttribute('stroke-dasharray')")
+    assert tiene_dasharray, ("un <path> dentro de <svg stroke=\"currentColor\" fill=\"none\"> se tiene que "
+                             "dibujar por trazo (heredado por CSS), no caer en \"otros\"")
+
+
 def test_el_relleno_no_entra_hasta_que_el_trazo_esta_casi_completo(chrome):
     # J2 (QA 03/10/2026): ningún test anterior distinguía "el relleno entra después del
     # trazo" de "el relleno entra entero apenas arranca el trazo" (esa mutación sobrevivía).
