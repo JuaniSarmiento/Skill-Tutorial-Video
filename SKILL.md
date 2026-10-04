@@ -219,17 +219,20 @@ aborta antes de generar nada, listando los tres válidos.
   si no, `brand.json` → `movimiento.entrada` (la misma noción de "cuánto tarda en entrar algo"
   que usan las escenas). Si el slot más corto de los dos lados no entra 3 veces en esa duración,
   se acorta a slot/3 con un aviso (nunca en silencio).
-- **`barrido`**: una franja del color de **acento** del brand que, en la mitad saliente, crece
-  desde el borde izquierdo hasta cubrir toda la pantalla justo en el corte, y en la mitad
-  entrante arranca cubriendo del todo y se achica hasta desaparecer — comparten el mismo
-  instante de cobertura total en el corte, así que se ve como un solo barrido continuo, no dos
-  mitades independientes. Easing ease-out cúbico (`1-(1-p)^3`, la misma curva que `base.js` usa
-  para la entrada de los elementos de una escena): "comparte forma con las escenas".
+- **`barrido`**: una franja del color de **acento** del brand que CRUZA la pantalla en una sola
+  pasada: en la mitad saliente el borde de ataque entra por la izquierda y cubre, hasta llegar
+  al 100 % justo en el corte; en la mitad entrante el borde de SALIDA sigue de largo hacia la
+  derecha y descubre (la franja sale por la derecha), en vez de retraerse hacia la izquierda
+  como una cortina que entra y vuelve. Una sola curva ease-in-out continua
+  (`ancho × (1 - cos(π·p))`, p de 0 a 1 en toda la transición, no dos mitades independientes)
+  para que no haya salto de velocidad en el corte.
   - **Gotcha medido (ffmpeg 6.1.1)**: `drawbox` NO reevalúa `w`/`x` por cuadro aunque la
     expresión use `t` (queda congelada en el primer valor, calculado con `t` indefinido); y
     `w=0` significa "ancho completo" para `drawbox`, no "nada". Por eso el barrido se maneja
-    cuadro a cuadro con un script de `sendcmd` (un comando `w` por cuadro, calculado en Python)
-    en vez de una expresión continua, y "sin barrido" se representa como 1px (no 0).
+    cuadro a cuadro con un script de `sendcmd` (un comando `x` y un `w` por cuadro, calculados
+    en Python) en vez de una expresión continua, y "sin barrido" se representa como 1px (no 0);
+    y la caja lleva `enable='between(t,a,b)'` acotado a la ventana de la transición, para que
+    fuera de ella no quede ni un píxel del acento montado en el resto del archivo.
 - **`fundido`**: fundido A UN COLOR del brand (el **fondo**, no el acento: una pantalla "en
   blanco" entre dos tramos, no un flash de acento en cada corte), con el filtro nativo `fade` de
   ffmpeg — no es un cross-dissolve: cada tramo vive en su propio `seg/NN.mp4` (`concat -c copy`)
@@ -263,8 +266,9 @@ necesita lo dice en vez de omitirlo en silencio.
   segmento tiene que nombrar lo que el elemento muestra en el momento en que entra (ver
   resolución de cues en Escenas, más arriba).
 - **Qué transición usar cuándo** (formato completo en Transiciones, más arriba; recordá Q4:
-  sólo entre pantalla y escena, nunca pantalla→pantalla): `corte` (el default, sin declarar
-  nada) para la mayoría de los cambios — una transición en cada corte cansa, no edita;
+  sólo si al menos uno de los dos lados es una escena — pantalla→escena, escena→pantalla o
+  escena→escena, nunca pantalla→pantalla): `corte` (el default, sin declarar nada) para la
+  mayoría de los cambios — una transición en cada corte cansa, no edita;
   `barrido` para marcar un cambio de TEMA (de la pantalla grabada a la metáfora que lo explica,
   o viceversa), porque el acento que atraviesa la pantalla dice "ahora cambiamos de plano de
   verdad"; `fundido` para un respiro más calmo, por ejemplo entre el cierre de una idea

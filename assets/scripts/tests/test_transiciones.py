@@ -116,21 +116,32 @@ def test_color_de_cambiar_el_acento_del_brand_cambia_el_color_de_barrido():
 # `drawbox` no reevalúa `w`/`x` por cuadro con `t` en ffmpeg 6.1.1 (medido: una
 # expresión con `t` queda congelada en el valor que dio al armar el filtro, NaN
 # en ese momento), así que el barrido se maneja cuadro a cuadro con `sendcmd`.
+#
+# Mejora de calidad (QA): un solo barrido CRUZADO, no una cortina que entra y se
+# repliega. `anchos_barrido` devuelve (t, x, w): en la mitad SALIENTE el borde de
+# ataque crece con x=0 fijo (como antes); en la ENTRANTE el borde de SALIDA sigue
+# hacia la derecha (x crece, w se achica) en vez de retraerse hacia la izquierda.
+# Las dos mitades comparten una única curva ease-in-out (sin salto de velocidad
+# en el corte) en vez de dos ease-out independientes.
 
 def test_anchos_barrido_saliente_arranca_casi_en_0_y_termina_en_el_ancho_completo():
     anchos = transiciones.anchos_barrido("saliente", t0=1.0, mitad=0.2, ancho=320, fps=30)
 
-    assert anchos[0] == (1.0, 1)          # nunca 0 exacto: drawbox trata w=0 como "completo"
-    assert anchos[-1][1] == 320
-    assert all(a[1] <= b[1] for a, b in zip(anchos, anchos[1:]))  # monótono creciente
+    assert anchos[0][0] == 1.0
+    assert anchos[0][1:] == (0, 1)           # x=0, w≈0: nunca 0 exacto (drawbox w=0 = "completo")
+    assert anchos[-1][1:] == (0, 320)        # x=0, w=ancho: 100% de cobertura en el corte
+    assert all(x == 0 for _, x, _ in anchos)  # saliente: el borde de ataque, x siempre fijo en 0
+    assert all(a[2] <= b[2] for a, b in zip(anchos, anchos[1:]))  # w monótono creciente
 
 
 def test_anchos_barrido_entrante_arranca_completo_y_termina_casi_en_0():
     anchos = transiciones.anchos_barrido("entrante", t0=0.0, mitad=0.2, ancho=320, fps=30)
 
-    assert anchos[0] == (0.0, 320)
-    assert anchos[-1][1] == 1
-    assert all(a[1] >= b[1] for a, b in zip(anchos, anchos[1:]))  # monótono decreciente
+    assert anchos[0][1:] == (0, 320)         # x=0, w=ancho: arranca cubriendo del todo
+    assert anchos[-1][1] == 319               # x≈ancho: el borde de salida llegó al final
+    assert anchos[-1][2] == 1
+    assert all(a[1] <= b[1] for a, b in zip(anchos, anchos[1:]))  # entrante: x (borde de salida) monótono CRECIENTE...
+    assert all(a[2] >= b[2] for a, b in zip(anchos, anchos[1:]))  # ...y w monótono decreciente (nunca se repliega)
 
 
 def test_anchos_barrido_tiene_un_punto_por_cuadro_de_la_ventana():
@@ -139,13 +150,49 @@ def test_anchos_barrido_tiene_un_punto_por_cuadro_de_la_ventana():
     assert len(anchos) == 7
 
 
-def test_comandos_barrido_un_comando_w_por_cuadro():
-    anchos = [(0.0, 1), (0.033333, 10), (0.066667, 320)]
+def test_anchos_barrido_redondea_hacia_arriba_desde_0_5_para_no_acortar_r64():
+    # mitad=0.35s a 30fps = 10.5 cuadros exactos: round() banker's da 10 (se acorta),
+    # el redondeo correcto para R-6.4 (±1 cuadro) es 11.
+    anchos = transiciones.anchos_barrido("saliente", t0=0.0, mitad=0.35, ancho=320, fps=30)
+    assert len(anchos) == 12  # n=11 -> 12 puntos
+
+
+def test_comandos_barrido_un_comando_x_y_un_comando_w_por_cuadro():
+    anchos = [(0.0, 0, 1), (0.033333, 0, 10), (0.066667, 0, 320)]
     texto = transiciones.comandos_barrido(anchos, filtro="t6")
 
     assert texto.count("drawbox@t6 w") == 3
+    assert texto.count("drawbox@t6 x") == 3
+    assert "0.000000 drawbox@t6 x '0';" in texto
     assert "0.000000 drawbox@t6 w '1';" in texto
     assert "0.066667 drawbox@t6 w '320';" in texto
+
+
+def test_barrido_es_un_solo_cruce_con_una_curva_sin_salto_de_velocidad_en_el_corte():
+    mitad, fps, ancho = 0.3, 30, 320
+    saliente = transiciones.anchos_barrido("saliente", t0=0.0, mitad=mitad, ancho=ancho, fps=fps)
+    entrante = transiciones.anchos_barrido("entrante", t0=0.0, mitad=mitad, ancho=ancho, fps=fps)
+
+    # Una sola línea de tiempo (0..2×ancho): en saliente el borde relevante es x+w
+    # (borde de ataque); en entrante, trasladado, es ancho+x (borde de salida que
+    # sigue de largo). Es el MISMO barrido visto en sus dos mitades.
+    borde = [x + w for _, x, w in saliente] + [ancho + x for _, x, w in entrante]
+
+    # Cruza de punta a punta: monótono en TODA la transición, nunca se repliega.
+    assert all(a <= b for a, b in zip(borde, borde[1:]))
+
+    # El cuadro del corte (último del saliente) está al 100% de cobertura.
+    assert saliente[-1][1:] == (0, ancho)
+
+    # Sin salto de velocidad en el corte mayor que el máximo del resto: comparo el
+    # salto de la velocidad (2da diferencia) exactamente en la costura contra el
+    # máximo de esa misma magnitud en el resto de la curva.
+    velocidad = [b - a for a, b in zip(borde, borde[1:])]
+    saltos = [abs(b - a) for a, b in zip(velocidad, velocidad[1:])]
+    idx_costura = len(saliente) - 2  # costura entre el último punto de saliente y el primero de entrante
+    salto_costura = saltos[idx_costura]
+    resto = saltos[:idx_costura] + saltos[idx_costura + 1:]
+    assert salto_costura <= max(resto) + 1  # +1: margen de redondeo a entero (px)
 
 
 def test_vf_fundido_saliente_usa_fade_out_con_el_color():

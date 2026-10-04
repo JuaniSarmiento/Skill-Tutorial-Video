@@ -1,4 +1,5 @@
 """Transiciones entre tramos (S6 del Hito 2, docs/explicador/HITO2.md)."""
+import math
 import sys
 from pathlib import Path
 
@@ -105,19 +106,21 @@ def color_de(tipo: str, brand: dict) -> str:
     return "0x" + hexcolor.lstrip("#").upper()
 
 
-def ease_out_cubico(p: float) -> float:
-    """1-(1-p)^3: la misma curva de `base.js` (función `salida`) para la entrada de
-    los elementos de una escena (R-6.4: "comparte forma con las escenas")."""
-    p = min(max(p, 0.0), 1.0)
-    return 1 - (1 - p) ** 3
+def anchos_barrido(fase: str, t0: float, mitad: float, ancho: int = 1920, fps: int = 30) -> list[tuple[float, int, int]]:
+    """[(t_del_cuadro, x_del_drawbox, ancho_del_drawbox)] para cada cuadro de la
+    ventana de la transición: un solo barrido CRUZADO (mejora de calidad, QA
+    posterior a R-6.1..R-6.4), no una cortina que entra y se repliega.
 
-
-def anchos_barrido(fase: str, t0: float, mitad: float, ancho: int = 1920, fps: int = 30) -> list[tuple[float, int]]:
-    """[(t_del_cuadro, ancho_del_drawbox_en_px)] para cada cuadro de la ventana de la
-    transición: en la mitad SALIENTE la franja del acento crece desde el borde
-    izquierdo (0px en t0) hasta cubrir toda la pantalla (en t0+mitad, que coincide
-    con el corte); en la mitad ENTRANTE arranca cubriendo del todo (en t=0) y se
-    achica hasta desaparecer (en t=mitad).
+    Se modela como una franja sólida que recorre un eje virtual de 2×`ancho`,
+    con una única curva ease-in-out sobre TODA la transición (sin salto de
+    velocidad en el corte, a diferencia de dos `ease_out_cubico` independientes
+    por mitad): `sweep(p) = ancho * (1 - cos(pi*p))`, p en [0,1] (0 = arranca,
+    0.5 = el corte, 1 = termina). En la mitad SALIENTE (p en [0, 0.5]) sólo se ve
+    crecer el borde de ataque: x=0 fijo, w = sweep. En la ENTRANTE (p en
+    [0.5, 1]) el borde de ataque ya salió de pantalla y se ve seguir el borde de
+    SALIDA hacia la derecha: x crece, w se achica (x+w queda pegado al borde
+    derecho), en vez de retraerse hacia la izquierda con x=0 fijo (la cortina que
+    entra y vuelve que señaló QA).
 
     DISCRETO y no una expresión ffmpeg con `t`: medido con ffmpeg 6.1.1, `drawbox`
     evalúa `w`/`x` UNA SOLA VEZ (no por cuadro) aunque la expresión use `t` sin
@@ -128,25 +131,38 @@ def anchos_barrido(fase: str, t0: float, mitad: float, ancho: int = 1920, fps: i
     completo" (no "nada"; medido mandando w='0' por `sendcmd`: cubría toda la
     pantalla igual), así que "sin barrido" es 1px (R-6.1: a 1920 de ancho, bien
     por debajo del 1% que mide R-6.4).
+
+    `n` redondea "hacia arriba desde .5" (`int(x + 0.5)`), no `round()`: el
+    banker's rounding de `round()` en un `mitad*fps` que cae justo en .5 (p.ej.
+    0.35s a 30fps = 10.5) redondea para el PAR más cercano, que a veces es para
+    abajo, y deja la transición 1-2 cuadros corta (R-6.4 pide ±1 cuadro).
     """
-    n = round(mitad * fps)
+    n = max(1, int(mitad * fps + 0.5))
     salida = []
     for i in range(n + 1):
-        if fase == "saliente":
-            t = t0 + i / fps
-            p = (t - t0) / mitad
-        else:
-            t = i / fps
-            p = t / mitad
-        cobertura = ease_out_cubico(p) if fase == "saliente" else 1 - ease_out_cubico(p)
-        w = max(1, round(ancho * cobertura))
-        salida.append((t, w))
+        p_local = i / n
+        p = 0.5 * p_local if fase == "saliente" else 0.5 + 0.5 * p_local
+        t = t0 + i / fps if fase == "saliente" else i / fps
+        sweep = ancho * (1 - math.cos(math.pi * p))
+        x_right = min(sweep, ancho)
+        x_left = max(sweep - ancho, 0.0)
+        w = round(x_right - x_left)
+        x = round(x_left)
+        if w < 1:
+            w = 1
+            x = min(x, ancho - 1)
+        salida.append((t, x, w))
     return salida
 
 
-def comandos_barrido(anchos: list[tuple[float, int]], filtro: str = "t6") -> str:
-    """Script de `sendcmd` (un `w 'ANCHO'` por cuadro) para el filtro `drawbox@filtro`."""
-    return "".join(f"{t:.6f} drawbox@{filtro} w '{w}';\n" for t, w in anchos)
+def comandos_barrido(anchos: list[tuple[float, int, int]], filtro: str = "t6") -> str:
+    """Script de `sendcmd` (un `x 'X'` y un `w 'ANCHO'` por cuadro) para el filtro
+    `drawbox@filtro` (el barrido cruzado mueve los dos, no sólo `w`)."""
+    partes = []
+    for t, x, w in anchos:
+        partes.append(f"{t:.6f} drawbox@{filtro} x '{x}';\n")
+        partes.append(f"{t:.6f} drawbox@{filtro} w '{w}';\n")
+    return "".join(partes)
 
 
 def vf_fundido(fase: str, t0: float, mitad: float, color: str) -> str:
