@@ -635,8 +635,12 @@ def _estricto_falla(hallazgos: list[str], no_corrio: list[str]) -> bool:
     """B3c (DECISIÓN PENDIENTE DE JUANI, hoy no falla): política de si `--estricto`
     tiene que salir con 1 cuando algún chequeo no corrió (`no_corrio` no vacío),
     además de cuando hay `hallazgos`. Toda la política vive acá: cambiarla es
-    una línea."""
-    return bool(hallazgos)
+    una línea.
+
+    NOTE 10: un aviso de normalización ("aviso: ...", D4) no es un hallazgo real
+    (el rol era válido, sólo venía con mayúsculas o tildes distintas) y no cuenta
+    acá, aunque `informe_revisar` lo siga mostrando bajo "hallazgos"."""
+    return any(not h.startswith("aviso: ") for h in hallazgos)
 
 
 # carpetas de trabajo que NO son el nombre de una voz (NOTE 3b)
@@ -787,9 +791,15 @@ def _hallazgos_roles(segmentos: list[dict]) -> list[str]:
         if crudo is None:
             roles.append(None)
             continue
+        if not isinstance(crudo, str):  # NOTE 5: p.ej. "rol": 1 en un guion mal armado
+            hallazgos.append(f"rol inválido (no es texto): {crudo!r}")
+            roles.append(None)
+            continue
         normalizado = _normalizar_rol(crudo)
         if normalizado != crudo:
-            hallazgos.append(f"rol {crudo!r} normalizado a {normalizado!r} (sin tildes/mayúsculas)")
+            # NOTE 10: esto es un AVISO, no un hallazgo real; el prefijo "aviso: "
+            # es lo que _estricto_falla usa para no contarlo.
+            hallazgos.append(f"aviso: rol {crudo!r} normalizado a {normalizado!r} (sin tildes/mayúsculas)")
         if normalizado not in ROLES_VALIDOS:
             hallazgos.append(f"rol desconocido {normalizado!r} (válidos: {', '.join(ROLES_VALIDOS)})")
             roles.append(None)
@@ -824,7 +834,18 @@ def revisar(vid: str, voz_name: str = "argentina", n: float = N_CAMBIO_VISUAL) -
     `hallazgos` son los problemas que encontró un chequeo que sí pudo correr;
     `no_corrio` dice, de los que no pudieron, cuál y por qué (R-5.6).
     """
-    g = load(vid)
+    # NOTE 5/6: el guion inexistente, con JSON roto, o sin "segmentos" es un error
+    # claro de revisar() mismo (no de quien hizo el subprocess de ffmpeg), así el
+    # CLI (NOTE 6) puede acotar su except a ESTE motivo y no a cualquier
+    # FileNotFoundError (p.ej. si falta el binario de ffmpeg).
+    try:
+        g = load(vid)
+    except FileNotFoundError:
+        raise RevisarError(f"no existe {vid} (falta guion/{vid}.json)") from None
+    except json.JSONDecodeError as e:
+        raise RevisarError(f"el guion de {vid} tiene JSON inválido: {e}") from None
+    if "segmentos" not in g:
+        raise RevisarError(f"el guion de {vid} no tiene 'segmentos'")
     work = ROOT / "videos" / vid
     hallazgos: list[str] = []
     no_corrio: list[str] = []
@@ -900,16 +921,23 @@ def _dispatch_revisar(args: list[str]) -> int:
     (B8: '--estricto' puede ir antes del vNN) y da mensajes claros con el uso en
     vez de traceback ante vNN faltante, sin argumentos, o un flag desconocido
     (B3b: no se ignora en silencio)."""
-    flags = [a for a in args if a.startswith("--")]
+    # NOTE 6: CUALQUIER token con "-" adelante es un flag (no sólo "--algo"), así
+    # "-e" no se cuela como si fuera el vNN o la voz.
+    flags = [a for a in args if a.startswith("-")]
     desconocidos = [f for f in flags if f not in FLAGS_REVISAR]
     if desconocidos:
         print(f"editar.py revisar: flag desconocido {desconocidos[0]!r} (válidos: {', '.join(FLAGS_REVISAR)})",
               file=sys.stderr)
         print(USO_REVISAR, file=sys.stderr)
         return 2
-    posicionales = [a for a in args if not a.startswith("--")]
+    posicionales = [a for a in args if not a.startswith("-")]
     if not posicionales:
         print("editar.py revisar: falta <vNN>", file=sys.stderr)
+        print(USO_REVISAR, file=sys.stderr)
+        return 2
+    if len(posicionales) > 2:  # NOTE 6: "revisar v09 argentina extra" no se ignora
+        print(f"editar.py revisar: demasiados argumentos ({', '.join(posicionales[2:])!r})",
+              file=sys.stderr)
         print(USO_REVISAR, file=sys.stderr)
         return 2
     vid = posicionales[0]
@@ -917,9 +945,6 @@ def _dispatch_revisar(args: list[str]) -> int:
     estricto = "--estricto" in flags
     try:
         hallazgos, no_corrio = revisar(vid, voz_name)
-    except FileNotFoundError:
-        print(f"editar.py revisar: no existe {vid} (falta guion/{vid}.json)", file=sys.stderr)
-        return 2
     except RevisarError as e:
         print(f"editar.py revisar: {e}", file=sys.stderr)
         return 2

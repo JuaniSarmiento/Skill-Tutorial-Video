@@ -69,6 +69,28 @@ def test_revisar_sin_ningun_artefacto_dice_que_no_corrio_en_vez_de_omitirlo(raiz
     assert any("voz-argentina.wav" in m for m in no_corrio)
 
 
+# --- NOTE 5: guion JSON roto o sin "segmentos": error claro, no traceback ---------
+
+def test_guion_con_json_invalido_es_error_claro(raiz):
+    (raiz / "guion" / "v09.json").write_text("{ esto no es json")
+
+    with pytest.raises(editar.RevisarError) as exc:
+        editar.revisar("v09", "argentina")
+
+    assert "v09" in str(exc.value)
+    assert "inválido" in str(exc.value)
+
+
+def test_guion_sin_segmentos_es_error_claro(raiz):
+    _guion(raiz, {})  # sin la clave "segmentos"
+
+    with pytest.raises(editar.RevisarError) as exc:
+        editar.revisar("v09", "argentina")
+
+    assert "v09" in str(exc.value)
+    assert "segmentos" in str(exc.value)
+
+
 # --- B3a: voz sin NINGÚN artefacto, habiendo artefactos de otra voz: error claro ----
 
 def test_voz_sin_ningun_artefacto_pero_con_otra_voz_presente_es_error(raiz, tmp_path):
@@ -610,6 +632,49 @@ def test_rol_con_mayusculas_y_tildes_se_normaliza_con_aviso(raiz):
     assert not any("no hay ningún segmento con rol 'analogia'" in h for h in hallazgos)
 
 
+def test_rol_con_espacios_se_normaliza_sin_romper(raiz):
+    """N4: si se borra el .strip() de _normalizar_rol, 'analogia ' (con espacio)
+    queda como rol desconocido en vez de normalizarse a 'analogia'."""
+    _guion(raiz, {"segmentos": [
+        {"inicio": 0, "fin": 1, "texto": "a", "rol": "gancho"},
+        {"inicio": 1, "fin": 2, "texto": "b", "rol": "analogia "},
+        {"inicio": 2, "fin": 3, "texto": "c", "rol": "ejemplo"},
+        {"inicio": 3, "fin": 4, "texto": "d", "rol": "repaso"}]})
+
+    hallazgos, _ = editar.revisar("v09", "argentina")
+
+    assert not any("rol desconocido" in h for h in hallazgos)
+    assert not any("no hay ningún segmento con rol 'analogia'" in h for h in hallazgos)
+
+
+def test_rol_no_textual_se_informa_sin_romper(raiz):
+    """NOTE 5: un rol que no es texto (p.ej. 1, por un guion mal armado) no puede
+    tirar un AttributeError al intentar normalizarlo."""
+    _guion(raiz, {"segmentos": [
+        {"inicio": 0, "fin": 1, "texto": "a", "rol": "gancho"},
+        {"inicio": 1, "fin": 2, "texto": "b", "rol": 1},
+        {"inicio": 2, "fin": 3, "texto": "c", "rol": "ejemplo"},
+        {"inicio": 3, "fin": 4, "texto": "d", "rol": "repaso"}]})
+
+    hallazgos, _ = editar.revisar("v09", "argentina")
+
+    assert any("rol inválido" in h and "1" in h for h in hallazgos)
+
+
+# --- NOTE 10: un aviso de normalización no cuenta como hallazgo para --estricto ---
+
+def test_estricto_no_falla_solo_por_un_rol_con_tildes_bien_escrito(raiz, monkeypatch, capsys):
+    _guion(raiz, {"segmentos": [
+        {"inicio": 0, "fin": 1, "texto": "a", "rol": "gancho"},
+        {"inicio": 1, "fin": 2, "texto": "b", "rol": "Analogía"},
+        {"inicio": 2, "fin": 3, "texto": "c", "rol": "ejemplo"},
+        {"inicio": 3, "fin": 4, "texto": "d", "rol": "repaso"}]})
+
+    _, code = _correr_cli(raiz, monkeypatch, capsys, ["--estricto"])
+
+    assert code == 0
+
+
 # --- R-5.1 / R-5.7: por línea de comandos, informe y código de salida --------------
 
 def _correr_cli(raiz, monkeypatch, capsys, argv_extra):
@@ -710,6 +775,26 @@ def test_estricto_antes_del_vid_tambien_hace_fallar_con_hallazgos(raiz, monkeypa
     _, _, code = _correr_cli_argv(raiz, monkeypatch, capsys, ["--estricto", "v09"])
 
     assert code == 1
+
+
+def test_revisar_con_guion_corto_no_se_cuela_como_voz(raiz, monkeypatch, capsys):
+    """NOTE 6: 'revisar v09 -e' no puede tomar '-e' como si fuera la voz."""
+    _guion(raiz, {"segmentos": [{"inicio": 0, "fin": 1, "texto": "a"}]})
+
+    _, err, code = _correr_cli_argv(raiz, monkeypatch, capsys, ["v09", "-e"])
+
+    assert code != 0
+    assert "-e" in err
+
+
+def test_revisar_con_demasiados_argumentos_es_error(raiz, monkeypatch, capsys):
+    """NOTE 6: 'revisar v09 argentina extra' no puede ignorar 'extra' en silencio."""
+    _guion(raiz, {"segmentos": [{"inicio": 0, "fin": 1, "texto": "a"}]})
+
+    _, err, code = _correr_cli_argv(raiz, monkeypatch, capsys, ["v09", "argentina", "extra"])
+
+    assert code != 0
+    assert "extra" in err
 
 
 # --- B3c (decisión pendiente): hoy --estricto NO falla si algo no corrió ----------
