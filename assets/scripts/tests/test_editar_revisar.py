@@ -5,6 +5,7 @@ chequeo necesita un artefacto que no está, lo dice (R-5.6) en vez de omitirlo.
 """
 import json
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -262,6 +263,29 @@ def test_hueco_de_exactamente_n_no_es_hallazgo():
 
 def test_hueco_de_apenas_mas_de_n_es_hallazgo():
     assert editar._huecos_escena({"duracion": 6.001, "puntos": []}, 6.0) == [(0.0, 6.001)]
+
+
+# --- M2: D1 con el mismo criterio de borde exacto (6.0s), sin depender de ffmpeg --
+
+def test_freeze_de_exactamente_n_no_es_hallazgo(monkeypatch):
+    """M2: en el límite EXACTO, D1 tiene que usar '>', nunca '>='. Fabrica la salida
+    de ffmpeg (freeze_start/freeze_end separados por exactamente 6.0s) para no
+    depender del redondeo de cuadros de un video real."""
+    class _Resultado:
+        returncode = 0
+        stderr = "freeze_start: 1.000000\nfreeze_end: 7.000000\n"
+    monkeypatch.setattr(editar.subprocess, "run", lambda *a, **k: _Resultado())
+
+    assert editar._freezes(Path("dummy.mp4"), 6.0) == []
+
+
+def test_freeze_de_apenas_mas_de_n_es_hallazgo(monkeypatch):
+    class _Resultado:
+        returncode = 0
+        stderr = "freeze_start: 1.000000\nfreeze_end: 7.001000\n"
+    monkeypatch.setattr(editar.subprocess, "run", lambda *a, **k: _Resultado())
+
+    assert editar._freezes(Path("dummy.mp4"), 6.0) == [(1.0, 7.001)]
 
 
 # --- B6: el hueco también se mide desde 0, y una escena sin ninguna cue es hueco ---
