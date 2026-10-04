@@ -57,6 +57,21 @@ def test_revisar_sin_ningun_artefacto_dice_que_no_corrio_en_vez_de_omitirlo(raiz
     assert any("voz-argentina.wav" in m for m in no_corrio)
 
 
+# --- B3a: voz sin NINGÚN artefacto, habiendo artefactos de otra voz: error claro ----
+
+def test_voz_sin_ningun_artefacto_pero_con_otra_voz_presente_es_error(raiz, tmp_path):
+    clip = tmp_path / "clip.mp4"
+    _clip(clip, "testsrc=s=320x240:r=30:d=1,format=yuv420p")
+    _concat_video(raiz / "videos" / "v09" / "video-argentina.mp4", [clip])
+    _guion(raiz, {"segmentos": [{"inicio": 0, "fin": 1, "texto": "a"}]})
+
+    with pytest.raises(editar.RevisarError) as exc:
+        editar.revisar("v09", "argentin")  # typo
+
+    assert "argentin" in str(exc.value)
+    assert "argentina" in str(exc.value)
+
+
 # --- R-5.2: tiempo muerto (freezedetect) sobre video-<voz>.mp4 ----------------------
 
 def test_tiempo_muerto_de_mas_de_n_segundos_se_reporta(raiz, tmp_path):

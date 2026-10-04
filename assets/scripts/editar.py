@@ -605,6 +605,24 @@ def exportar(vid: str) -> None:
 N_CAMBIO_VISUAL = 6.0
 
 
+class RevisarError(Exception):
+    """Error claro de `revisar` (B3a/B8): se informa sin traceback y sale != 0."""
+
+
+def _voces_con_artefactos(work: Path) -> set[str]:
+    """Nombres de voz para los que existe al menos un artefacto en `work`
+    (video-<voz>.mp4, voz-<voz>.wav o slots-<voz>.json). B3a: sirve para avisar de
+    un nombre de voz tipeado mal cuando sí hay artefactos de otra voz."""
+    voces = set()
+    for ruta in work.glob("video-*.mp4"):
+        voces.add(ruta.stem.removeprefix("video-"))
+    for ruta in work.glob("voz-*.wav"):
+        voces.add(ruta.stem.removeprefix("voz-"))
+    for ruta in work.glob("slots-*.json"):
+        voces.add(ruta.stem.removeprefix("slots-"))
+    return voces
+
+
 def _freezes(video: Path, n: float) -> list[tuple[float, float]]:
     """D1: [(inicio, fin)] de los tramos de `video` sin cambio visual de MÁS de n
     segundos (B9: criterio estricto, igual que D2).
@@ -735,6 +753,15 @@ def revisar(vid: str, voz_name: str = "argentina", n: float = N_CAMBIO_VISUAL) -
     work = ROOT / "videos" / vid
     hallazgos: list[str] = []
     no_corrio: list[str] = []
+
+    # B3a: si NINGÚN artefacto de `voz_name` existe pero sí hay de otra voz, es casi
+    # siempre un nombre tipeado mal: error claro en vez de "no corrió" en silencio
+    # para cada chequeo. Si no hay artefactos de NINGUNA voz (vNN recién creado),
+    # sigue de largo: ahí no hay con qué comparar.
+    voces = _voces_con_artefactos(work)
+    if voces and voz_name not in voces:
+        raise RevisarError(f"no hay ningún artefacto para la voz {voz_name!r} en {vid}; "
+                           f"voces con artefactos: {', '.join(sorted(voces))}")
 
     video = work / f"video-{voz_name}.mp4"
     if video.exists():
