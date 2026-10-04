@@ -243,3 +243,18 @@ def test_contacto_con_un_spec_sin_tipo_falla_nombrando_el_archivo(tmp_path, rend
     err = capsys.readouterr().err
     assert "sin-tipo.json" in err and "tipo" in err
     assert renders == []
+
+
+# B8 (QA 03/10/2026): "imagen" existe desde S4 pero la ayuda de argparse y el mensaje de
+# "falta tipo" de contacto seguían listando sólo diagrama/presentacion/datos.
+
+def test_el_mensaje_de_tipo_faltante_en_contacto_menciona_imagen(tmp_path, renders, capsys):
+    with pytest.raises(SystemExit):
+        escena._cli(["contacto", _spec(tmp_path, "sin-tipo.json", duracion=2), "-o", str(tmp_path / "h.png")])
+    assert "imagen" in capsys.readouterr().err
+
+
+def test_la_ayuda_del_cli_render_menciona_imagen(capsys):
+    with pytest.raises(SystemExit):
+        escena._cli(["render", "--help"])
+    assert "imagen" in capsys.readouterr().out

@@ -20,7 +20,7 @@ uso:
                      [--brand brand.json] [--duracion S] [--fps 30] [--ancho 1920]
   escena.py contacto <spec.json>... -o hoja.png [--brand brand.json] [--palabras p.json]
 
-`tipo` es el nombre de una plantilla de assets/escenas/ (diagrama, presentacion, datos).
+`tipo` es el nombre de una plantilla de assets/escenas/ (diagrama, presentacion, datos, imagen).
 Corre con: uv run --with playwright python escena.py ...   (usa el Chrome instalado)
 """
 import copy
@@ -30,6 +30,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import xml.etree.ElementTree as ET
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -103,30 +104,108 @@ def resolver_spec(spec: dict, palabras) -> dict:
     return out
 
 
-# R-4.6: sólo SVG local (Q8, decidido por Juani): sin fotos ni referencias de red.
-HREF_EXTERNO = re.compile(r'(?:xlink:href|href)\s*=\s*["\']https?://')
+# R-4.6 / B1 (QA 03/10/2026): sólo SVG local (Q8, decidido por Juani), sin JS ni red. El SVG
+# entra por innerHTML, así que un regex sobre el texto crudo no alcanza (mayúsculas, sin
+# comillas, entidades, @import/@font-face, foreignObject, image con data:, file://...): se
+# parsea como XML y se pasa por una lista blanca de elementos/atributos. Lo que no está en la
+# lista blanca falla ANTES de abrir Chrome, nombrando archivo/elemento/atributo.
+NS_SVG = "http://www.w3.org/2000/svg"
+NS_XLINK = "http://www.w3.org/1999/xlink"
+ET.register_namespace("", NS_SVG)
+ET.register_namespace("xlink", NS_XLINK)
+
+# Sólo dibujo: nada de <script>, <style>, <foreignObject>, <image> (ni con data:, Q8 prohíbe
+# fotos) ni SMIL (<animate>/<set>, rompe el determinismo de t).
+ELEMENTOS_PERMITIDOS = {
+    "svg", "g", "path", "circle", "ellipse", "rect", "line", "polyline", "polygon",
+    "defs", "use", "title", "desc", "text",
+}
+ATRIBUTOS_PERMITIDOS = {
+    "viewbox", "width", "height", "x", "y", "cx", "cy", "r", "rx", "ry",
+    "x1", "y1", "x2", "y2", "points", "d", "transform",
+    "fill", "stroke", "stroke-width", "stroke-linecap", "stroke-linejoin",
+    "stroke-dasharray", "stroke-dashoffset", "fill-opacity", "stroke-opacity",
+    "opacity", "fill-rule", "clip-rule", "class", "id",
+    "href", "xmlns", "xmlns:xlink", "version",
+    "font-size", "font-weight", "font-family", "text-anchor",
+}
+# atributos cuyo valor puede referenciar una url(): sólo url(#id) interno, nunca de red
+ATRIBUTOS_CON_POSIBLE_URL = {"fill", "stroke"}
+# B4(b) (QA 03/10/2026): fill/stroke con un color fijo no se recolorea al brand; la
+# convención (ver imagen.html) es "none" o "currentColor". Un color fijo falla claro en vez
+# de quedar pegado para siempre al color con el que se dibujó el SVG original.
+COLORES_PERMITIDOS = {"none", "currentColor"}
+DOCTYPE_O_ENTIDAD = re.compile(r"<!\s*(DOCTYPE|ENTITY)", re.IGNORECASE)
 
 
-def resolver_dibujos(spec: dict) -> dict:
+def _local(tag: str) -> str:
+    """"{namespace}tag" o "ns:tag" -> "tag", en minúscula."""
+    return tag.rsplit("}", 1)[-1].rsplit(":", 1)[-1].lower()
+
+
+def sanear_svg(contenido: str, ruta) -> str:
+    """Lista blanca de elementos/atributos; levanta ValueError nombrando archivo/elemento/
+    atributo ante cualquier cosa fuera de ella. Devuelve el SVG re-serializado.
+    """
+    m = DOCTYPE_O_ENTIDAD.search(contenido)
+    if m:
+        raise ValueError(f"SVG {ruta!r}: {m.group(1).upper()} no permitido (protección XXE/billion-laughs)")
+    try:
+        raiz = ET.fromstring(contenido)
+    except ET.ParseError as e:
+        raise ValueError(f"SVG {ruta!r}: no es XML válido ({e})") from e
+
+    for el in raiz.iter():
+        nombre = _local(el.tag)
+        if nombre not in ELEMENTOS_PERMITIDOS:
+            raise ValueError(f"SVG {ruta!r}: elemento {nombre!r} no permitido (sólo dibujo vectorial, Q8)")
+        for attr, valor in el.attrib.items():
+            nombre_attr = _local(attr)
+            if nombre_attr.startswith("on"):
+                raise ValueError(f"SVG {ruta!r}: elemento {nombre!r} con atributo de evento {attr!r} no permitido")
+            if nombre_attr not in ATRIBUTOS_PERMITIDOS:
+                raise ValueError(f"SVG {ruta!r}: elemento {nombre!r} con atributo {attr!r} no permitido")
+            if nombre_attr == "href":
+                if nombre != "use" or not valor.startswith("#"):
+                    raise ValueError(
+                        f"SVG {ruta!r}: elemento {nombre!r} con href {valor!r}; "
+                        "sólo <use href=\"#id\"> interno (sin red, Q8)")
+            if nombre_attr in ATRIBUTOS_CON_POSIBLE_URL and "url(" in valor and "url(#" not in valor:
+                raise ValueError(f"SVG {ruta!r}: elemento {nombre!r} con {attr}={valor!r}; "
+                                 "url() sólo puede referenciar un #id interno")
+            if (nombre_attr in ATRIBUTOS_CON_POSIBLE_URL and "url(" not in valor
+                    and valor not in COLORES_PERMITIDOS):
+                raise ValueError(
+                    f"SVG {ruta!r}: elemento {nombre!r} con {attr}={valor!r}; "
+                    'usá "currentColor" (se recolorea al brand) o "none", nunca un color fijo')
+    return ET.tostring(raiz, encoding="unicode")
+
+
+def resolver_dibujos(spec: dict, base_dir=None) -> dict:
     """Copia del spec con el contenido de cada dibujos[].svg embebido en "markup".
 
     Escena "imagen" (HITO2.md S4). Se valida ANTES de abrir Chrome: un SVG
-    faltante o con href externo corta aquí, sin .mp4 ni .parcial.mp4 (R-4.6).
+    faltante, mal formado o fuera de la lista blanca corta aquí, sin .mp4 ni
+    .parcial.mp4 (R-4.6, B1).
+
+    B3 (QA 03/10/2026): un "svg" relativo se resuelve contra `base_dir` (el
+    directorio del spec.json), no contra el cwd de quien corre escena.py; así
+    el ejemplo renderiza igual desde la raíz del repo o desde cualquier otro
+    directorio. Sin base_dir, el default documentado es el cwd (compatible con
+    specs que ya traían una ruta absoluta). Un "svg" absoluto no se ve afectado.
     """
+    base_dir = Path(base_dir) if base_dir is not None else Path.cwd()
     out = copy.deepcopy(spec)
     for d in out.get("dibujos", []):
         ruta = d.get("svg")
         if not ruta:
             continue
         p = Path(ruta)
+        if not p.is_absolute():
+            p = base_dir / p
         if not p.exists():
             raise ValueError(f"dibujo {d.get('id', '?')!r}: no existe el SVG {ruta!r}")
-        contenido = p.read_text()
-        m = HREF_EXTERNO.search(contenido)
-        if m:
-            raise ValueError(f"dibujo {d.get('id', '?')!r}: el SVG {ruta!r} tiene un href externo "
-                             f"({m.group(0)}...); sólo SVG local (Q8)")
-        d["markup"] = contenido
+        d["markup"] = sanear_svg(p.read_text(), ruta)
     return out
 
 
@@ -202,13 +281,19 @@ def avisar_si_falta_la_fuente(page, fuente) -> bool:
 # R-4.5 (PLAN.md): Canvas 2D / SVG, nunca WebGL (la GPU integrada de Juani la arrastra).
 # Se patchea ANTES de que cargue la plantilla: si una la llama, página falla con el mismo
 # camino que un error de JS (page.on("pageerror")) y sale como ContratoError.
+# B6 (QA 03/10/2026): HTMLCanvasElement no es el único con getContext; OffscreenCanvas (que
+# puede pedir 'webgl' igual, sin estar en el DOM) la saltea si no se cubre también.
 GUARDIA_WEBGL = """(function () {
-  const orig = HTMLCanvasElement.prototype.getContext;
-  HTMLCanvasElement.prototype.getContext = function (tipo, ...resto) {
-    if (['webgl', 'webgl2', 'experimental-webgl'].includes(tipo))
-      throw new Error(`getContext(${JSON.stringify(tipo)}): esta skill es Canvas 2D / SVG, nunca WebGL`);
-    return orig.call(this, tipo, ...resto);
-  };
+  function bloquear(proto) {
+    const orig = proto.getContext;
+    proto.getContext = function (tipo, ...resto) {
+      if (['webgl', 'webgl2', 'experimental-webgl'].includes(tipo))
+        throw new Error(`getContext(${JSON.stringify(tipo)}): esta skill es Canvas 2D / SVG, nunca WebGL`);
+      return orig.call(this, tipo, ...resto);
+    };
+  }
+  bloquear(HTMLCanvasElement.prototype);
+  if (typeof OffscreenCanvas !== 'undefined') bloquear(OffscreenCanvas.prototype);
 })();"""
 
 
@@ -224,6 +309,21 @@ def pagina_de_escena(browser, plantilla, spec: dict, brand: dict):
     page = browser.new_page(viewport={"width": ANCHO_BASE, "height": ALTO_BASE}, device_scale_factor=1)
     errores = []
     page.on("pageerror", lambda e: errores.append(str(e)))
+
+    def _bloquear_red(route):
+        """B1, defensa en profundidad: el saneado de resolver_dibujos es la primera barrera;
+        esta es la segunda, para todas las plantillas. Nada sale al mundo (XHR/fetch/img/CSS):
+        sólo file:// de la propia escena. Un intento de red falla el render con ContratoError
+        en vez de pasar en silencio (antes un `catch` de la plantilla se lo tragaba).
+        """
+        url = route.request.url
+        if url.startswith("file://"):
+            route.continue_()
+        else:
+            errores.append(f"intento de red bloqueado ({route.request.method} {url})")
+            route.abort()
+
+    page.route("**/*", _bloquear_red)
     try:
         page.add_init_script(GUARDIA_WEBGL)
         page.add_init_script(f"window.SPEC = {json.dumps(spec)}; window.BRAND = {json.dumps(brand)};")
@@ -262,13 +362,16 @@ def _cuadro(page, t: float) -> bytes:
 
 
 def render(plantilla, spec: dict, salida, brand: dict | None = None, palabras=None,
-           fps: int = 30, ancho: int = ANCHO_BASE) -> float:
+           fps: int = 30, ancho: int = ANCHO_BASE, base_dir=None) -> float:
     """Renderiza la escena a `salida` y devuelve su duración (cuadros / fps).
 
     Se escribe a un .parcial.mp4 y se renombra al final: si algo falla a mitad, no
     queda un mp4 corto que se reproduce bien y parece un render válido.
+
+    `base_dir` (B3): directorio contra el que se resuelven los "svg" relativos de
+    dibujos[] (el directorio del spec.json); sin él, el cwd de quien llama.
     """
-    spec = resolver_dibujos(resolver_spec(spec, palabras))
+    spec = resolver_dibujos(resolver_spec(spec, palabras), base_dir)
     brand = brand or cargar_brand(None)
     salida = Path(salida)
     salida.parent.mkdir(parents=True, exist_ok=True)
@@ -321,7 +424,7 @@ def _cli(argv) -> None:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="accion", required=True)
     r = sub.add_parser("render")
-    r.add_argument("plantilla", help="tipo (diagrama, presentacion, datos) o ruta a un .html")
+    r.add_argument("plantilla", help="tipo (diagrama, presentacion, datos, imagen) o ruta a un .html")
     r.add_argument("spec")
     r.add_argument("--duracion", type=float, help="pisa la duración del spec (ej: el slot de la voz)")
     r.add_argument("--fps", type=int, default=30)
@@ -345,16 +448,17 @@ def _cli(argv) -> None:
         spec = json.loads(Path(a.spec).read_text())
         if a.duracion is not None:
             spec["duracion"] = a.duracion
-        d = render(ruta_plantilla(a.plantilla), spec, a.salida, brand, voz, a.fps, a.ancho)
+        d = render(ruta_plantilla(a.plantilla), spec, a.salida, brand, voz, a.fps, a.ancho,
+                   base_dir=Path(a.spec).resolve().parent)
         print(f"{a.salida}: {d:.2f} s")
     else:
         escenas = []
         for s in a.specs:
             spec = json.loads(Path(s).read_text())
             if not spec.get("tipo"):
-                ap.error(f"{s} no dice su 'tipo' (diagrama, presentacion, datos)")
+                ap.error(f"{s} no dice su 'tipo' (diagrama, presentacion, datos, imagen)")
             escenas.append((Path(s).stem + " " + spec["tipo"], ruta_plantilla(spec["tipo"]),
-                            resolver_dibujos(resolver_spec(spec, voz))))
+                            resolver_dibujos(resolver_spec(spec, voz), Path(s).resolve().parent)))
         print(hoja_contacto(escenas, a.salida, brand, a.columnas))
 
 

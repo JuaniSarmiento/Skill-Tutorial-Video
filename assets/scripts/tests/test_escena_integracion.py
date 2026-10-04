@@ -91,6 +91,20 @@ def test_una_plantilla_que_llama_a_webgl_falla_con_contrato_error(tmp_path, tipo
         escena.render(html, {}, tmp_path / "out.mp4", fps=12, ancho=960)
 
 
+@pytest.mark.parametrize("tipo", ["webgl", "webgl2", "experimental-webgl"])
+def test_una_plantilla_que_llama_a_webgl_por_offscreencanvas_tambien_falla(tmp_path, tipo):
+    # B6 (QA 03/10/2026): la guardia sólo cubría HTMLCanvasElement; OffscreenCanvas
+    # la saltea y sigue pudiendo pedir WebGL.
+    html = tmp_path / "webgl-offscreen.html"
+    html.write_text(f"""<script>
+      window.DURATION = 1;
+      window.seek = async t => {{ new OffscreenCanvas(100, 100).getContext({tipo!r}); }};
+    </script>""")
+
+    with pytest.raises(escena.ContratoError, match="webgl"):
+        escena.render(html, {}, tmp_path / "out.mp4", fps=12, ancho=960)
+
+
 def test_una_plantilla_que_usa_canvas_2d_no_se_ve_afectada_por_la_guardia_de_webgl(tmp_path):
     html = tmp_path / "canvas2d.html"
     html.write_text("""<script>
@@ -101,6 +115,40 @@ def test_una_plantilla_que_usa_canvas_2d_no_se_ve_afectada_por_la_guardia_de_web
     d = escena.render(html, {}, tmp_path / "out.mp4", fps=12, ancho=960)
 
     assert d == pytest.approx(1.0)
+
+
+RED = """<!doctype html><script>
+window.DURATION = 1;
+window.seek = async t => {
+  try { await fetch('http://127.0.0.1:1/nope'); } catch (e) { /* una plantilla rota podría
+    tragarse el error de red: la defensa tiene que saltar igual, no depender de esto */ }
+};
+</script>"""
+
+
+def test_un_intento_de_red_durante_el_seek_falla_con_contrato_error(tmp_path):
+    # B1, defensa en profundidad: aunque el JS se trague el error de fetch, el motor
+    # tiene que fallar (page.route bloquea todo lo que no sea file://).
+    html = tmp_path / "red.html"
+    html.write_text(RED)
+
+    with pytest.raises(escena.ContratoError, match="red"):
+        escena.render(html, {"duracion": 1.0}, tmp_path / "out.mp4", fps=12, ancho=960)
+
+
+RED_AL_CARGAR = """<!doctype html><script>
+fetch('http://127.0.0.1:1/nope').catch(() => {});
+window.DURATION = 1;
+window.seek = async t => {};
+</script>"""
+
+
+def test_un_intento_de_red_al_cargar_la_pagina_tambien_falla(tmp_path):
+    html = tmp_path / "red2.html"
+    html.write_text(RED_AL_CARGAR)
+
+    with pytest.raises(escena.ContratoError, match="red"):
+        escena.render(html, {"duracion": 1.0}, tmp_path / "out.mp4", fps=12, ancho=960)
 
 
 def test_la_hoja_de_contacto_es_un_png_con_tres_cuadros_por_escena(tmp_path):
@@ -223,6 +271,44 @@ def test_el_cli_contacto_acepta_specs_imagen(tmp_path):
     alto = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=height", "-of", "csv=p=0", str(hoja)],
                           capture_output=True, text=True, check=True).stdout.strip()
     assert int(alto) > 0
+
+
+def test_el_cli_render_imagen_con_svg_relativo_funciona_desde_otro_cwd(tmp_path, monkeypatch):
+    # B3 (QA 03/10/2026): el "svg" se resuelve contra el directorio del spec.json, no
+    # contra el cwd de quien corre escena.py.
+    serie = tmp_path / "serie"
+    serie.mkdir()
+    (serie / "dibujo.svg").write_text(
+        '<svg viewBox="0 0 10 10"><path d="M1 1L9 9" stroke="currentColor" fill="none"/></svg>')
+    spec = serie / "s.json"
+    spec.write_text(json.dumps({"tipo": "imagen", "dibujos": [{"id": "a", "svg": "dibujo.svg", "cue": 0.1}],
+                                "duracion": 1}))
+    mp4 = tmp_path / "o.mp4"
+    otro_cwd = tmp_path / "otro"
+    otro_cwd.mkdir()
+    monkeypatch.chdir(otro_cwd)
+
+    escena._cli(["render", "imagen", str(spec), "-o", str(mp4), "--fps", "12", "--ancho", "960"])
+
+    assert mp4.exists()
+
+
+def test_el_cli_contacto_con_svg_relativo_funciona_desde_otro_cwd(tmp_path, monkeypatch):
+    serie = tmp_path / "serie"
+    serie.mkdir()
+    (serie / "dibujo.svg").write_text(
+        '<svg viewBox="0 0 10 10"><path d="M1 1L9 9" stroke="currentColor" fill="none"/></svg>')
+    spec = serie / "00.json"
+    spec.write_text(json.dumps({"tipo": "imagen", "dibujos": [{"id": "a", "svg": "dibujo.svg", "cue": 0.1}],
+                                "duracion": 1.0}))
+    hoja = tmp_path / "hoja.png"
+    otro_cwd = tmp_path / "otro"
+    otro_cwd.mkdir()
+    monkeypatch.chdir(otro_cwd)
+
+    escena._cli(["contacto", str(spec), "-o", str(hoja), "--columnas", "3"])
+
+    assert hoja.exists()
 
 
 def test_el_cli_contacto_con_svg_faltante_falla_antes_de_abrir_chrome(tmp_path):

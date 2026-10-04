@@ -159,3 +159,86 @@ def test_cambiar_el_acento_cambia_el_dibujo_en_foco_y_deja_el_resto_igual(chrome
     foco_b, no_foco_b = _render_en(chrome, "#2255FF", t)
     assert foco_a != foco_b, "el dibujo en foco tiene que cambiar con el acento"
     assert no_foco_a == no_foco_b, "el dibujo que no está en foco no puede cambiar"
+
+
+# --- B4(c): SVG sin viewBox (QA 03/10/2026) ------------------------------------
+
+def _un_dibujo(chrome, tmp_path, svg_contenido):
+    svg = tmp_path / "dibujo.svg"
+    svg.write_text(svg_contenido)
+    brand = escena.cargar_brand(None)
+    spec = escena.resolver_dibujos(
+        {"titulo": {"texto": "x"}, "duracion": 1.0, "dibujos": [{"id": "a", "svg": str(svg), "cue": 0.1}]})
+    return brand, spec
+
+
+def test_svg_sin_viewbox_pero_con_contenido_medible_se_calcula_del_bbox(chrome, tmp_path):
+    brand, spec = _un_dibujo(chrome, tmp_path, '<svg><rect x="40" y="40" width="20" height="20" fill="currentColor"/></svg>')
+    with escena.pagina_de_escena(chrome, escena.ruta_plantilla("imagen"), spec, brand) as (page, d):
+        escena._cuadro(page, d - 0.05)
+        ancho, alto = page.evaluate(
+            "() => { const s = document.querySelector('[data-caja^=\"dibujo\"] svg').viewBox.baseVal;"
+            " return [s.width, s.height]; }")
+    assert ancho > 0 and alto > 0
+
+
+def test_svg_sin_viewbox_y_sin_contenido_medible_falla_nombrando_el_dibujo(chrome, tmp_path):
+    brand, spec = _un_dibujo(chrome, tmp_path, "<svg></svg>")
+    with pytest.raises(escena.ContratoError, match="viewBox"):
+        with escena.pagina_de_escena(chrome, escena.ruta_plantilla("imagen"), spec, brand) as (page, d):
+            escena._cuadro(page, d - 0.05)
+
+
+# --- B4(a): formas fuera de la convención (sólo relleno, <text>) se revelan ----
+# progresivo, no de golpe (QA 03/10/2026)
+
+def _dibujo_con_cue(tmp_path, svg_contenido, cue=1.0, duracion=3.0):
+    svg = tmp_path / "forma.svg"
+    svg.write_text(svg_contenido)
+    brand = escena.cargar_brand(None)
+    spec = escena.resolver_dibujos({"titulo": {"texto": "Una idea"}, "duracion": duracion,
+                                    "dibujos": [{"id": "a", "svg": str(svg), "cue": cue}]})
+    return brand, spec
+
+
+def test_una_forma_solo_con_relleno_se_revela_progresivo_no_de_golpe(chrome, tmp_path):
+    brand, spec = _dibujo_con_cue(
+        tmp_path, '<svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="80" fill="currentColor"/></svg>')
+    entrada = brand["movimiento"]["entrada"]
+    with escena.pagina_de_escena(chrome, escena.ruta_plantilla("imagen"), spec, brand) as (page, _):
+        escena._cuadro(page, 1.0 + entrada * 0.15)
+        temprano = _pixeles(page, "dibujo a", _fondo_rgb(brand))
+        escena._cuadro(page, 1.0 + entrada)
+        maximo = _pixeles(page, "dibujo a", _fondo_rgb(brand))
+    assert 0 < temprano < maximo * 0.7, (temprano, maximo)
+
+
+def test_el_relleno_no_entra_hasta_que_el_trazo_esta_casi_completo(chrome):
+    # J2 (QA 03/10/2026): ningún test anterior distinguía "el relleno entra después del
+    # trazo" de "el relleno entra entero apenas arranca el trazo" (esa mutación sobrevivía).
+    brand = escena.cargar_brand(None)
+    entrada = brand["movimiento"]["entrada"]
+    spec = escena.resolver_dibujos(UN_DIBUJO)
+    FILL_OPACITY = ("() => +document.querySelector('[data-caja=\"dibujo lampara\"] .lleno')"
+                    ".getAttribute('fill-opacity')")
+    with escena.pagina_de_escena(chrome, escena.ruta_plantilla("imagen"), spec, brand) as (page, _):
+        escena._cuadro(page, 1.0 + entrada * 0.3)
+        temprano = page.evaluate(FILL_OPACITY)
+        escena._cuadro(page, 1.0 + entrada)
+        final = page.evaluate(FILL_OPACITY)
+    assert temprano == 0, "a 30% del tiempo de entrada el relleno todavía no tiene que verse"
+    assert final == 1
+
+
+def test_un_text_tambien_se_revela_progresivo_no_de_golpe(chrome, tmp_path):
+    brand, spec = _dibujo_con_cue(
+        tmp_path,
+        '<svg viewBox="0 0 200 200">'
+        '<text x="10" y="150" font-size="140" fill="currentColor">OK</text></svg>')
+    entrada = brand["movimiento"]["entrada"]
+    with escena.pagina_de_escena(chrome, escena.ruta_plantilla("imagen"), spec, brand) as (page, _):
+        escena._cuadro(page, 1.0 + entrada * 0.15)
+        temprano = _pixeles(page, "dibujo a", _fondo_rgb(brand))
+        escena._cuadro(page, 1.0 + entrada)
+        maximo = _pixeles(page, "dibujo a", _fondo_rgb(brand))
+    assert 0 < temprano < maximo * 0.7, (temprano, maximo)
