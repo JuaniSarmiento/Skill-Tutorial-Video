@@ -213,6 +213,29 @@ pueden mezclar con segmentos de pantalla en el mismo guion. Ejemplo completo, si
 - **`av<19`**: la faster-whisper actual rompe con `av` 19 (`metadata_errors`). Va pineado en
   los comandos de abajo.
 
+## Diapositivas de cátedra: skill `presentaciones-tupad`
+
+Para videos de una materia de UTN TUPaD, las diapositivas las arma la skill
+**`presentaciones-tupad`** (`~/.claude/skills/presentaciones-tupad/`), no las escenas de arriba:
+es el estilo institucional (azul UTN, tarjetas, código sobre gris, pie con logo y numeración) y
+genera `.pptx` editable + `.pdf` desde un YAML. Las escenas animadas quedan para videos propios.
+
+- **Si la cátedra ya tiene la presentación**, se usa esa (es material que el alumno también lee).
+  Si no la hay o hay que corregirla, se arma con `presentaciones-tupad` (leé su `SKILL.md`).
+- **El código y las salidas salen de ejecutar los `.py`**, y la pila de llamadas o el árbol de
+  recursión se dibujan desde una traza real (`imagen: {diagrama: pila|arbol, ...}`). Las salidas
+  de la diapositiva y las de la terminal del video coinciden porque salen del mismo programa.
+- **Del PDF al video**: cada página a 1920x1080 (`pdftoppm -r 120 -png` y encuadre sin deformar)
+  como tramo de imagen fija a pantalla completa; los recuadros sobre lo que se nombra y los
+  cortes al editor/terminal se sincronizan con la voz. El método completo, probado en los videos
+  de la U10 de Programación I, está en
+  `~/Proyectos/Video-Tutoriales/u10-recursividad/produccion/` (`LEEME.md` y `scripts/armar.py`).
+- **Revelado por partes sin animar**: para una diapositiva densa, generar con la spec variantes
+  que muestren una tarjeta por vez y pasarlas con cortes (no viola "solo cortes").
+- Las dos skills comparten las reglas que importan: código leído de archivos reales, salidas
+  ejecutadas, ninguna ruta personal en pantalla (`/tmp/recursividad/`, carpeta real) y DejaVu
+  Sans Mono sin ligaduras (`==` no se puede ver como un símbolo).
+
 ## Transiciones
 
 `"transicion"` en el guion (S6 del Hito 2, `docs/explicador/HITO2.md`): **arriba** del guion es
