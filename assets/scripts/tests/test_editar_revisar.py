@@ -353,7 +353,7 @@ def test_voz_baja_pero_con_contenido_no_se_confunde_con_silencio(raiz, tmp_path)
 
 def test_fish_lentas_deja_1_3s_de_silencio_entre_segmentos_y_d3_lo_marca(raiz, tmp_path):
     assert "profe" in editar.FISH_LENTAS  # profe es una voz de FISH_LENTAS
-    gap = editar.LEAD + 1.0  # LEAD + la "cola" de FISH_LENTAS en preparar()
+    gap = editar.LEAD + editar._cola("profe")  # NOTE 11: misma fuente que preparar()
     habla = tmp_path / "habla.wav"
     silencio = tmp_path / "silencio.wav"
     _clip(habla, "sine=f=300:d=1")

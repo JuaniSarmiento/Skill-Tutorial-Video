@@ -417,6 +417,14 @@ def spec_de_escena(seg: dict, slot: float, voz_palabras: list[dict]) -> dict:
     return escena.resolver_spec({**spec, "duracion": slot}, corridas)
 
 
+def _cola(voz_name: str) -> float:
+    """Margen después de la voz (NOTE 11): depende de si la voz es rápida
+    (FISH_SPEED >= 1.0), de FISH_LENTAS, o ninguna de las dos (TAIL). Única fuente
+    de esta cuenta: `preparar()` y el test de la decisión 2 (D3/FISH_LENTAS) la
+    usan a través de esta función, no de un número copiado a mano."""
+    return 0.6 if FISH_SPEED.get(voz_name, 0.8) >= 1.0 else (1.0 if voz_name in FISH_LENTAS else TAIL)
+
+
 def preparar(vid: str, voz_name: str) -> list[tuple[dict, float, list | None]]:
     """Genera (o reusa) la voz de cada segmento y mide su slot: [(seg, slot, palabras)].
 
@@ -427,8 +435,7 @@ def preparar(vid: str, voz_name: str) -> list[tuple[dict, float, list | None]]:
     for i, seg in enumerate(load(vid)["segmentos"]):
         wav = voice_wav(vid, voz_name, i, seg["texto"])
         voice = duration(wav)
-        cola = 0.6 if FISH_SPEED.get(voz_name, 0.8) >= 1.0 else (1.0 if voz_name in FISH_LENTAS else TAIL)
-        slot = round(max(seg.get("min", 0), voice + LEAD + cola), 2)
+        slot = round(max(seg.get("min", 0), voice + LEAD + _cola(voz_name)), 2)
         tramos.append((seg, slot, palabras_de_voz(wav) if es_escena(seg) else None))
         print(f"  seg {i:02d}: voz {voice:5.1f}s -> slot {slot:5.1f}s")
     return tramos
