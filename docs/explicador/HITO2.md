@@ -202,7 +202,20 @@ aviso con su nombre.
 - `<use href="#c" fill="currentColor">` con `#c` sin fill propio se rechaza en falso.
 - Mutantes vivos sin bug: `urlsubstr`, `textolibre`, `polylinelibre`, `otroslineal`, `rootsinresolve`.
 
-**S7a (zonas)** — falta su segunda ronda de QA
+**S3 (efectos de sonido)** — pasó QA (04/10)
+- Faltan tests de: sfx en un segmento i>0 (acumulado de slots), sfx dentro de la mezcla CON
+  música, y el cambio en `preparar()` (mutantes M3/M4/M5 sobreviven; el código anda).
+- Dos sfx con la misma cue de texto caen ambos en la primera aparición (`resolver_cue` vs
+  `resolver_cues`); SKILL.md dice que se resuelven "igual que en una escena".
+- Entradas mal formadas (`cue`/`archivo` faltante, `ganancia_db` no numérico, `archivo: ""`,
+  `sfx` como objeto) terminan en traceback en vez de abortar al arrancar.
+- Nivel de los sfx fijo (~-28 dBFS de pico), no relativo a la voz.
+- `"Pop"` con mayúscula no se reconoce como sonido generado.
+- La docstring de `sfx.construir_pista` miente sobre la duración de la pista.
+
+**S7a (zonas)** — 2 BLOCKING abiertos (pegar/insertar líneas da 0 momentos; cursor de bloque
+≥20 px parpadeando da un momento falso cada ~3 s). Arreglo frenado el 04/10 para priorizar S8;
+retomar antes de S7b.
 - Un menú que se abre y se cierra da dos momentos (el cierre vuelve a un estado previo).
 - Mutaciones de FPS, `ANCHO`, "el ruido mueve la base" sin test dedicado.
 
