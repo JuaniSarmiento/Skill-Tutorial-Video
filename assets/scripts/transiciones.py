@@ -136,13 +136,28 @@ def anchos_barrido(fase: str, t0: float, mitad: float, ancho: int = 1920, fps: i
     banker's rounding de `round()` en un `mitad*fps` que cae justo en .5 (p.ej.
     0.35s a 30fps = 10.5) redondea para el PAR más cercano, que a veces es para
     abajo, y deja la transición 1-2 cuadros corta (R-6.4 pide ±1 cuadro).
+
+    En la mitad SALIENTE, `t0+mitad` es la duración total del tramo (`slot`), que
+    casi nunca es múltiplo exacto de `1/fps` (viene de la duración de las
+    palabras): el último cuadro REAL del archivo (`round(slot*fps)-1`, la misma
+    cuenta que usa G1) queda ANTES de `t0+mitad`, así que un comando agendado en
+    `t0+i/fps` cae en general DESALINEADO de la grilla de cuadros real del
+    archivo (que arranca en 0, no en `t0`) y puede perderse entre dos cuadros, no
+    sólo el último (gotcha medido por QA: el corte quedaba a 99.x% en vez de
+    100%). Por eso los puntos de la mitad saliente se agendan ANCLADOS al último
+    cuadro real y contando para atrás de a `1/fps` exacto, en vez de para
+    adelante desde `t0`: así caen todos sobre la grilla real.
     """
     n = max(1, int(mitad * fps + 0.5))
+    ultimo_frame_t = (round((t0 + mitad) * fps) - 1) / fps if fase == "saliente" else None
     salida = []
     for i in range(n + 1):
         p_local = i / n
         p = 0.5 * p_local if fase == "saliente" else 0.5 + 0.5 * p_local
-        t = t0 + i / fps if fase == "saliente" else i / fps
+        if fase == "saliente":
+            t = ultimo_frame_t - (n - i) / fps
+        else:
+            t = i / fps
         sweep = ancho * (1 - math.cos(math.pi * p))
         x_right = min(sweep, ancho)
         x_left = max(sweep - ancho, 0.0)

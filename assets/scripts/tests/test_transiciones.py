@@ -127,7 +127,11 @@ def test_color_de_cambiar_el_acento_del_brand_cambia_el_color_de_barrido():
 def test_anchos_barrido_saliente_arranca_casi_en_0_y_termina_en_el_ancho_completo():
     anchos = transiciones.anchos_barrido("saliente", t0=1.0, mitad=0.2, ancho=320, fps=30)
 
-    assert anchos[0][0] == 1.0
+    # el primer punto queda anclado a la grilla real de cuadros (contado para
+    # atrás desde el último cuadro real, no para adelante desde t0), así que
+    # puede caer hasta 1 cuadro antes de t0 -nunca más lejos- (ver docstring de
+    # anchos_barrido: evita que un comando quede desalineado y "se pierda").
+    assert abs(anchos[0][0] - 1.0) <= 1 / 30 + 1e-6
     assert anchos[0][1:] == (0, 1)           # x=0, w≈0: nunca 0 exacto (drawbox w=0 = "completo")
     assert anchos[-1][1:] == (0, 320)        # x=0, w=ancho: 100% de cobertura en el corte
     assert all(x == 0 for _, x, _ in anchos)  # saliente: el borde de ataque, x siempre fijo en 0
@@ -155,6 +159,17 @@ def test_anchos_barrido_redondea_hacia_arriba_desde_0_5_para_no_acortar_r64():
     # el redondeo correcto para R-6.4 (±1 cuadro) es 11.
     anchos = transiciones.anchos_barrido("saliente", t0=0.0, mitad=0.35, ancho=320, fps=30)
     assert len(anchos) == 12  # n=11 -> 12 puntos
+
+
+def test_r64_cuenta_de_cuadros_con_acento_coincide_con_la_duracion_pedida():
+    # Repro del hallazgo NOTE 1 de QA: 0.6s daba 16 cuadros, 0.7s daba 18.
+    for duracion, esperado in [(0.6, 18), (0.7, 21)]:
+        fps, ancho = 30, 1920
+        mitad = duracion / 2
+        saliente = transiciones.anchos_barrido("saliente", t0=0.0, mitad=mitad, ancho=ancho, fps=fps)
+        entrante = transiciones.anchos_barrido("entrante", t0=0.0, mitad=mitad, ancho=ancho, fps=fps)
+        con_acento = sum(1 for _, _, w in saliente + entrante if w / ancho > 0.01)
+        assert abs(con_acento - esperado) <= 1, (duracion, con_acento, esperado)
 
 
 def test_comandos_barrido_un_comando_x_y_un_comando_w_por_cuadro():
@@ -312,6 +327,23 @@ def _fila(mp4, t: float, ancho_px: int = 4, x: int = 0, y: int = 100) -> list[tu
                           "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
                          capture_output=True, check=True).stdout
     return [tuple(out[i * 3:i * 3 + 3]) for i in range(ancho_px)]
+
+
+def test_aplicar_barrido_saliente_llega_al_100_por_ciento_en_el_cuadro_del_corte(tmp_path):
+    # Mejora de calidad (QA): "el saliente llega a 99.5-99.8% porque el comando de
+    # t=slot nunca se aplica". slot=1.37 NO es múltiplo de 1/30: el último cuadro
+    # real del archivo queda ANTES de t=slot, así que el sendcmd agendado justo en
+    # t0+mitad (=slot) cae después del último cuadro y nunca se ejecuta. Se mide
+    # cerca del borde derecho (no en x=0, que ya está cubierto con cualquier avance).
+    slot, mitad, ancho = 1.37, 0.3, 320
+    clip = _clip(tmp_path, "00.mp4", dur=slot, w=ancho, h=240)
+
+    transiciones.aplicar_barrido(clip, "saliente", t0=slot - mitad, mitad=mitad, color="0xF2B544",
+                                 ancho=ancho, fps=30)
+
+    ultimo_frame_t = (round(slot * 30) - 1) / 30
+    for rgb in _fila(clip, ultimo_frame_t, ancho_px=2, x=ancho - 2, y=100):
+        assert _cerca(rgb, (242, 181, 68), tol=10), f"el cuadro del corte no llegó al 100%: {rgb}"
 
 
 def test_aplicar_barrido_entrante_fuera_de_la_ventana_ninguna_columna_tiene_acento(tmp_path):
