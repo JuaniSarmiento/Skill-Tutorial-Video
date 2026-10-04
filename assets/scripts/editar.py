@@ -17,6 +17,7 @@ uso:
   editar.py voz     <vNN> <voz>      genera videos/<vNN>/voz-<voz>.wav y final-<voz>.mp4 (+ .srt)
   editar.py exportar <vNN>           exporta textos por segmento para generar voces fuera (Colab)
   editar.py escenas <vNN> [voz]      deja videos/<vNN>/escenas/NN.json listos para la hoja de contacto (no renderiza)
+  editar.py zonas   <vNN>            deja videos/<vNN>/zonas/NN.json con los momentos clave detectados en el crudo de cada segmento de pantalla (fuente de datos del zoom automático, ver SKILL.md). Sólo lee: no genera voces ni toca ningún video
   editar.py revisar <vNN> [voz] [--estricto]   el director: mide tiempo muerto, silencios y roles (sección Director en SKILL.md). Sólo lee: no genera ni modifica nada. Sin --estricto sale siempre con 0; con --estricto sale con 1 si hay hallazgos
 
 Un segmento con "escena": {"tipo": "diagrama|presentacion|datos", ...} no se corta del crudo:
@@ -585,6 +586,31 @@ def voz(vid: str, name: str) -> None:
     print(f"{vid}: {final.name} {duration(final):.1f}s")
 
 
+def zonas(vid: str) -> list[Path]:
+    """Deja en videos/<vNN>/zonas/NN.json los momentos clave detectados en el crudo de
+    cada segmento de pantalla (S7a del Hito 2, docs/explicador/HITO2.md, decisión Q5):
+    sirven de fuente para el zoom automático de S7b. Sólo lee el crudo: no genera voces
+    ni toca ningún video. Los títulos y las escenas no usan crudo, así que no se analizan.
+    """
+    import zonas as zonas_mod
+    g = load(vid)
+    raw_g = ROOT / g["raw"] if g.get("raw") else None
+    out = ROOT / "videos" / vid / "zonas"
+    out.mkdir(parents=True, exist_ok=True)
+    rutas = []
+    for i, seg in enumerate(g["segmentos"]):
+        if seg.get("tipo") == "titulo" or es_escena(seg):
+            continue
+        raw = ROOT / seg["raw"] if seg.get("raw") else raw_g
+        if raw is None or not raw.exists():
+            continue
+        momentos = zonas_mod.detectar_momentos(raw, seg["inicio"], seg["fin"])
+        r = out / f"{i:02d}.json"
+        r.write_text(json.dumps(momentos, ensure_ascii=False, indent=1))
+        rutas.append(r)
+    return rutas
+
+
 def exportar(vid: str) -> None:
     g = load(vid)
     out = ROOT / "videos" / vid / "textos.json"
@@ -715,6 +741,12 @@ if __name__ == "__main__":
         else:   # ruta absoluta: el comando se copia y se corre desde la raíz del tutorial
             print(f"hoja de contacto: uv run --with playwright python {Path(__file__).resolve().parent / 'escena.py'} contacto "
                   + " ".join(str(r) for r in rutas) + f" -o {ROOT / 'videos' / vid / 'contacto.png'}")
+    elif accion == "zonas":
+        rutas = zonas(vid)
+        if not rutas:
+            print(f"{vid}: no hay segmentos de pantalla para analizar")
+        else:
+            print(f"{vid}: {len(rutas)} segmento(s) de pantalla analizados -> " + ", ".join(str(r) for r in rutas))
     elif accion == "revisar":
         estricto = "--estricto" in sys.argv
         posicionales = [a for a in sys.argv[3:] if not a.startswith("--")]
