@@ -75,7 +75,13 @@
     ]
    },
    "texto": "Ana puso diez mil dólares, y termina con ciento cinco mil. Sofía puso treinta mil, y termina con noventa y cuatro mil. ¿El secreto? El interés compuesto.",
-   "transicion": "barrido"
+   "transicion": "barrido",
+   "sfx": [
+    {
+     "archivo": "pop",
+     "cue": "y termina"
+    }
+   ]
   },
   {
    "rol": "analogia",
@@ -88,7 +94,7 @@
      {
       "id": "copo",
       "svg": "dibujos/copo.svg",
-      "cue": "un copo"
+      "cue": "copo de nieve"
      },
      {
       "id": "rueda",
@@ -160,7 +166,7 @@
       "de": "i",
       "a": "n",
       "texto": "se suman",
-      "cue": "se suman"
+      "cue": "suman al capital"
      }
     ]
    },
@@ -200,7 +206,13 @@
     ]
    },
    "texto": "El primer año ganás cien dólares. El segundo, ciento diez. El tercero, ciento veintiuno. Y el décimo, doscientos treinta y seis. Sin poner nada más.",
-   "transicion": "barrido"
+   "transicion": "barrido",
+   "sfx": [
+    {
+     "archivo": "whoosh",
+     "cue": 0
+    }
+   ]
   },
   {
    "rol": "ejemplo",
@@ -235,7 +247,13 @@
      }
     ]
    },
-   "texto": "Hoy tenés mil, y no tocás nada. Pasada una década, dos mil seiscientos. A las dos décadas, seis mil setecientos. Y a las tres décadas, más de diecisiete mil."
+   "texto": "Hoy tenés mil, y no tocás nada. Pasada una década, dos mil seiscientos. A las dos décadas, seis mil setecientos. Y a las tres décadas, más de diecisiete mil.",
+   "sfx": [
+    {
+     "archivo": "pop",
+     "cue": "tres décadas"
+    }
+   ]
   },
   {
    "rol": "ejemplo",
@@ -322,7 +340,7 @@
       "id": "f",
       "texto": "Resultado",
       "detalle": "US$ 105.174",
-      "cue": "todo el truco"
+      "cue": "truco"
      }
     ],
     "flechas": [
@@ -366,7 +384,13 @@
     ]
    },
    "texto": "Uno: los intereses también ganan intereses. Dos: empezar temprano pesa más que poner mucho. Y tres: el que multiplica es el tiempo. La mejor fecha para empezar es hoy.",
-   "transicion": "fundido"
+   "transicion": "fundido",
+   "sfx": [
+    {
+     "archivo": "ding",
+     "cue": "mejor fecha"
+    }
+   ]
   }
  ]
 }
