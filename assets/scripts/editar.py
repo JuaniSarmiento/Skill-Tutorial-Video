@@ -39,6 +39,8 @@ from pathlib import Path
 
 import encoder
 import musica
+import palabras
+import sfx
 
 ROOT = Path(os.environ.get("TUT_ROOT", os.getcwd()))
 PIPER_MODEL = Path.home() / ".local/share/piper-voices/es_AR-daniela-high.onnx"
@@ -464,15 +466,17 @@ def _cola(voz_name: str) -> float:
 def preparar(vid: str, voz_name: str) -> list[tuple[dict, float, list | None]]:
     """Genera (o reusa) la voz de cada segmento y mide su slot: [(seg, slot, palabras)].
 
-    Las palabras sólo se transcriben para los segmentos de escena, que las necesitan
-    para resolver sus cues.
+    Las palabras se transcriben para los segmentos de escena (que las necesitan para
+    resolver sus cues) y también para cualquier segmento con "sfx" (R-3.2: un efecto
+    sobre una cue de texto en un tramo de pantalla se resuelve igual que en una escena).
     """
     tramos = []
     for i, seg in enumerate(load(vid)["segmentos"]):
         wav = voice_wav(vid, voz_name, i, seg["texto"])
         voice = duration(wav)
         slot = round(max(seg.get("min", 0), voice + LEAD + _cola(voz_name)), 2)
-        tramos.append((seg, slot, palabras_de_voz(wav) if es_escena(seg) else None))
+        necesita_palabras = es_escena(seg) or bool(seg.get("sfx"))
+        tramos.append((seg, slot, palabras_de_voz(wav) if necesita_palabras else None))
         print(f"  seg {i:02d}: voz {voice:5.1f}s -> slot {slot:5.1f}s")
     return tramos
 
@@ -585,6 +589,65 @@ def _normalizar_musica(musica_g):
     return musica_g
 
 
+def _resolver_sfx(vid: str, g: dict, slots: list[float], name: str,
+                   work: Path) -> list[tuple[float, Path, float]]:
+    """[(t_absoluto, archivo, ganancia_db)] de todos los "sfx" del guion (S3,
+    docs/explicador/HITO2.md), resueltos y validados antes de escribir ningún audio:
+
+    - R-3.4: una cue numérica cuenta desde el INICIO DEL SLOT; fuera de [0, slot) aborta
+      nombrando el segmento.
+    - R-3.3: una cue de texto que no se dice aborta nombrando el segmento, "sfx", la cue
+      y lo que se oyó (reusa tal cual el mensaje de palabras.resolver_cue).
+    - Un "archivo" faltante (ruta propia) aborta con su ruta absoluta, igual que la
+      música (sfx.resolver_archivo).
+
+    El tiempo de una cue de texto es relativo al WAV de la voz (arranca en 0): en el
+    audio final ese wav empieza LEAD segundos después del inicio del slot (igual que
+    spec_de_escena con las escenas), de ahí el "+ LEAD".
+    """
+    cache_dir = work / "sfx"
+    efectos: list[tuple[float, Path, float]] = []
+    t = 0.0
+    for i, (seg, slot) in enumerate(zip(g["segmentos"], slots)):
+        for s in seg.get("sfx", []):
+            archivo = sfx.resolver_archivo(ROOT, s["archivo"], cache_dir)
+            cue = s["cue"]
+            ganancia = s.get("ganancia_db", 0.0)
+            if isinstance(cue, (int, float)) and not isinstance(cue, bool):
+                if not (0 <= cue < slot):
+                    sys.exit(f"ABORTADO: el segmento {i:02d} tiene un sfx con cue {cue} "
+                             f"fuera del slot (0..{slot:.3f}s)")
+                efectos.append((t + cue, archivo, ganancia))
+            else:
+                wav = voice_wav(vid, name, i, seg["texto"])
+                try:
+                    t_rel = palabras.resolver_cue(palabras_de_voz(wav), cue)
+                except ValueError as e:
+                    sys.exit(f"ABORTADO: segmento {i:02d}, sfx {cue!r}: {e}")
+                efectos.append((t + LEAD + t_rel, archivo, ganancia))
+        t += slot
+    return efectos
+
+
+def _mezclar_sfx(efectos_sfx: list[tuple[float, Path, float]], base: Path, dur: float,
+                  work: Path, name: str) -> Path:
+    """Mezcla la pista de sfx (si hay) sobre `base`, ANTES de normalizar (R-3.5/R-2.3: el
+    limitador de TRUE PEAK final tiene que ver también los sfx, no sólo voz+música).
+
+    Sin "sfx" en el guion, `efectos_sfx` está vacía y esto devuelve `base` tal cual: ni se
+    genera `sfx-<voz>.wav` ni se toca un byte de más (G1-G4 no se mueven sin la clave).
+    """
+    if not efectos_sfx:
+        return base
+    pista = work / f"sfx-{name}.wav"
+    sfx.construir_pista(dur, efectos_sfx, pista)
+    con_sfx = work / f"{base.stem}-sfx.wav"
+    run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(base), "-i", str(pista),
+         "-filter_complex", "[0:a][1:a]amix=inputs=2:duration=first:normalize=0[aout]",
+         "-map", "[aout]", "-t", f"{dur:.6f}", str(con_sfx)])
+    return con_sfx
+
+
 def voz(vid: str, name: str) -> None:
     g = load(vid)
     work = ROOT / "videos" / vid
@@ -593,6 +656,10 @@ def voz(vid: str, name: str) -> None:
     # R-2.6: archivo de música faltante o ilegible aborta ACÁ, antes de generar nada
     # (ni la voz): "al arrancar", no a mitad de render.
     m_archivo = musica.resolver_archivo(ROOT, musica_g["archivo"]) if musica_g else None
+    # S3: mismo momento para los sfx (archivo faltante o cue inválida abortan antes de
+    # escribir nada); sin "sfx" en ningún segmento, `efectos_sfx` queda vacía y el resto
+    # de esta función no se entera de que esto existe (G1-G4: nada cambia sin la clave).
+    efectos_sfx = _resolver_sfx(vid, g, slots, name, work)
 
     pcm = bytearray()
     srt = []
@@ -629,8 +696,9 @@ def voz(vid: str, name: str) -> None:
         acotada = work / f"voz-acotada-{name}.wav"
         run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(wav_out), "-af", "apad",
              "-t", f"{duration(video):.6f}", str(acotada)])
+        fuente = _mezclar_sfx(efectos_sfx, acotada, duration(video), work, name)
         normalizada = work / f"normalizada-{name}.wav"
-        musica.normalizar_dos_pasadas(acotada, normalizada, objetivo_i=-16.0,
+        musica.normalizar_dos_pasadas(fuente, normalizada, objetivo_i=-16.0,
                                        margen_tp=MARGEN_TP_LOUDNORM,
                                        limite_tp_final=TP_OBJETIVO_CON_MUSICA,
                                        sr=SR_SALIDA_CON_MUSICA)
@@ -657,8 +725,9 @@ def voz(vid: str, name: str) -> None:
         run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(wav_out), "-i", str(musica_out),
              "-filter_complex", "[0:a][1:a]amix=inputs=2:duration=longest:normalize=0,apad[aout]",
              "-map", "[aout]", "-t", f"{duration(video):.6f}", str(mezcla)])
+        fuente = _mezclar_sfx(efectos_sfx, mezcla, duration(video), work, name)
         normalizada = work / f"normalizada-{name}.wav"
-        musica.normalizar_dos_pasadas(mezcla, normalizada, objetivo_i=-16.0,
+        musica.normalizar_dos_pasadas(fuente, normalizada, objetivo_i=-16.0,
                                        margen_tp=MARGEN_TP_LOUDNORM,
                                        limite_tp_final=TP_OBJETIVO_CON_MUSICA,
                                        sr=SR_SALIDA_CON_MUSICA)
