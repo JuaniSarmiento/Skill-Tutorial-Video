@@ -70,7 +70,7 @@ TP_OBJETIVO_CON_MUSICA = -2.0
 # el objetivo final): deliberadamente laxo, así no es loudnorm el que frena la ganancia
 # antes de llegar al integrado (ver musica.normalizar_dos_pasadas). El TP real queda
 # garantizado por el limitador de TRUE PEAK aparte, apuntando a TP_OBJETIVO_CON_MUSICA.
-MARGEN_TP_LOUDNORM = -1.0
+MARGEN_TP_LOUDNORM = -0.5
 # -ar explícito en la salida con música: sin esto, el sample rate que loudnorm usa
 # internamente para sobremuestrear (al medir TP) se cuela a la salida (medido: 96000Hz).
 SR_SALIDA_CON_MUSICA = 48000

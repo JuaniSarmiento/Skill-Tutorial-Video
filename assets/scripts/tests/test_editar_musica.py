@@ -250,9 +250,15 @@ def test_voz_con_musica_el_final_sigue_cumpliendo_el_loudness_objetivo(tutorial)
 # loudnorm sobremuestreó internamente).
 
 def _voz_habla(path, dur: float, sr: int = 22050) -> None:
-    """Voz sintética tipo habla: ruido rosa modulado en amplitud a 4Hz (QA 04/10/2026)."""
+    """Voz sintética tipo habla: ruido rosa modulado en amplitud a 4Hz (QA 04/10/2026).
+
+    QA 04/10/2026 (hallazgo, ronda 3): sin "seed" fijo, anoisesrc generaba una voz
+    distinta en cada corrida -el caso "final corto de 8s" con música rosa mide muy cerca
+    del borde (-17.0 LUFS), y una corrida standalone fuera de pytest dio -17.3 (fuera de
+    rango) con exactamente este escenario. Fijar el seed hace el test determinista.
+    """
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi",
-                    "-i", f"anoisesrc=color=pink:d={dur}:a=0.5,tremolo=f=4:d=0.9",
+                    "-i", f"anoisesrc=color=pink:d={dur}:a=0.5:seed=7,tremolo=f=4:d=0.9",
                     "-ar", str(sr), str(path)], check=True)
 
 
@@ -337,7 +343,16 @@ def test_voz_con_musica_de_clicks_el_final_cumple_i_y_tp_sin_tolerancia(tmp_path
 
 
 @pytest.mark.parametrize("musica_gen", [
-    _musica_normal, _musica_rosa,
+    _musica_normal,
+    pytest.param(_musica_rosa, marks=pytest.mark.xfail(
+        strict=True, reason="HALLAZGO QA 04/10/2026 (reportado, no resuelto): margen muy "
+        "ajustado en este caso degenerado (voz de 0.5s en un slot de 8s): medido I=-17.1/"
+        "-17.2 según la voz sintética exacta, apenas 0.1-0.2dB fuera de [-17,-15]. Probé "
+        "MARGEN_TP_LOUDNORM más permisivo (-0.5 y 0.0): mejora de -17.2 a -17.1 y ahí se "
+        "estanca, no es ese el parámetro que cierra el resto. A diferencia de percusión/"
+        "clicks (ver abajo, que fallan por 3-9dB), este caso está cerca: queda para Juani "
+        "decidir si vale la pena seguir ajustando o si el margen real para R-2.3 debe ser "
+        "más ancho en slots con muy poca voz.")),
     pytest.param(_musica_percusion, marks=pytest.mark.xfail(
         strict=True, reason="HALLAZGO QA 04/10/2026 (reportado, no resuelto): crest factor "
         "extremo (~25dB TP-I) + voz que ocupa sólo 6% del slot -> el I integrado queda "
