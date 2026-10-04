@@ -194,9 +194,17 @@ def aplicar_ducking(pista: Path, vts: list[tuple[float, float, str]],
         raise RuntimeError(f"falló aplicando el ducking: {res.stderr[:2000]}")
 
 
+CROSSFADE_BUCLE = 0.1  # segundos de crossfade en cada costura del bucle (N6, QA 03/10/2026)
+
+
 def preparar_pista(archivo: Path, total: float, fundido: float, out: Path) -> None:
     """Deja la música durando exactamente `total` (R-2.4): bucle si es corta, recorte con
-    fundido de `fundido` segundos al final si es larga."""
+    fundido de `fundido` segundos al final si es larga.
+
+    N6 (QA 03/10/2026): -stream_loop repite el clip tal cual, sin pisar los extremos: si no
+    cierra en un cruce por cero, cada vuelta salta de golpe del último valor al primero (un
+    click). Acá cada costura lleva un crossfade de CROSSFADE_BUCLE segundos (`acrossfade`).
+    """
     d = duracion(archivo)
     if d >= total:
         f = min(fundido, total)
@@ -205,13 +213,29 @@ def preparar_pista(archivo: Path, total: float, fundido: float, out: Path) -> No
              "-af", f"afade=t=out:st={max(total - f, 0):.3f}:d={f:.3f}", str(out)],
             capture_output=True, text=True)
     else:
-        vueltas = int(total // d) + 1
-        res = subprocess.run(
-            ["ffmpeg", "-y", "-loglevel", "error", "-stream_loop", str(vueltas), "-i", str(archivo),
-             "-t", f"{total:.3f}", str(out)],
-            capture_output=True, text=True)
+        cf = min(CROSSFADE_BUCLE, d / 2)
+        paso = d - cf if cf > 0 else d
+        vueltas = max(1, int((total - d) // paso) + 2)
+        if vueltas == 1 or cf <= 0:
+            res = subprocess.run(
+                ["ffmpeg", "-y", "-loglevel", "error", "-stream_loop", str(vueltas), "-i", str(archivo),
+                 "-t", f"{total:.3f}", str(out)],
+                capture_output=True, text=True)
+        else:
+            cmd = ["ffmpeg", "-y", "-loglevel", "error"]
+            for _ in range(vueltas):
+                cmd += ["-i", str(archivo)]
+            etiqueta = "0:a"
+            partes = []
+            for i in range(1, vueltas):
+                nueva = f"a{i}"
+                partes.append(f"[{etiqueta}][{i}:a]acrossfade=d={cf:.3f}:c1=tri:c2=tri[{nueva}]")
+                etiqueta = nueva
+            cmd += ["-filter_complex", ";".join(partes), "-map", f"[{etiqueta}]",
+                    "-t", f"{total:.3f}", str(out)]
+            res = subprocess.run(cmd, capture_output=True, text=True)
     if res.returncode != 0:
-        raise RuntimeError(f"falló preparando la pista de música: {res.stderr[-1000:]}")
+        raise RuntimeError(f"falló preparando la pista de música: {res.stderr[:2000]}")
 
 
 def _loudness_en_ventana(wav: Path, inicio: float, fin: float, default: float) -> float:

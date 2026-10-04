@@ -244,6 +244,40 @@ def test_preparar_pista_mas_larga_que_el_total_recorta_con_fundido(tmp_path):
     assert _rms_en(out, 1.9, ventana=0.02) < base * 0.5
 
 
+def _salto_maximo_cerca_de(wav: Path, t: float, ventana: float, sr: int = 44100) -> int:
+    """Máxima diferencia absoluta entre muestras consecutivas de `wav`, en una ventana de
+    `ventana` segundos centrada en el segundo `t` (para medir un click puntual)."""
+    import array
+
+    with wave.open(str(wav)) as w:
+        w.setpos(max(int((t - ventana / 2) * sr), 0))
+        n = int(ventana * sr)
+        frames = w.readframes(n)
+    m = array.array("h")
+    m.frombytes(frames)
+    if len(m) < 2:
+        return 0
+    return max(abs(m[i + 1] - m[i]) for i in range(len(m) - 1))
+
+
+def test_preparar_pista_en_bucle_no_deja_un_click_en_la_costura(tmp_path):
+    # N6 (QA 03/10/2026): -stream_loop repite el clip tal cual, sin pisar los extremos: si
+    # el clip no cierra en un cruce por cero (437.3 Hz en 1.0s no completa un número entero
+    # de ciclos), cada vuelta del bucle salta de golpe del último valor al primero. Medido
+    # sin fix: salto en la costura ~3966 contra ~256 en el resto de la señal (~15x).
+    archivo = tmp_path / "clip.wav"
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi",
+                    "-i", "sine=f=437.3:d=1.0", "-ar", "44100", str(archivo)], check=True)
+    out = tmp_path / "pista.wav"
+
+    musica.preparar_pista(archivo, total=4.0, fundido=2.0, out=out)
+
+    salto_costura = max(_salto_maximo_cerca_de(out, 1.0, ventana=0.01),
+                         _salto_maximo_cerca_de(out, 2.0, ventana=0.01))
+    salto_resto = _salto_maximo_cerca_de(out, 1.5, ventana=0.5)
+    assert salto_costura <= salto_resto * 3, (salto_costura, salto_resto)
+
+
 # --- loudness_integrada(): I (LUFS), vía ebur128 ---------------------------------------
 
 def test_loudness_integrada_de_un_tono_mas_fuerte_es_mayor(tmp_path):
