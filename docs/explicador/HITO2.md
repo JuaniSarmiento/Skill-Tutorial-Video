@@ -188,7 +188,23 @@ aviso con su nombre.
 
 ## Pendientes (notas de QA no bloqueantes)
 
-_Se completa al cerrar cada rebanada._
+**S2 (música)**
+- Finales muy cortos (8 s) con música de crest factor extremo (percusión, clicks) o rosa quedan
+  fuera de -16 ±1 LUFS (xfail en `test_editar_musica.py`). Explorar compresión suave previa.
+
+**S4 (imagen)**
+- Íconos con varios subtrazos (Heroicons outline) terminan de dibujarse al ~40 % de la entrada:
+  Chrome reinicia el dash en cada subtrazo. Progresivo, pero más rápido que lo previsto (R-4.2).
+- Forma con stroke y fill a la vez sin `.lleno` aparece casi entera desde el primer cuadro.
+- Subtrazo de largo cero (`h0`) con cap redondo pierde su punto en el cuadro final.
+- `aria-*`/`data-*` no se descartan del markup (el comentario dice que sí); SKILL.md cita a Font
+  Awesome entre los sets con stroke/fill en la raíz (no es así).
+- `<use href="#c" fill="currentColor">` con `#c` sin fill propio se rechaza en falso.
+- Mutantes vivos sin bug: `urlsubstr`, `textolibre`, `polylinelibre`, `otroslineal`, `rootsinresolve`.
+
+**S7a (zonas)** — falta su segunda ronda de QA
+- Un menú que se abre y se cierra da dos momentos (el cierre vuelve a un estado previo).
+- Mutaciones de FPS, `ANCHO`, "el ruido mueve la base" sin test dedicado.
 
 ## Preguntas abiertas (con el default que permite avanzar)
 
