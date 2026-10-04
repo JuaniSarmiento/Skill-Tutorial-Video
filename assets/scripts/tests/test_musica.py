@@ -169,7 +169,13 @@ def test_aplicar_ducking_la_transicion_es_rampa_no_escalon(tmp_path):
     for a, b in zip(puntos, puntos[1:]):
         assert a > b * 1.02, puntos  # progreso real, no una meseta repetida
     assert puntos[0] < base * 0.98, puntos      # no arrancó ya en la meseta "silencio"
-    assert puntos[-1] > base * 0.1 * 1.3, puntos  # no llegó ya a la meseta "voz"
+    # QA 04/10/2026: la rampa interpola en dB (NOTE, ronda 3), no en amplitud lineal: al
+    # 80% del camino en tiempo (d=0.08 de una rampa de ancho 0.1 a cada lado) corresponde
+    # al 80% del camino EN dB (-16 de los -20 totales), bastante más cerca en amplitud
+    # lineal que con una interpolación lineal -eso es justo el comportamiento esperado-,
+    # pero todavía no es la meseta: tiene que quedar al menos 1dB por arriba de los -20.
+    db_final = _dbfs_de_rms(puntos[-1] / base)
+    assert db_final > -20.0 + 1.0, (puntos, db_final)  # no llegó ya a la meseta "voz"
 
 
 # --- B1 (QA 03/10/2026): con muchos segmentos, el evaluador de ffmpeg no puede con -------
@@ -247,6 +253,46 @@ def _salto_maximo_cerca_de(wav: Path, t: float, ventana: float, sr: int = 44100)
     return max(abs(m[i + 1] - m[i]) for i in range(len(m) - 1))
 
 
+# --- QA 04/10/2026 (NOTE, ronda 3): el bucle con crossfade no escala -------------------
+# (repro: música de 1s x total de 1200s -> 1200 acrossfade encadenados, 294s; música de
+# 0.15s x total de 600s -> OSError: Argument list too long). Arreglo: una UNIDAD de bucle
+# sin costura (el crossfade aplicado UNA vez, no por vuelta) + "-stream_loop" sin filtros
+# por vuelta: el costo no crece con la cantidad de vueltas.
+
+def test_preparar_pista_con_musica_de_1s_y_total_de_1800s_termina_en_tiempo_acotado(tmp_path):
+    import time
+
+    corta = _tono(tmp_path, "corta.wav", 1.0)
+    out = tmp_path / "pista.wav"
+
+    inicio = time.monotonic()
+    musica.preparar_pista(corta, total=1800.0, fundido=2.0, out=out)
+    tardo = time.monotonic() - inicio
+
+    assert musica.duracion(out) == pytest.approx(1800.0, abs=0.5)
+    assert tardo < 30, f"tardó {tardo:.1f}s con música de 1s x total de 1800s"
+
+
+def test_preparar_pista_con_musica_muy_corta_y_total_largo_no_falla_por_argument_list_too_long(tmp_path):
+    corta = _tono(tmp_path, "corta.wav", 0.5)  # >= 2*CROSSFADE_BUCLE (0.1*2=0.2), no rechazada
+    out = tmp_path / "pista.wav"
+
+    musica.preparar_pista(corta, total=600.0, fundido=2.0, out=out)
+
+    assert musica.duracion(out) == pytest.approx(600.0, abs=0.5)
+
+
+def test_preparar_pista_con_musica_mas_corta_que_2x_el_crossfade_aborta_con_mensaje_claro(tmp_path):
+    muy_corta = _tono(tmp_path, "muy_corta.wav", 0.05)  # < 2*CROSSFADE_BUCLE (0.2)
+    out = tmp_path / "pista.wav"
+
+    with pytest.raises(SystemExit) as e:
+        musica.preparar_pista(muy_corta, total=10.0, fundido=2.0, out=out)
+
+    assert "corta" in str(e.value).lower()
+    assert not out.exists()
+
+
 def test_preparar_pista_en_bucle_no_deja_un_click_en_la_costura(tmp_path):
     # N6 (QA 03/10/2026): -stream_loop repite el clip tal cual, sin pisar los extremos: si
     # el clip no cierra en un cruce por cero (437.3 Hz en 1.0s no completa un número entero
@@ -317,6 +363,57 @@ def _loudness_en(wav: Path, inicio: float, fin: float) -> float:
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(wav), "-ss", str(inicio),
                     "-to", str(fin), str(recorte)], check=True)
     return musica.loudness_integrada(recorte)
+
+
+# --- QA 04/10/2026 (NOTE, ronda 3, M24): "en silencio, usar la voz anterior; si no hay, --
+# la siguiente" no tenía ningún test directo (sólo quedaba implícito en tests de
+# end-to-end que no distinguían los dos casos).
+
+def test_voz_lu_mas_cercana_prioriza_la_anterior_si_hay():
+    # índice 3 ("silencio"/"mute"): hay voz medida ANTES (índice 1) y DESPUÉS (índice 5):
+    # tiene que usar la de ANTES, no la de después.
+    voz_lu_por_indice = {1: -20.0, 5: -10.0}
+
+    resultado = musica._voz_lu_mas_cercana(voz_lu_por_indice, 3, default=-99.0)
+
+    assert resultado == -20.0
+
+
+def test_voz_lu_mas_cercana_usa_la_siguiente_si_no_hay_anterior():
+    # triangula: sin ninguna voz medida ANTES del índice 1, tiene que caer a la siguiente
+    # (índice 5), no al default.
+    voz_lu_por_indice = {5: -10.0}
+
+    resultado = musica._voz_lu_mas_cercana(voz_lu_por_indice, 1, default=-99.0)
+
+    assert resultado == -10.0
+
+
+# --- QA 04/10/2026 (NOTE, ronda 3, M1): la rampa tiene que probarse por el camino REAL --
+# (voz()/construir_pista): los tests de "no es un escalón" de más arriba llaman a
+# aplicar_ducking() DIRECTO con un `ramp` explícito, así que una mutación que deje
+# construir_pista pasando ramp=0 (escalón) a aplicar_ducking no la detecta ninguno.
+
+def test_construir_pista_la_transicion_a_silencio_es_rampa_no_escalon(tmp_path):
+    voz = _tono(tmp_path, "voz.wav", 4.0)
+    cruda = _tono(tmp_path, "musica-cruda.wav", 4.0, sr=44100)
+    vts = [(0.0, 2.0, "voz"), (2.0, 4.0, "silencio")]
+    out = tmp_path / "musica-juani.wav"
+
+    musica.construir_pista(voz, cruda, vts, debajo_de_la_voz_lu=18, out=out)
+
+    # RELEASE_S=0.6s (liberación, subiendo: voz->silencio): muestrea bien adentro de esa
+    # rampa, lejos de las dos mesetas. Con un escalón (ramp=0), estos puntos saltarían
+    # directo a la meseta de destino -eso es justo lo que este test tiene que detectar.
+    # "voz" (debajo_de_la_voz_lu=18) queda MÁS atenuada que "silencio" (SILENCIO_LU=10):
+    # la transición sube (es la liberación, RELEASE_S=0.6s).
+    meseta_voz = _rms_en(out, 0.5, ventana=0.01, sr=44100)
+    meseta_silencio = _rms_en(out, 3.5, ventana=0.01, sr=44100)
+    puntos = [_rms_en(out, 2.0 + d, ventana=0.005, sr=44100) for d in (-0.2, -0.1, 0.0, 0.1, 0.2)]
+    for a, b in zip(puntos, puntos[1:]):
+        assert b > a * 1.02, puntos  # progreso real, creciente (no un salto ya hecho)
+    assert puntos[0] > meseta_voz * 1.02, (puntos, meseta_voz)          # ya se despegó de "voz"
+    assert puntos[-1] < meseta_silencio * 0.98, (puntos, meseta_silencio)  # no llegó ya a "silencio"
 
 
 def test_construir_pista_en_tramos_con_voz_queda_al_menos_15_lu_por_debajo(tmp_path):
@@ -393,6 +490,26 @@ def _dbfs_pico_en(wav: Path, inicio: float, fin: float) -> float:
     return float("-inf") if m.group(1) == "-inf" else float(m.group(1))
 
 
+# --- QA 04/10/2026 (NOTE, ronda 3): construir_pista no puede costar 2 ffmpeg por ventana -
+# de voz (medido: 57s con 300 segmentos). El loudness de todas las ventanas se mide en UNA
+# sola pasada sobre voz_wav (no un ffmpeg nuevo por ventana).
+
+def test_construir_pista_con_300_segmentos_no_tarda_mas_de_15s(tmp_path):
+    import time
+
+    n = 300
+    voz = _tono(tmp_path, "voz.wav", n * 0.3)
+    cruda = _tono(tmp_path, "musica-cruda.wav", n * 0.3, sr=44100)
+    vts = musica.ventanas([0.3] * n, [(0.05, 0.25)] * n)
+    out = tmp_path / "musica-juani.wav"
+
+    inicio = time.monotonic()
+    musica.construir_pista(voz, cruda, vts, debajo_de_la_voz_lu=18, out=out)
+    tardo = time.monotonic() - inicio
+
+    assert tardo < 15, f"tardó {tardo:.1f}s con 300 segmentos (no puede escalar con 2 ffmpeg/ventana)"
+
+
 def test_construir_pista_en_un_segmento_con_musica_false_queda_por_debajo_de_60dbfs(tmp_path):
     voz = _tono(tmp_path, "voz.wav", 3.0)
     cruda = _tono(tmp_path, "musica-cruda.wav", 3.0, sr=44100)
@@ -400,6 +517,25 @@ def test_construir_pista_en_un_segmento_con_musica_false_queda_por_debajo_de_60d
     out = tmp_path / "musica-juani.wav"
 
     musica.construir_pista(voz, cruda, vts, debajo_de_la_voz_lu=18, out=out)
+
+    assert _dbfs_pico_en(out, 2.2, 2.8) < -60
+
+
+# --- QA 04/10/2026 (NOTE, ronda 3, M19): MUTE_DB=-50 sobrevivía ------------------------
+# porque el test de arriba usa un sine de lavfi (~-18dBFS, "flojo"): -18-50=-68dBFS, que
+# TAMBIÉN es < -60 (no distingue -50 de -90). Con una música FUERTE (cerca de 0dBFS):
+# -50dBFS NO es < -60 (la mutación falla este test), -90dBFS SÍ lo es.
+
+def test_construir_pista_en_mute_con_musica_fuerte_queda_por_debajo_de_60dbfs(tmp_path):
+    voz = _tono(tmp_path, "voz.wav", 3.0)
+    fuerte = tmp_path / "musica-fuerte.wav"
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "sine=f=300:d=3.0",
+                    "-af", "volume=20dB", "-ar", "44100", str(fuerte)], check=True)
+    assert _dbfs_pico_en(fuerte, 0.0, 3.0) > -5, "la música de este test tiene que estar cerca de 0dBFS"
+    vts = [(0.0, 0.3, "silencio"), (0.3, 2.0, "voz"), (2.0, 3.0, "mute")]
+    out = tmp_path / "musica-juani.wav"
+
+    musica.construir_pista(voz, fuerte, vts, debajo_de_la_voz_lu=18, out=out)
 
     assert _dbfs_pico_en(out, 2.2, 2.8) < -60
 
@@ -435,13 +571,39 @@ def test_aplicar_ducking_al_salir_de_mute_la_rampa_de_subida_arranca_despues_del
     assert _dbfs_pico_en(out, 1.48, 1.50) < -60
 
 
+# --- QA 04/10/2026 (NOTE, ronda 3): la rampa interpolaba en AMPLITUD LINEAL, no en dB ---
+# (repro n1.py): con 26dB de diferencia entre mesetas, eso da saltos de 4.5-5.8dB en 10ms
+# cerca del extremo bajo de la rampa (ahí la amplitud lineal cambia poco por muestra, pero
+# en dB ese mismo cambio es enorme). La rampa tiene que sonar pareja: ningún salto > ~1dB
+# en una ventana de 10ms, en ningún punto de la rampa.
+
+def _dbfs_de_rms(rms: float) -> float:
+    import math
+
+    return 20 * math.log10(rms) if rms > 0 else float("-inf")
+
+
+def test_aplicar_ducking_la_rampa_no_da_saltos_grandes_de_db_con_26db_de_diferencia(tmp_path):
+    tono = _tono(tmp_path, "tono.wav", 3.0)
+    vts = [(0.0, 1.0, "silencio"), (1.0, 2.0, "voz"), (2.0, 3.0, "silencio")]
+    out = tmp_path / "out.wav"
+
+    musica.aplicar_ducking(tono, vts, {"silencio": 0.0, "voz": -26.0}, out, ramp=0.2)
+
+    # muestrea toda la rampa (1.0 ± 0.1, bien cubierta por ramp=0.2) en pasos de 10ms.
+    pasos = [1.0 - 0.1 + i * 0.01 for i in range(21)]
+    dbs = [_dbfs_de_rms(_rms_en(out, t, ventana=0.005)) for t in pasos]
+    saltos = [abs(b - a) for a, b in zip(dbs, dbs[1:]) if a != float("-inf") and b != float("-inf")]
+
+    assert max(saltos) < 1.5, (saltos, dbs)
+
+
 # --- J1 (QA 03/10/2026): ataque rápido, liberación lenta (sin bombeo) -------------------
 
 def _tiempo_y_db(puntos: list[tuple[float, float]], i: int) -> tuple[float, float]:
-    t, nivel = puntos[i]
-    import math
-
-    return t, 20 * math.log10(nivel) if nivel > 0 else float("-inf")
+    # QA 04/10/2026: _puntos_envolvente ahora devuelve (t, nivel_EN_dB) directamente (antes
+    # era lineal y había que convertir acá).
+    return puntos[i]
 
 
 def test_puntos_envolvente_la_liberacion_es_mas_lenta_que_el_ataque_y_no_pasa_20db_por_s():
@@ -489,6 +651,22 @@ def test_sin_huecos_cortos_un_hueco_de_0_4s_entre_frases_no_dispara_la_subida():
     assert sin_huecos[1] == -18.0, sin_huecos
 
 
+def test_sin_huecos_cortos_un_hueco_real_que_cruza_el_borde_de_dos_slots_si_sube():
+    # QA 04/10/2026 (NOTE, ronda 3): un hueco real de 0.9s (> UMBRAL_HUECO_S=0.8) que cruza
+    # el borde entre dos slots queda partido en DOS ventanas "silencio" (una por slot, 0.6s
+    # y 0.3s), cada una por debajo del umbral por separado: la música no sube aunque el
+    # hueco junto sí sea "de verdad". Hay que evaluar la duración CONTIGUA, no por ventana.
+    vts = musica.ventanas([3.0, 3.0], [(0.3, 2.4), (0.3, 2.7)])
+    ganancias_db = [-12, -20, -12, -12, -20, -12]
+
+    sin_huecos = musica._sin_huecos_cortos(vts, ganancias_db, 0.8)
+
+    # las dos ventanas "silencio" contiguas (índices 2 y 3) forman un hueco de 0.9s: no
+    # tienen que quedar en el mínimo de sus vecinas (-20), tienen que poder subir.
+    assert sin_huecos[2] != -20, sin_huecos
+    assert sin_huecos[3] != -20, sin_huecos
+
+
 def test_sin_huecos_cortos_un_hueco_largo_si_deja_subir():
     # triangula: un hueco de 1.0s (>= UMBRAL_HUECO_S) es un silencio de verdad, sí sube.
     vts = [(0.0, 2.0, "voz"), (2.0, 3.0, "silencio"), (3.0, 5.0, "voz")]
@@ -497,3 +675,77 @@ def test_sin_huecos_cortos_un_hueco_largo_si_deja_subir():
     sin_huecos = musica._sin_huecos_cortos(vts, ganancias_db, musica.UMBRAL_HUECO_S)
 
     assert sin_huecos[1] == -10.0, sin_huecos
+
+
+# --- QA 04/10/2026 (BLOCKING, ronda 3): normalizar_dos_pasadas, R-2.3 sin tolerancia ----
+#
+# loudnorm de UNA pasada no llega al integrado objetivo cuando el TP lo restringe (el
+# target de TP limita la ganancia antes de que el integrado llegue a destino). El estándar
+# profesional es loudnorm de DOS pasadas (1ra mide con print_format=json, 2da aplica con
+# measured_* y linear=true) + un limitador de TRUE PEAK aparte (loudnorm en modo lineal no
+# limita TP realmente).
+
+def _rosa(path, dur: float, sr: int = 44100, amplitud: float = 0.5) -> None:
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi",
+                    "-i", f"anoisesrc=color=pink:d={dur}:a={amplitud}", "-ar", str(sr), str(path)],
+                   check=True)
+
+
+def test_normalizar_dos_pasadas_con_musica_picuda_el_integrado_llega_al_objetivo(tmp_path):
+    # el TP de loudnorm de UNA pasada restringe la ganancia antes de llegar al objetivo:
+    # ruido rosa fuerte (cerca de 0dBFS, crest factor real de música, no un pulso aislado).
+    rosa = tmp_path / "rosa.wav"
+    _rosa(rosa, 6.0, amplitud=0.9)
+    out = tmp_path / "normalizada.wav"
+
+    musica.normalizar_dos_pasadas(rosa, out, objetivo_i=-16.0, margen_tp=-1.0,
+                                   limite_tp_final=-2.0, sr=48000)
+
+    i = musica.loudness_integrada(out)
+    assert i == pytest.approx(-16.0, abs=1.0)
+
+
+def test_normalizar_dos_pasadas_respeta_el_limite_de_true_peak(tmp_path):
+    rosa = tmp_path / "rosa.wav"
+    _rosa(rosa, 6.0, amplitud=0.9)
+    out = tmp_path / "normalizada.wav"
+
+    musica.normalizar_dos_pasadas(rosa, out, objetivo_i=-16.0, margen_tp=-1.0,
+                                   limite_tp_final=-2.0, sr=48000)
+
+    _, tp = musica.medir_i_tp(out)
+    assert tp <= -2.0 + 0.3, tp  # tolerancia chica: el oversampling de la medición no es exacto
+
+
+def test_musica_no_llama_subprocess_run_directo_todo_pasa_por_el_vigia_de_editar(tmp_path, monkeypatch):
+    # QA 04/10/2026 (NOTE, ronda 3): todo subprocess de musica.py tiene que pasar por el
+    # vigía anti-cuelgue de editar.run() (antes llamaba subprocess.run directo en varios
+    # puntos: duracion(), loudness_integrada(), aplicar_ducking(), preparar_pista(), etc.
+    # editar.run() usa subprocess.Popen internamente (no subprocess.run), así que
+    # bloquear subprocess.run acá detecta cualquier llamada que NO haya pasado por ahí.
+    def _explota(*a, **k):
+        raise AssertionError(f"musica.py llamó subprocess.run directo (no pasó por editar.run()): {a}")
+
+    # arma el escenario ANTES de bloquear subprocess.run (esta preparación del test usa
+    # subprocess.run directo a propósito: no es lo que se está verificando).
+    voz = _tono(tmp_path, "voz.wav", 2.0)
+    cruda = _tono(tmp_path, "cruda.wav", 2.0, sr=44100)
+    vts = [(0.0, 2.0, "voz")]
+    out = tmp_path / "out.wav"
+
+    monkeypatch.setattr(musica.subprocess, "run", _explota)
+
+    musica.construir_pista(voz, cruda, vts, debajo_de_la_voz_lu=18, out=out)
+    musica.preparar_pista(voz, total=1.5, fundido=0.5, out=tmp_path / "pista.wav")
+
+
+def test_normalizar_dos_pasadas_deja_la_salida_a_la_tasa_pedida(tmp_path):
+    tono = _tono(tmp_path, "tono.wav", 2.0, sr=44100)
+    out = tmp_path / "normalizada.wav"
+
+    musica.normalizar_dos_pasadas(tono, out, objetivo_i=-16.0, margen_tp=-1.0,
+                                   limite_tp_final=-2.0, sr=48000)
+
+    res = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=sample_rate",
+                          "-of", "csv=p=0", str(out)], capture_output=True, text=True, check=True)
+    assert res.stdout.strip() == "48000"
