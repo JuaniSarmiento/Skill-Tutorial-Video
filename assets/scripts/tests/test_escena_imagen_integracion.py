@@ -213,6 +213,23 @@ def test_una_forma_solo_con_relleno_se_revela_progresivo_no_de_golpe(chrome, tmp
     assert 0 < temprano < maximo * 0.7, (temprano, maximo)
 
 
+def test_el_relleno_no_entra_hasta_que_el_trazo_esta_casi_completo(chrome):
+    # J2 (QA 03/10/2026): ningún test anterior distinguía "el relleno entra después del
+    # trazo" de "el relleno entra entero apenas arranca el trazo" (esa mutación sobrevivía).
+    brand = escena.cargar_brand(None)
+    entrada = brand["movimiento"]["entrada"]
+    spec = escena.resolver_dibujos(UN_DIBUJO)
+    FILL_OPACITY = ("() => +document.querySelector('[data-caja=\"dibujo lampara\"] .lleno')"
+                    ".getAttribute('fill-opacity')")
+    with escena.pagina_de_escena(chrome, escena.ruta_plantilla("imagen"), spec, brand) as (page, _):
+        escena._cuadro(page, 1.0 + entrada * 0.3)
+        temprano = page.evaluate(FILL_OPACITY)
+        escena._cuadro(page, 1.0 + entrada)
+        final = page.evaluate(FILL_OPACITY)
+    assert temprano == 0, "a 30% del tiempo de entrada el relleno todavía no tiene que verse"
+    assert final == 1
+
+
 def test_un_text_tambien_se_revela_progresivo_no_de_golpe(chrome, tmp_path):
     brand, spec = _dibujo_con_cue(
         tmp_path,

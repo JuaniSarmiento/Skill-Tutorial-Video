@@ -426,6 +426,17 @@ def test_imagen_con_demasiados_dibujos_falla_claro(chrome):
         _al_final(chrome, "imagen", spec, CAJAS)
 
 
+def test_imagen_con_demasiados_dibujos_el_error_da_el_maximo_real(chrome):
+    # B8 (QA 03/10/2026): el mensaje no daba ningún número real para "cuántos entran".
+    # Con el layout actual (AREA 1640 px, GAP 48, LADO_MIN 160) el máximo es 8.
+    iconos = ["lampara", "semilla", "escudo"] * 4
+    spec = _imagen(iconos)
+    for i, d in enumerate(spec["dibujos"]):
+        d["id"] = f"{d['id']}{i}"
+    with pytest.raises(escena.ContratoError, match="máximo 8"):
+        _al_final(chrome, "imagen", spec, CAJAS)
+
+
 # B2 (QA 03/10/2026, repro rotulos-largos.json): imagen.html nunca medía el ancho del
 # rótulo; con texto largo se pisaba en silencio. Ahora se intenta acomodar en dos
 # renglones dentro del ancho del dibujo; si ni así entra, falla nombrando el rótulo.

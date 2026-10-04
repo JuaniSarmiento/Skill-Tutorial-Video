@@ -11,8 +11,11 @@ spec:
 
 Cada dibujo se DIBUJA, no aparece de golpe: el trazo avanza con stroke-dasharray /
 stroke-dashoffset en función de t, y el relleno secundario (class="lleno") entra
-después, en la segunda mitad de "movimiento.entrada" del brand. Los píxeles no-fondo
-dentro del recuadro del dibujo nunca bajan de un cuadro al siguiente.
+después, en el último 15 % de "movimiento.entrada" del brand (cuando el trazo ya
+está prácticamente completo, no a mitad de camino: B8, QA 03/10/2026). Formas sin
+stroke y <text> (SVG externo fuera de la convención) se revelan con fundido +
+escala con resorte. Los píxeles no-fondo dentro del recuadro del dibujo nunca
+bajan de un cuadro al siguiente.
 
 Recoloreado al brand: el SVG se escribe con stroke="currentColor" (trazo) y
 class="lleno" fill="currentColor" (relleno); nunca un color fijo adentro del SVG.
@@ -107,8 +110,12 @@ pantalla). Un rótulo va debajo del dibujo que nombra ("de").
       return;
     }
     const lado = Math.min(LADO_MAX, (AREA.x1 - AREA.x0 - GAP * (n - 1)) / n);
-    if (lado < LADO_MIN)
-      throw new Error(`${n} dibujos no entran en una fila ni a ${LADO_MIN} px: usá menos dibujos`);
+    if (lado < LADO_MIN) {
+      // B8 (QA 03/10/2026): el error no decía ningún número real para "cuántos entran".
+      const maximo = Math.floor((AREA.x1 - AREA.x0 + GAP) / (LADO_MIN + GAP));
+      throw new Error(`${n} dibujos no entran en una fila ni a ${LADO_MIN} px (máximo ${maximo}): ` +
+                      'usá menos dibujos');
+    }
     const ancho = lado * n + GAP * (n - 1);
     const x0 = (AREA.x0 + AREA.x1) / 2 - ancho / 2;
     const cy = (AREA.y0 + AREA.y1 - ROTULO_ALTO) / 2;
@@ -169,7 +176,8 @@ pantalla). Un rótulo va debajo del dibujo que nombra ("de").
     const entrados = dibujos.filter(d => t >= d.t0);
     const foco = entrados.reduce((f, d) => (!f || d.t0 >= f.t0 ? d : f), null);
     for (const d of dibujos) {
-      const p = salida((t - d.t0) / (M.entrada || 0.7));
+      const x = clamp((t - d.t0) / (M.entrada || 0.7));   // fracción lineal de tiempo, 0..1
+      const p = salida(x);
       d.el.style.color = d === foco ? 'var(--acento)' : 'var(--tenue)';
       // antes de t0, p=0 y el dash queda desfasado a invisible, pero un cap "round" en
       // 0 de largo visible todavía pinta un puntito (medido: ~88 px no-fondo). La opacidad
@@ -180,7 +188,11 @@ pantalla). Un rótulo va debajo del dibujo que nombra ("de").
         el.setAttribute('stroke-dasharray', largo);
         el.setAttribute('stroke-dashoffset', (largo * (1 - p)).toFixed(2));
       }
-      for (const el of d.rellenos) el.setAttribute('fill-opacity', clamp((p - 0.5) / 0.5).toFixed(3));
+      // B8 (QA 03/10/2026): el relleno arrancaba en p>=0.5 de la curva ease-out, que con
+      // "salida" cúbica cae a sólo ~21% del TIEMPO real (no "la segunda mitad"). Ahora
+      // arranca en el último 15% del tiempo (x, lineal), cuando el trazo ya está prácticamente
+      // completo: se ve el dibujo terminarse y, recién ahí, el relleno lavar encima.
+      for (const el of d.rellenos) el.setAttribute('fill-opacity', clamp((x - 0.85) / 0.15).toFixed(3));
       for (const el of d.otros) {
         const v = Math.max(0, resorte(t - d.t0));
         const cx = +el.dataset.cx, cy = +el.dataset.cy, base = el.dataset.base;
