@@ -136,11 +136,25 @@ ATRIBUTOS_CON_POSIBLE_URL = {"fill", "stroke"}
 # de quedar pegado para siempre al color con el que se dibujó el SVG original.
 COLORES_PERMITIDOS = {"none", "currentColor"}
 DOCTYPE_O_ENTIDAD = re.compile(r"<!\s*(DOCTYPE|ENTITY)", re.IGNORECASE)
+# N5 (QA 04/10/2026): sin "fill" (propio o heredado de un ancestro, la convención de los
+# sets tipo Lucide/Tabler de declararlo una vez en el <svg> raíz), el default de SVG es
+# negro: no se recolorea y queda casi invisible sobre el fondo casi-negro del brand.
+# "line" queda afuera: no tiene área, fill no pinta nada.
+ELEMENTOS_CON_FILL_OBLIGATORIO = {"path", "circle", "ellipse", "rect", "polyline", "polygon", "text"}
 
 
 def _local(tag: str) -> str:
     """"{namespace}tag" o "ns:tag" -> "tag", en minúscula."""
     return tag.rsplit("}", 1)[-1].rsplit(":", 1)[-1].lower()
+
+
+def _con_fill_heredado(el, heredado=False):
+    """(elemento, ¿declara "fill" él o algún ancestro?), en recorrido profundo."""
+    propio = any(_local(a) == "fill" for a in el.attrib)
+    heredado = heredado or propio
+    yield el, heredado
+    for hijo in el:
+        yield from _con_fill_heredado(hijo, heredado)
 
 
 def sanear_svg(contenido: str, ruta) -> str:
@@ -155,10 +169,15 @@ def sanear_svg(contenido: str, ruta) -> str:
     except ET.ParseError as e:
         raise ValueError(f"SVG {ruta!r}: no es XML válido ({e})") from e
 
-    for el in raiz.iter():
+    for el, fill_heredado in _con_fill_heredado(raiz):
         nombre = _local(el.tag)
         if nombre not in ELEMENTOS_PERMITIDOS:
             raise ValueError(f"SVG {ruta!r}: elemento {nombre!r} no permitido (sólo dibujo vectorial, Q8)")
+        if nombre in ELEMENTOS_CON_FILL_OBLIGATORIO and not fill_heredado:
+            raise ValueError(
+                f"SVG {ruta!r}: elemento {nombre!r} sin 'fill' propio ni heredado de un ancestro; "
+                'el default de SVG es negro. Declará fill="currentColor" o fill="none" '
+                "(puede ir una sola vez en el <svg> raíz)")
         for attr, valor in el.attrib.items():
             nombre_attr = _local(attr)
             if nombre_attr.startswith("on"):

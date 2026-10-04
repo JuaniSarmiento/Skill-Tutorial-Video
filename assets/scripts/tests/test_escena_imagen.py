@@ -32,7 +32,7 @@ def test_un_svg_con_href_externo_falla_nombrando_la_ruta(tmp_path):
 
 def test_un_svg_valido_queda_embebido_en_markup(tmp_path):
     p = tmp_path / "bueno.svg"
-    p.write_text('<svg viewBox="0 0 10 10"><path d="M0 0L10 10"/></svg>')
+    p.write_text('<svg viewBox="0 0 10 10"><path d="M0 0L10 10" fill="none"/></svg>')
     spec = {"dibujos": [{"id": "a", "svg": str(p), "cue": 0.1}]}
 
     out = escena.resolver_dibujos(spec)
@@ -195,8 +195,28 @@ def test_svg_con_text_se_acepta(tmp_path):
     assert "<text" in out["dibujos"][0]["markup"]
 
 
+# --- N5 (QA 04/10/2026): sin "fill" propio ni heredado de un ancestro, el default de ----
+# SVG es negro: invisible (o casi) sobre el fondo casi-negro del brand, y no se recolorea.
+
+def test_path_sin_fill_propio_ni_heredado_falla_claro(tmp_path):
+    contenido = '<svg viewBox="0 0 10 10"><path d="M0 0L1 1" stroke="currentColor"/></svg>'
+    spec = _spec_con_svg(tmp_path, contenido)
+    with pytest.raises(ValueError, match="fill"):
+        escena.resolver_dibujos(spec)
+
+
+def test_path_con_fill_heredado_del_svg_raiz_se_acepta(tmp_path):
+    # convención de los sets tipo Lucide/Tabler: fill/stroke declarados una vez en la raíz.
+    contenido = '<svg viewBox="0 0 10 10" fill="none"><path d="M0 0L1 1" stroke="currentColor"/></svg>'
+    spec = _spec_con_svg(tmp_path, contenido, "bueno.svg")
+
+    out = escena.resolver_dibujos(spec)
+
+    assert "M0 0L1 1" in out["dibujos"][0]["markup"]
+
+
 def test_use_con_href_interno_se_acepta(tmp_path):
-    contenido = ('<svg viewBox="0 0 10 10">'
+    contenido = ('<svg viewBox="0 0 10 10" fill="none">'
                  '<defs><path id="p" d="M0 0L10 10"/></defs>'
                  '<use href="#p" stroke="currentColor"/>'
                  '</svg>')
