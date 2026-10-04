@@ -755,6 +755,18 @@ def _hallazgos_roles(segmentos: list[dict]) -> list[str]:
     return hallazgos
 
 
+# R-5.8: cada regla Dn de la sección "Director" (SKILL.md) tiene acá su chequeo de
+# verdad. `revisar()` llama a cada uno A TRAVÉS de este registro (no por su nombre
+# de función directamente): test_docs_director.py lo comprueba reemplazando cada
+# entrada por un espía, así que no basta con que el ID aparezca en un comentario.
+CHEQUEOS = {
+    "D1": _freezes,
+    "D2": _huecos_escena,
+    "D3": _silencios,
+    "D4": _hallazgos_roles,
+}
+
+
 def revisar(vid: str, voz_name: str = "argentina", n: float = N_CAMBIO_VISUAL) -> tuple[list[str], list[str]]:
     """(hallazgos, no_corrio) de revisar el guion y lo ya renderizado de `vid`/`voz_name`.
 
@@ -777,7 +789,7 @@ def revisar(vid: str, voz_name: str = "argentina", n: float = N_CAMBIO_VISUAL) -
 
     video = work / f"video-{voz_name}.mp4"
     if video.exists():
-        for inicio, fin in _freezes(video, n):
+        for inicio, fin in CHEQUEOS["D1"](video, n):
             hallazgos.append(f"tiempo muerto: {inicio:.1f}s–{fin:.1f}s sin cambio visual (> {n:.0f}s) en {video.name}")
     else:
         no_corrio.append(f"tiempo muerto: no corrió, falta {video} (correr 'editar.py imagen {vid} {voz_name}')")
@@ -792,7 +804,7 @@ def revisar(vid: str, voz_name: str = "argentina", n: float = N_CAMBIO_VISUAL) -
             for ruta in vigentes:
                 try:
                     spec = json.loads(ruta.read_text())
-                    huecos = _huecos_escena(spec, n)
+                    huecos = CHEQUEOS["D2"](spec, n)
                 except KeyError as e:
                     no_corrio.append(f"cambio visual en escenas: no corrió para {ruta.name}, "
                                      f"falta {e} en el spec (correr 'editar.py escenas {vid} {voz_name}')")
@@ -806,12 +818,12 @@ def revisar(vid: str, voz_name: str = "argentina", n: float = N_CAMBIO_VISUAL) -
 
     voz_wav = work / f"voz-{voz_name}.wav"
     if voz_wav.exists():
-        for inicio, fin in _silencios(voz_wav, 0.9):
+        for inicio, fin in CHEQUEOS["D3"](voz_wav, 0.9):
             hallazgos.append(f"silencio: {inicio:.1f}s–{fin:.1f}s en la voz (> 0.9s) en {voz_wav.name}")
     else:
         no_corrio.append(f"silencios: no corrió, falta {voz_wav} (correr 'editar.py voz {vid} {voz_name}')")
 
-    hallazgos.extend(_hallazgos_roles(g["segmentos"]))
+    hallazgos.extend(CHEQUEOS["D4"](g["segmentos"]))
 
     return hallazgos, no_corrio
 

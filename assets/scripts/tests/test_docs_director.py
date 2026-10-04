@@ -1,9 +1,20 @@
 """R-5.8: cada regla numerada de la sección Director (SKILL.md) tiene su chequeo
 en `editar.py revisar` — se referencian con el mismo ID (D1, D2, ...) como
 comentario, igual que test_docs_comandos.py compara documentación con código.
+
+R-5.8 más fuerte: no alcanza con que el ID aparezca en un docstring o comentario
+(eso lo cumple cualquier mención de paso). Cada Dn tiene que estar en
+`editar.CHEQUEOS`, el registro que `revisar()` recorre de verdad para correr los
+chequeos — se comprueba reemplazando cada entrada por un espía y viendo que
+`revisar()` lo llama.
 """
+import json
 import re
 from pathlib import Path
+
+import pytest
+
+import editar
 
 RAIZ = Path(__file__).resolve().parents[3]
 SKILL = RAIZ / "SKILL.md"
@@ -44,6 +55,41 @@ def test_una_regla_sin_su_id_en_el_codigo_se_reporta_sin_check():
 
 
 def test_cada_regla_del_director_tiene_su_check_en_revisar():
+    """R-5.8 más fuerte: no alcanza con que el ID aparezca en un comentario o
+    docstring (eso lo cumple cualquier mención de paso, sin atar nada). Cada Dn
+    de SKILL.md tiene que ser una clave de `editar.CHEQUEOS`, el registro que
+    `revisar()` usa de verdad (ver test_revisar_llama_a_cada_chequeo_del_registro,
+    más abajo, para la prueba de que lo ejecuta)."""
     seccion = _seccion_director(SKILL.read_text())
-    sin_check = _reglas_sin_check(seccion, EDITAR.read_text())
-    assert sin_check == [], f"reglas sin chequeo en editar.py: {sin_check}"
+    reglas = _RE_REGLA.findall(seccion)
+    sin_check = [r for r in reglas if r not in editar.CHEQUEOS]
+    assert sin_check == [], f"reglas sin chequeo registrado en editar.CHEQUEOS: {sin_check}"
+
+
+# --- la prueba de que CHEQUEOS no es sólo una lista: revisar() lo recorre de verdad ---
+
+@pytest.fixture
+def raiz(tmp_path, monkeypatch):
+    monkeypatch.setattr(editar, "ROOT", tmp_path)
+    (tmp_path / "guion").mkdir()
+    (tmp_path / "videos" / "v09").mkdir(parents=True)
+    return tmp_path
+
+
+def test_revisar_llama_a_cada_chequeo_del_registro(raiz, monkeypatch):
+    (raiz / "videos" / "v09" / "video-argentina.mp4").write_bytes(b"")
+    (raiz / "videos" / "v09" / "voz-argentina.wav").write_bytes(b"")
+    escenas_dir = raiz / "videos" / "v09" / "escenas"
+    escenas_dir.mkdir()
+    (escenas_dir / "00.json").write_text(json.dumps({"duracion": 1.0}))
+    (raiz / "guion" / "v09.json").write_text(json.dumps({"segmentos": [
+        {"escena": {"tipo": "presentacion"}, "texto": "a", "rol": "gancho"}]}))
+
+    llamados = set()
+    for id_regla in editar.CHEQUEOS:
+        espia = (lambda id_regla: lambda *a, **k: (llamados.add(id_regla), [])[1])(id_regla)
+        monkeypatch.setitem(editar.CHEQUEOS, id_regla, espia)
+
+    editar.revisar("v09", "argentina")
+
+    assert llamados == set(editar.CHEQUEOS), f"CHEQUEOS no llamados por revisar(): {set(editar.CHEQUEOS) - llamados}"
