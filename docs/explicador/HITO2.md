@@ -176,6 +176,20 @@ aviso con su nombre.
 - **Q4**: transición solo si uno de los dos lados es escena; pantalla→pantalla queda en corte seco.
 - El resto de las preguntas va con su default.
 
+## Decididas por el orquestador el 04/10/2026 (Juani delegó las decisiones)
+
+- `revisar --estricto` falla si algún chequeo no corrió: un control que no midió nada no da verde.
+- La cola de cada slot baja a 0.5 s para todas las voces (antes 1.0 en `FISH_LENTAS`): el hueco
+  entre segmentos queda en 0.8 s. 1.3 s de silencio entre frases es tiempo muerto.
+- Loudness en dos pasadas también sin música: todo final queda en -16 ±1 LUFS / TP ≤ -1.5. Cambia
+  a propósito el audio de los guiones del Hito 1; la base de S0 se regenera con esa justificación.
+- Proceso: máximo 2 rondas de QA por rebanada (solo lo BLOCKING vuelve al implementador; las notas
+  van a "Pendientes"), máximo 2 agentes a la vez, y S8 (un video real) antes que S3 y S7b.
+
+## Pendientes (notas de QA no bloqueantes)
+
+_Se completa al cerrar cada rebanada._
+
 ## Preguntas abiertas (con el default que permite avanzar)
 
 | # | Pregunta | Default |
