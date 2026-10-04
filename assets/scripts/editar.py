@@ -632,15 +632,14 @@ USO_REVISAR = "uso: editar.py revisar <vNN> [voz] [--estricto]"
 
 
 def _estricto_falla(hallazgos: list[str], no_corrio: list[str]) -> bool:
-    """B3c (DECISIÓN PENDIENTE DE JUANI, hoy no falla): política de si `--estricto`
-    tiene que salir con 1 cuando algún chequeo no corrió (`no_corrio` no vacío),
-    además de cuando hay `hallazgos`. Toda la política vive acá: cambiarla es
-    una línea.
+    """B3c (DECISIÓN de Juani, 03/10/2026): `--estricto` sale con 1 si hay algún
+    hallazgo real O si algún chequeo no corrió (`no_corrio` no vacío). Toda la
+    política vive acá: cambiarla es una línea.
 
     NOTE 10: un aviso de normalización ("aviso: ...", D4) no es un hallazgo real
     (el rol era válido, sólo venía con mayúsculas o tildes distintas) y no cuenta
     acá, aunque `informe_revisar` lo siga mostrando bajo "hallazgos"."""
-    return any(not h.startswith("aviso: ") for h in hallazgos)
+    return any(not h.startswith("aviso: ") for h in hallazgos) or bool(no_corrio)
 
 
 # carpetas de trabajo que NO son el nombre de una voz (NOTE 3b)

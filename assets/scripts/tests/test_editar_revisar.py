@@ -687,7 +687,17 @@ def test_rol_no_textual_se_informa_sin_romper(raiz):
 
 # --- NOTE 10: un aviso de normalización no cuenta como hallazgo para --estricto ---
 
-def test_estricto_no_falla_solo_por_un_rol_con_tildes_bien_escrito(raiz, monkeypatch, capsys):
+def test_estricto_no_falla_solo_por_un_rol_con_tildes_bien_escrito(raiz, monkeypatch, capsys, tmp_path):
+    """Con video/wav limpios presentes (D1/D3 corrieron y no encontraron nada) y
+    roles completos salvo la tilde: el ÚNICO hallazgo es el aviso de
+    normalización, que no cuenta (NOTE 10) y --estricto no tiene por qué fallar
+    por `no_corrio` tampoco, porque acá nada "no corrió"."""
+    clip = tmp_path / "clip.mp4"
+    _clip(clip, "testsrc=s=320x240:r=30:d=1,format=yuv420p")
+    _concat_video(raiz / "videos" / "v09" / "video-argentina.mp4", [clip])
+    habla = tmp_path / "habla.wav"
+    _clip(habla, "sine=f=300:d=1")
+    _concat_wav(raiz / "videos" / "v09" / "voz-argentina.wav", [habla])
     _guion(raiz, {"segmentos": [
         {"inicio": 0, "fin": 1, "texto": "a", "rol": "gancho"},
         {"inicio": 1, "fin": 2, "texto": "b", "rol": "Analogía"},
@@ -741,7 +751,15 @@ def test_con_hallazgos_y_estricto_sale_con_1(raiz, monkeypatch, capsys):
     assert code == 1
 
 
-def test_sin_hallazgos_y_estricto_sale_con_0(raiz, monkeypatch, capsys):
+def test_sin_hallazgos_y_estricto_sale_con_0(raiz, monkeypatch, capsys, tmp_path):
+    """Con video/wav limpios presentes (nada "no corrió") y roles completos, sin
+    ningún hallazgo real: --estricto sale con 0."""
+    clip = tmp_path / "clip.mp4"
+    _clip(clip, "testsrc=s=320x240:r=30:d=1,format=yuv420p")
+    _concat_video(raiz / "videos" / "v09" / "video-argentina.mp4", [clip])
+    habla = tmp_path / "habla.wav"
+    _clip(habla, "sine=f=300:d=1")
+    _concat_wav(raiz / "videos" / "v09" / "voz-argentina.wav", [habla])
     _guion(raiz, {"segmentos": [
         {"inicio": 0, "fin": 1, "texto": "a", "rol": "gancho"},
         {"inicio": 1, "fin": 2, "texto": "b", "rol": "analogia"},
@@ -823,10 +841,10 @@ def test_revisar_con_demasiados_argumentos_es_error(raiz, monkeypatch, capsys):
 
 # --- B3c (decisión pendiente): hoy --estricto NO falla si algo no corrió ----------
 
-def test_estricto_no_falla_solo_porque_un_chequeo_no_corrio(raiz, monkeypatch, capsys):
-    """Política actual (B3c, pendiente de decisión de Juani): `_estricto_falla` sólo
-    mira `hallazgos`, nunca `no_corrio`. Guion con roles completos (sin hallazgo de
-    D4) y SIN ningún artefacto (D1/D2/D3 "no corrieron"): --estricto sale con 0."""
+def test_estricto_falla_si_algun_chequeo_no_corrio(raiz, monkeypatch, capsys):
+    """Decisión de Juani (03/10/2026): `_estricto_falla` ahora también mira
+    `no_corrio`. Guion con roles completos (sin hallazgo de D4) y SIN ningún
+    artefacto (D1/D2/D3 "no corrieron"): --estricto sale con 1."""
     _guion(raiz, {"segmentos": [
         {"inicio": 0, "fin": 1, "texto": "a", "rol": "gancho"},
         {"inicio": 1, "fin": 2, "texto": "b", "rol": "analogia"},
@@ -835,7 +853,7 @@ def test_estricto_no_falla_solo_porque_un_chequeo_no_corrio(raiz, monkeypatch, c
 
     _, code = _correr_cli(raiz, monkeypatch, capsys, ["--estricto"])
 
-    assert code == 0
+    assert code == 1
 
 
 # --- M12: --estricto tiene que fallar también por hallazgos de D1-D3, no sólo D4 --
