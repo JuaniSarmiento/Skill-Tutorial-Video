@@ -38,9 +38,13 @@ metadata:
   antes del primer tramo si no hay). `TUT_VAAPI_DEVICE` pisa `/dev/dri/renderD128`. Vacía o con
   mayúsculas/espacios (`""`, ` AUTO `) se normaliza igual que sin definirla. Si VAAPI falla a
   mitad de un tramo, el error sugiere `TUT_ENCODER=software` (nunca mezcla encoders a mitad
-  de un render: rompe G4). Cada llamada a ffmpeg tiene un timeout (`TUT_FFMPEG_TIMEOUT`,
-  default 120 s): si se cuelga, falla nombrando el comando en vez de colgar el proceso para
-  siempre.
+  de un render: rompe G4). Cada llamada a ffmpeg de `editar.py` (incluido `escena.py` vía
+  `encoder.py`) pasa por `editar.run()`, que vigila el PROGRESO, no el tiempo total
+  (`TUT_FFMPEG_TIMEOUT`, default 120 s = segundos SIN avance): un render largo que progresa
+  nunca falla por tardar; si se cuelga de verdad (deadlock, 0% CPU, sin salida), falla
+  nombrando el comando en vez de colgar el proceso para siempre. Los subprocess de
+  `musica.py` todavía NO pasan por ese vigía (quedan con el timeout por defecto de ffmpeg,
+  es decir ninguno): si uno se cuelga, no hay corte automático.
 - **Música de fondo** (`editar.py voz`, `musica.py`): `"musica": {"archivo", "debajo_de_la_voz_lu"?,
   "fundido"?}` arriba del guion (ver README → El guion); `"musica": false` en un segmento la apaga
   sólo ahí. `archivo` es relativo a `TUT_ROOT`; la música la pone quien arma el tutorial en

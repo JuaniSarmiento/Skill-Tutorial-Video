@@ -11,14 +11,15 @@ R-0.2 versiona esa base en tests/fixtures/s0/*.json (chica: dos hashes por guion
 cada render futuro se compara contra ella: es un test de caracterización, pasa hoy por
 construcción porque la base se grabó con este mismo render.
 
-Base regenerada el 03/10/2026 (N1, QA): `read_pcm` dejó de aplicar `-af atempo=1.0000` cuando
-el factor es 1.0 (ese filtro cuelga a ffmpeg 6.1.1 con ciertas entradas). Se midió que
-`atempo=1.0000` NO era un no-op bit a bit: comparando muestra a muestra contra la misma voz sin
-ese filtro, 43733 de 44100 muestras difieren, con una diferencia máxima de 7 unidades sobre una
-escala de 32768 (ruido de borde del propio filtro de ffmpeg, inaudible, pero no idéntico). El
-framemd5 de video no cambió (el fix es sólo de audio); el audio_md5 de las dos bases sí, y se
-regeneró con este mismo render (igual que se armó la base original). G1/G2/G4 no dependen de
-esto: miden cuadros y tiempos, no el contenido exacto de las muestras.
+Base regenerada el 03/10/2026: `read_pcm` dejó de aplicar `-af atempo=1.0000` cuando el
+factor es 1.0 (ese filtro cuelga a ffmpeg 6.1.1 con ciertas entradas). N8 (QA 03/10/2026)
+corrigió la medición de ESTE párrafo: `atempo=1.0000` no era "ruido de borde inaudible", sino
+que ACORTABA y DESPLAZABA la voz -el wav con atempo tenía 44090 muestras en vez de 44100 (10
+de menos), lo que generaba un desfasaje CRECIENTE entre las dos señales de hasta ~9 muestras, y
+una diferencia máxima entre muestras de 7094 sobre una escala de 32768 (no 7)-. El framemd5 de
+video no cambió (el fix es sólo de audio); el audio_md5 de las dos bases sí, y se regeneró con
+este mismo render (igual que se armó la base original). G1/G2/G4 no dependen de esto: miden
+cuadros y tiempos, no el contenido exacto de las muestras.
 """
 import hashlib
 import json
