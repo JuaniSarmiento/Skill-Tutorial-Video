@@ -339,6 +339,37 @@ def test_voz_baja_pero_con_contenido_no_se_confunde_con_silencio(raiz, tmp_path)
     assert not any("silencio" in h for h in hallazgos)
 
 
+# --- Decisión pendiente de Juani (#2, HITO2.md): D3 con voces FISH_LENTAS --------
+#
+# El pipeline real (preparar(), editar.py) deja LEAD (0.3s, línea ~64: silencio
+# antes de que arranque la voz en cada slot) + cola (1.0s para las voces de
+# FISH_LENTAS, fijado en la línea ~430 de preparar()) = 1.3s de silencio "de
+# diseño" en CADA borde entre segmentos. Como 1.3s > 0.9s (el umbral de D3),
+# `revisar` marca TODOS esos bordes como silencio. Este test documenta el
+# comportamiento ACTUAL sin resolver la decisión: si Juani decide que D3 no
+# tiene que contar ese silencio de diseño para las voces FISH_LENTAS, el cambio
+# es sólo en CHEQUEOS["D3"]/_silencios (o en cómo revisar() los llama), y este
+# test es el que hay que actualizar primero.
+
+def test_fish_lentas_deja_1_3s_de_silencio_entre_segmentos_y_d3_lo_marca(raiz, tmp_path):
+    assert "profe" in editar.FISH_LENTAS  # profe es una voz de FISH_LENTAS
+    gap = editar.LEAD + 1.0  # LEAD + la "cola" de FISH_LENTAS en preparar()
+    habla = tmp_path / "habla.wav"
+    silencio = tmp_path / "silencio.wav"
+    _clip(habla, "sine=f=300:d=1")
+    _clip(silencio, f"anullsrc=r=22050:cl=mono:d={gap:.2f}")
+    _concat_wav(raiz / "videos" / "v09" / "voz-profe.wav", [habla, silencio, habla, silencio, habla])
+    _guion(raiz, {"segmentos": [
+        {"inicio": 0, "fin": 1, "texto": "a"},
+        {"inicio": 1, "fin": 2, "texto": "b"},
+        {"inicio": 2, "fin": 3, "texto": "c"}]})
+
+    hallazgos, _ = editar.revisar("v09", "profe")
+
+    silencios = [h for h in hallazgos if "silencio" in h]
+    assert len(silencios) == 2  # los DOS bordes entre los 3 segmentos, todos marcados
+
+
 # --- R-5.5: estructura de clase por `rol` ------------------------------------------
 
 def test_sin_ningun_rol_avisa_una_sola_linea(raiz):
