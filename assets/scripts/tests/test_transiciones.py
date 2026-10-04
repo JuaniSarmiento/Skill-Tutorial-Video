@@ -242,6 +242,53 @@ def test_aplicar_barrido_saliente_empieza_despejado_y_termina_cubierto(tmp_path)
     assert _cerca(_pixel(clip, 0.966), (242, 181, 68))
 
 
+# --- BLOCKING (QA): la caja de `drawbox` queda montada en todo el archivo con w=1 -
+# fuera de la ventana, sólo `sendcmd` cambia `w`. Repro de HITO2.md: fondo GRIS,
+# ninguna columna (ni x=0..3) puede tener el acento fuera de la ventana.
+
+def _clip_color(tmp_path, nombre: str, color: str, dur: float = 1.0, w: int = 320, h: int = 240):
+    import subprocess
+    from pathlib import Path
+    out = Path(tmp_path) / nombre
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi",
+                    "-i", f"color=c={color}:s={w}x{h}:r=30:d={dur}",
+                    "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", str(out)], check=True)
+    return out
+
+
+def _fila(mp4, t: float, ancho_px: int = 4, x: int = 0, y: int = 100) -> list[tuple[int, int, int]]:
+    """RGB de `ancho_px` columnas consecutivas (fila `y`) en el segundo `t` (repro de
+    HITO2.md: `crop=4:2:0:540`, altura 2 por el submuestreo de croma de yuv420p)."""
+    import subprocess
+    out = subprocess.run(["ffmpeg", "-loglevel", "error", "-ss", str(t), "-i", str(mp4), "-frames:v", "1",
+                          "-vf", f"crop={ancho_px}:2:{x}:{y}",
+                          "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+                         capture_output=True, check=True).stdout
+    return [tuple(out[i * 3:i * 3 + 3]) for i in range(ancho_px)]
+
+
+def test_aplicar_barrido_entrante_fuera_de_la_ventana_ninguna_columna_tiene_acento(tmp_path):
+    clip = _clip_color(tmp_path, "00.mp4", "gray", dur=1.0)
+    gris = _fila(clip, 0.9)[0]  # referencia ANTES de tocar el archivo
+
+    transiciones.aplicar_barrido(clip, "entrante", t0=0.0, mitad=0.25, color="0xF2B544",
+                                 ancho=320, fps=30)
+
+    for rgb in _fila(clip, 0.9):  # 0.9 >> mitad=0.25: bien afuera de la ventana
+        assert _cerca(rgb, gris, tol=4), f"columna con acento fuera de la ventana: {rgb}"
+
+
+def test_aplicar_barrido_saliente_fuera_de_la_ventana_ninguna_columna_tiene_acento(tmp_path):
+    clip = _clip_color(tmp_path, "00.mp4", "gray", dur=1.0)
+    gris = _fila(clip, 0.1)[0]
+
+    transiciones.aplicar_barrido(clip, "saliente", t0=0.75, mitad=0.25, color="0xF2B544",
+                                 ancho=320, fps=30)
+
+    for rgb in _fila(clip, 0.1):  # antes de t0=0.75: bien afuera de la ventana
+        assert _cerca(rgb, gris, tol=4), f"columna con acento fuera de la ventana: {rgb}"
+
+
 # --- validar(): chequeo temprano de TODO el guion, antes de generar nada (R-6.7) --
 
 def test_validar_guion_sin_ninguna_transicion_no_rompe():

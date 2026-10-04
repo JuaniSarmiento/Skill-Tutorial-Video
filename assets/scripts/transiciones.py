@@ -234,8 +234,10 @@ def aplicar_barrido(entrada, fase: str, t0: float, mitad: float, color: str,
     anchos = anchos_barrido(fase, t0, mitad, ancho=ancho, fps=fps)
     cmds = entrada.with_name(entrada.stem + ".sendcmd.txt")
     cmds.write_text(comandos_barrido(anchos))
+    a, b = t0, t0 + mitad
     try:
-        vf = f"sendcmd=f={cmds},drawbox@t6=x=0:y=0:w=1:h=ih:color={color}:thickness=fill"
+        vf = (f"sendcmd=f={cmds},drawbox@t6=x=0:y=0:w=1:h=ih:color={color}:thickness=fill:"
+              f"enable='between(t,{a:.6f},{b:.6f})'")
         _reencodar(entrada, vf, fps)
     finally:
         cmds.unlink(missing_ok=True)
