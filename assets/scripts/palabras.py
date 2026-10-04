@@ -108,6 +108,8 @@ def _numeros(pares: list[tuple]) -> list[tuple]:
             w = palabras[j]
             if w == "mil" and not total:
                 total, grupo, rango = (grupo or 1) * 1000, 0, 4
+            elif j == i and w.isdigit() and len(w) <= 3 and palabras[j + 1:j + 2] == ["mil"]:
+                grupo, rango = int(w), 1   # Whisper mezcla: "17 mil" es 17000
             elif w in _CENTENAS and rango > 3:
                 grupo, rango = grupo + _CENTENAS[w], 3
             elif w in _DECENAS and rango > 2:

@@ -1,67 +1,372 @@
 {
+ "transicion": "corte",
  "segmentos": [
   {
+   "rol": "gancho",
    "escena": {
     "tipo": "presentacion",
-    "kicker": "Finanzas en un minuto",
-    "titulo": {"texto": "El interés compuesto"},
-    "subtitulo": {"texto": "Por qué los ahorros crecen más rápido de lo que parece", "cue": "La respuesta"}
+    "kicker": "Interés compuesto",
+    "titulo": {
+     "texto": "Ahorrar 10 años le gana a ahorrar 30"
+    },
+    "subtitulo": {
+     "texto": "Si arrancás antes",
+     "cue": "si arrancás antes"
+    }
    },
-   "texto": "¿Por qué los ahorros a largo plazo crecen tanto? La respuesta tiene nombre: interés compuesto."
+   "texto": "Ahorrar diez años puede darte más plata que ahorrar treinta, si arrancás antes."
   },
   {
+   "rol": "gancho",
    "escena": {
     "tipo": "presentacion",
-    "titulo": {"texto": "Simple contra compuesto"},
+    "kicker": "Mil dólares por año, al 7 %",
+    "titulo": {
+     "texto": "Ana contra Sofía"
+    },
     "puntos": [
-     {"texto": "Simple: ganás sobre lo que pusiste", "cue": "interés simple"},
-     {"texto": "Compuesto: ganás también sobre lo ganado", "cue": "interés compuesto"}
+     {
+      "texto": "Ana ahorra de los 25 a los 35, y para",
+      "cue": "Ana ahorra"
+     },
+     {
+      "texto": "Sofía ahorra de los 35 a los 65",
+      "cue": "Sofía ahorra"
+     },
+     {
+      "texto": "¿Quién tiene más a los 65?",
+      "cue": "Quién llega"
+     }
     ]
    },
-   "texto": "Con interés simple, cada año ganás sobre la plata que pusiste al principio. Con interés compuesto, los intereses se suman al capital, y al año siguiente ganás también sobre ellos."
+   "texto": "Ana ahorra de los veinticinco a los treinta y cinco, y después para. Sofía ahorra de los treinta y cinco a los sesenta y cinco. ¿Quién llega con más plata?"
   },
   {
-   "escena": {
-    "tipo": "diagrama",
-    "titulo": {"texto": "Un ciclo que se repite"},
-    "nodos": [
-     {"id": "c", "texto": "Capital", "detalle": "$ 1.000", "cue": "tu capital"},
-     {"id": "i", "texto": "Interés", "detalle": "+ 10 %", "cue": "un interés"},
-     {"id": "n", "texto": "Capital nuevo", "detalle": "$ 1.100", "cue": "capital nuevo"}
-    ],
-    "flechas": [
-     {"de": "c", "a": "i", "texto": "rinde", "cue": "rinde"},
-     {"de": "i", "a": "n", "texto": "se suma", "cue": "se suma"}
-    ]
-   },
-   "texto": "Pensalo como un ciclo. Tu capital rinde un interés. Ese interés se suma, y el capital nuevo vuelve a rendir. Cada vuelta arranca de un número más grande."
-  },
-  {
+   "rol": "gancho",
    "escena": {
     "tipo": "datos",
-    "kicker": "Mil pesos al 10 % anual",
-    "titulo": {"texto": "El tiempo hace el trabajo"},
-    "prefijo": "$ ",
+    "kicker": "Mil dólares por año, al 7 % · a los 65 años",
+    "titulo": {
+     "texto": "Gana la que ahorró menos"
+    },
+    "prefijo": "US$ ",
     "barras": [
-     {"etiqueta": "Hoy", "valor": 1000, "cue": "Hoy"},
-     {"etiqueta": "10 años", "valor": 2594, "cue": "una década"},
-     {"etiqueta": "20 años", "valor": 6727, "cue": "dos décadas"},
-     {"etiqueta": "30 años", "valor": 17449, "cue": "tres décadas", "destacar": true}
-    ],
-    "nota": "Interés compuesto anual, sin aportes extra"
-   },
-   "texto": "Hagamos números. Hoy ponés mil pesos al diez por ciento anual. Pasada una década, tenés dos mil seiscientos. A las dos décadas, seis mil setecientos. Y a las tres décadas, más de diecisiete mil."
-  },
-  {
-   "escena": {
-    "tipo": "presentacion",
-    "titulo": {"texto": "Para llevarte"},
-    "puntos": [
-     {"texto": "Empezar temprano pesa más que poner mucho", "cue": "empezar temprano"},
-     {"texto": "El que multiplica es el tiempo", "cue": "el tiempo"}
+     {
+      "etiqueta": "Ana puso",
+      "valor": 10000,
+      "cue": "Ana puso"
+     },
+     {
+      "etiqueta": "Ana a los 65",
+      "valor": 105174,
+      "cue": "y termina",
+      "destacar": true
+     },
+     {
+      "etiqueta": "Sofía puso",
+      "valor": 30000,
+      "cue": "Sofía puso"
+     },
+     {
+      "etiqueta": "Sofía a los 65",
+      "valor": 94461,
+      "cue": "y termina"
+     }
     ]
    },
-   "texto": "Para llevarte: empezar temprano pesa más que poner mucho, porque el que multiplica es el tiempo."
+   "texto": "Ana puso diez mil dólares, y termina con ciento cinco mil. Sofía puso treinta mil, y termina con noventa y cuatro mil. ¿El secreto? El interés compuesto.",
+   "transicion": "barrido"
+  },
+  {
+   "rol": "analogia",
+   "escena": {
+    "tipo": "imagen",
+    "titulo": {
+     "texto": "Una bola de nieve"
+    },
+    "dibujos": [
+     {
+      "id": "copo",
+      "svg": "dibujos/copo.svg",
+      "cue": "un copo"
+     },
+     {
+      "id": "rueda",
+      "svg": "dibujos/bola-rodando.svg",
+      "cue": "empieza a rodar"
+     },
+     {
+      "id": "grande",
+      "svg": "dibujos/bola-grande.svg",
+      "cue": "más grande"
+     }
+    ],
+    "rotulos": [
+     {
+      "texto": "Tus ahorros",
+      "de": "copo",
+      "cue": "tus ahorros"
+     },
+     {
+      "texto": "El tiempo",
+      "de": "rueda",
+      "cue": "con el tiempo"
+     },
+     {
+      "texto": "El resultado",
+      "de": "grande",
+      "cue": "enorme"
+     }
+    ]
+   },
+   "texto": "Pensá en un copo de nieve: tus ahorros. Empieza a rodar, y con el tiempo junta nieve. Cuanto más grande es, más nieve junta en cada vuelta. Al final, es una bola enorme.",
+   "transicion": "fundido"
+  },
+  {
+   "rol": "analogia",
+   "escena": {
+    "tipo": "diagrama",
+    "titulo": {
+     "texto": "Con la plata pasa lo mismo"
+    },
+    "nodos": [
+     {
+      "id": "c",
+      "texto": "Tu capital",
+      "detalle": "US$ 1.000",
+      "cue": "Tu capital"
+     },
+     {
+      "id": "i",
+      "texto": "Intereses",
+      "detalle": "+ 10 %",
+      "cue": "intereses"
+     },
+     {
+      "id": "n",
+      "texto": "Capital nuevo",
+      "detalle": "US$ 1.100",
+      "cue": "capital nuevo"
+     }
+    ],
+    "flechas": [
+     {
+      "de": "c",
+      "a": "i",
+      "texto": "genera",
+      "cue": "genera"
+     },
+     {
+      "de": "i",
+      "a": "n",
+      "texto": "se suman",
+      "cue": "se suman"
+     }
+    ]
+   },
+   "texto": "Tu capital hace lo mismo: genera intereses. Esos intereses se suman al capital. Y el capital nuevo vuelve a generar, pero ahora es más grande."
+  },
+  {
+   "rol": "ejemplo",
+   "escena": {
+    "tipo": "datos",
+    "kicker": "Mil dólares al 10 %, sin poner nada más",
+    "titulo": {
+     "texto": "Lo que ganás cada año"
+    },
+    "prefijo": "US$ ",
+    "barras": [
+     {
+      "etiqueta": "Año 1",
+      "valor": 100,
+      "cue": "primer año"
+     },
+     {
+      "etiqueta": "Año 2",
+      "valor": 110,
+      "cue": "segundo"
+     },
+     {
+      "etiqueta": "Año 3",
+      "valor": 121,
+      "cue": "tercero"
+     },
+     {
+      "etiqueta": "Año 10",
+      "valor": 236,
+      "cue": "el décimo",
+      "destacar": true
+     }
+    ]
+   },
+   "texto": "El primer año ganás cien dólares. El segundo, ciento diez. El tercero, ciento veintiuno. Y el décimo, doscientos treinta y seis. Sin poner nada más.",
+   "transicion": "barrido"
+  },
+  {
+   "rol": "ejemplo",
+   "escena": {
+    "tipo": "datos",
+    "kicker": "Mil dólares al 10 % anual, sin aportes extra",
+    "titulo": {
+     "texto": "El tiempo hace el trabajo"
+    },
+    "prefijo": "US$ ",
+    "barras": [
+     {
+      "etiqueta": "Hoy",
+      "valor": 1000,
+      "cue": "Hoy"
+     },
+     {
+      "etiqueta": "10 años",
+      "valor": 2594,
+      "cue": "una década"
+     },
+     {
+      "etiqueta": "20 años",
+      "valor": 6727,
+      "cue": "dos décadas"
+     },
+     {
+      "etiqueta": "30 años",
+      "valor": 17449,
+      "cue": "tres décadas",
+      "destacar": true
+     }
+    ]
+   },
+   "texto": "Hoy tenés mil, y no tocás nada. Pasada una década, dos mil seiscientos. A las dos décadas, seis mil setecientos. Y a las tres décadas, más de diecisiete mil."
+  },
+  {
+   "rol": "ejemplo",
+   "escena": {
+    "tipo": "datos",
+    "kicker": "Mil dólares, treinta años, al 10 %",
+    "titulo": {
+     "texto": "Simple contra compuesto"
+    },
+    "prefijo": "US$ ",
+    "barras": [
+     {
+      "etiqueta": "Lo que pusiste",
+      "valor": 1000,
+      "cue": "Pusiste"
+     },
+     {
+      "etiqueta": "Interés simple",
+      "valor": 4000,
+      "cue": "Con interés simple"
+     },
+     {
+      "etiqueta": "Interés compuesto",
+      "valor": 17449,
+      "cue": "diecisiete mil",
+      "destacar": true
+     }
+    ]
+   },
+   "texto": "Pusiste mil dólares. Con interés simple, en treinta años llegás a cuatro mil. Con interés compuesto, a más de diecisiete mil. Misma plata. Mismo tiempo."
+  },
+  {
+   "rol": "ejemplo",
+   "escena": {
+    "tipo": "presentacion",
+    "kicker": "Un atajo para hacer la cuenta",
+    "titulo": {
+     "texto": "La regla del 72"
+    },
+    "puntos": [
+     {
+      "texto": "72 ÷ tasa",
+      "cue": "Dividí"
+     },
+     {
+      "texto": "= años para duplicar tu plata",
+      "cue": "se duplica"
+     },
+     {
+      "texto": "Al 10 %: unos 7 años",
+      "cue": "unos siete años"
+     },
+     {
+      "texto": "Al 7 %: unos 10 años",
+      "cue": "Al siete"
+     }
+    ]
+   },
+   "texto": "Dividí setenta y dos por la tasa, y sabés en cuántos años se duplica tu plata: es la regla del setenta y dos. Al diez por ciento, en unos siete años. Al siete por ciento, en unos diez.",
+   "transicion": "fundido"
+  },
+  {
+   "rol": "ejemplo",
+   "escena": {
+    "tipo": "diagrama",
+    "kicker": "Por qué gana Ana",
+    "titulo": {
+     "texto": "Lo que cuenta es cuánto rueda"
+    },
+    "nodos": [
+     {
+      "id": "a",
+      "texto": "Ana ahorra",
+      "detalle": "de 25 a 35",
+      "cue": "Ana ahorra"
+     },
+     {
+      "id": "r",
+      "texto": "Deja rodar",
+      "detalle": "30 años",
+      "cue": "deja rodar"
+     },
+     {
+      "id": "f",
+      "texto": "Resultado",
+      "detalle": "US$ 105.174",
+      "cue": "todo el truco"
+     }
+    ],
+    "flechas": [
+     {
+      "de": "a",
+      "a": "r",
+      "texto": "para",
+      "cue": "Después para"
+     },
+     {
+      "de": "r",
+      "a": "f",
+      "texto": "crece",
+      "cue": "más tiempo"
+     }
+    ]
+   },
+   "texto": "Ana ahorra de los veinticinco a los treinta y cinco. Después para, y deja rodar esa plata treinta años. Cada dólar de Ana tuvo más tiempo para crecer. Ese es todo el truco.",
+   "transicion": "barrido"
+  },
+  {
+   "rol": "repaso",
+   "escena": {
+    "tipo": "presentacion",
+    "titulo": {
+     "texto": "Para llevarte"
+    },
+    "puntos": [
+     {
+      "texto": "Los intereses también ganan intereses",
+      "cue": "Los intereses"
+     },
+     {
+      "texto": "Empezar temprano pesa más que poner mucho",
+      "cue": "empezar temprano"
+     },
+     {
+      "texto": "El que multiplica es el tiempo",
+      "cue": "multiplica"
+     }
+    ]
+   },
+   "texto": "Uno: los intereses también ganan intereses. Dos: empezar temprano pesa más que poner mucho. Y tres: el que multiplica es el tiempo. La mejor fecha para empezar es hoy.",
+   "transicion": "fundido"
   }
  ]
 }

@@ -262,6 +262,14 @@ necesita lo dice en vez de omitirlo en silencio.
   para comparar números; `imagen` para una metáfora dibujada; pantalla grabada para mostrar una
   herramienta de verdad. Una escena sin nada que entre después del título es tiempo muerto,
   igual que una terminal quieta.
+- **La primera palabra del texto nombra el primer elemento** (S8, primer video real). El
+  título ya está en pantalla: una muletilla de arranque ("Pensalo como...", "Volvamos a...",
+  "Para llevarte.") deja 2–4 s de título solo, que se ve vacío aunque D2 no lo marque. Abrí
+  el gancho con una portada (`presentacion` sin puntos, título grande) de ~5 s, y no
+  remates una escena con una frase que no trae elemento nuevo si ya va por los 5 s.
+- **Que Whisper oiga la cue**: elegí cues de 2–3 palabras de contenido ("unos siete años"),
+  no la preposición del arranque ("Al diez" se oyó "El 10") ni "por ciento" (no se pasa a
+  `%`). Un `datos` con 2 barras se ve vacío: sumá la referencia ("Lo que pusiste").
 - **Cada elemento entra en la palabra que lo nombra** (`cue`), nunca "cerca". El texto del
   segmento tiene que nombrar lo que el elemento muestra en el momento en que entra (ver
   resolución de cues en Escenas, más arriba).

@@ -1,0 +1,9 @@
+<!-- Copo de nieve (lo que ponés al principio: chico). Escrito a mano para esta skill, sin
+     licencia de terceros (Q8). Misma convención de recoloreado que lampara.svg. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <path d="M100 30 L100 170 M39 65 L161 135 M39 135 L161 65" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round"/>
+  <path d="M84 44 L100 60 L116 44 M84 156 L100 140 L116 156" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M46 84 L68 78 L62 56 M154 116 L132 122 L138 144" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M46 116 L68 122 L62 144 M154 84 L132 78 L138 56" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle class="lleno" fill="currentColor" cx="100" cy="100" r="14"/>
+</svg>
