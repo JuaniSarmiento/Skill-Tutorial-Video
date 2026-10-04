@@ -609,6 +609,18 @@ class RevisarError(Exception):
     """Error claro de `revisar` (B3a/B8): se informa sin traceback y sale != 0."""
 
 
+FLAGS_REVISAR = ("--estricto",)
+USO_REVISAR = "uso: editar.py revisar <vNN> [voz] [--estricto]"
+
+
+def _estricto_falla(hallazgos: list[str], no_corrio: list[str]) -> bool:
+    """B3c (DECISIÓN PENDIENTE DE JUANI, hoy no falla): política de si `--estricto`
+    tiene que salir con 1 cuando algún chequeo no corrió (`no_corrio` no vacío),
+    además de cuando hay `hallazgos`. Toda la política vive acá: cambiarla es
+    una línea."""
+    return bool(hallazgos)
+
+
 def _voces_con_artefactos(work: Path) -> set[str]:
     """Nombres de voz para los que existe al menos un artefacto en `work`
     (video-<voz>.mp4, voz-<voz>.wav o slots-<voz>.json). B3a: sirve para avisar de
@@ -813,8 +825,45 @@ def informe_revisar(vid: str, voz_name: str, hallazgos: list[str], no_corrio: li
     return "\n".join(lineas)
 
 
+def _dispatch_revisar(args: list[str]) -> int:
+    """CLI de 'revisar' (B8): separa flags de posicionales sin importar el orden
+    (B8: '--estricto' puede ir antes del vNN) y da mensajes claros con el uso en
+    vez de traceback ante vNN faltante, sin argumentos, o un flag desconocido
+    (B3b: no se ignora en silencio)."""
+    flags = [a for a in args if a.startswith("--")]
+    desconocidos = [f for f in flags if f not in FLAGS_REVISAR]
+    if desconocidos:
+        print(f"editar.py revisar: flag desconocido {desconocidos[0]!r} (válidos: {', '.join(FLAGS_REVISAR)})",
+              file=sys.stderr)
+        print(USO_REVISAR, file=sys.stderr)
+        return 2
+    posicionales = [a for a in args if not a.startswith("--")]
+    if not posicionales:
+        print("editar.py revisar: falta <vNN>", file=sys.stderr)
+        print(USO_REVISAR, file=sys.stderr)
+        return 2
+    vid = posicionales[0]
+    voz_name = posicionales[1] if len(posicionales) > 1 else "argentina"
+    estricto = "--estricto" in flags
+    try:
+        hallazgos, no_corrio = revisar(vid, voz_name)
+    except FileNotFoundError:
+        print(f"editar.py revisar: no existe {vid} (falta guion/{vid}.json)", file=sys.stderr)
+        return 2
+    except RevisarError as e:
+        print(f"editar.py revisar: {e}", file=sys.stderr)
+        return 2
+    print(informe_revisar(vid, voz_name, hallazgos, no_corrio))
+    return 1 if estricto and _estricto_falla(hallazgos, no_corrio) else 0
+
+
 if __name__ == "__main__":
-    accion, vid = sys.argv[1], sys.argv[2]
+    if len(sys.argv) < 2:
+        sys.exit(__doc__)
+    accion = sys.argv[1]
+    if accion == "revisar":
+        sys.exit(_dispatch_revisar(sys.argv[2:]))
+    vid = sys.argv[2]
     if accion == "imagen":
         imagen(vid, sys.argv[3] if len(sys.argv) > 3 else "argentina")
     elif accion == "voz":
@@ -828,13 +877,5 @@ if __name__ == "__main__":
         else:   # ruta absoluta: el comando se copia y se corre desde la raíz del tutorial
             print(f"hoja de contacto: uv run --with playwright python {Path(__file__).resolve().parent / 'escena.py'} contacto "
                   + " ".join(str(r) for r in rutas) + f" -o {ROOT / 'videos' / vid / 'contacto.png'}")
-    elif accion == "revisar":
-        estricto = "--estricto" in sys.argv
-        posicionales = [a for a in sys.argv[3:] if not a.startswith("--")]
-        voz_name = posicionales[0] if posicionales else "argentina"
-        hallazgos, no_corrio = revisar(vid, voz_name)
-        print(informe_revisar(vid, voz_name, hallazgos, no_corrio))
-        if estricto and hallazgos:
-            sys.exit(1)
     else:
         sys.exit(__doc__)

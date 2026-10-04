@@ -500,3 +500,88 @@ def test_sin_hallazgos_y_estricto_sale_con_0(raiz, monkeypatch, capsys):
     _, code = _correr_cli(raiz, monkeypatch, capsys, ["--estricto"])
 
     assert code == 0
+
+
+# --- B8: vNN inexistente, sin argumentos, --estricto antes del vid ----------------
+
+def _correr_cli_argv(raiz, monkeypatch, capsys, argv_despues_de_revisar):
+    import runpy
+    import sys
+    from pathlib import Path
+    monkeypatch.setenv("TUT_ROOT", str(raiz))
+    monkeypatch.setattr(sys, "argv", ["editar.py", "revisar", *argv_despues_de_revisar])
+    code = None
+    try:
+        runpy.run_path(str(Path(editar.__file__)), run_name="__main__")
+    except SystemExit as e:
+        code = e.code
+    captura = capsys.readouterr()
+    return captura.out, captura.err, (0 if code is None else code)
+
+
+def test_revisar_sin_argumentos_da_mensaje_claro_y_uso(raiz, monkeypatch, capsys):
+    _, err, code = _correr_cli_argv(raiz, monkeypatch, capsys, [])
+
+    assert code != 0
+    assert "uso" in err.lower()
+
+
+def test_revisar_con_vnn_inexistente_da_mensaje_claro(raiz, monkeypatch, capsys):
+    _, err, code = _correr_cli_argv(raiz, monkeypatch, capsys, ["v99"])
+
+    assert code != 0
+    assert "v99" in err
+
+
+def test_revisar_con_flag_desconocido_es_error_no_se_ignora(raiz, monkeypatch, capsys):
+    _guion(raiz, {"segmentos": [{"inicio": 0, "fin": 1, "texto": "a"}]})
+
+    _, err, code = _correr_cli_argv(raiz, monkeypatch, capsys, ["v09", "--estrict"])
+
+    assert code != 0
+    assert "--estrict" in err
+
+
+def test_estricto_antes_del_vid_tambien_hace_fallar_con_hallazgos(raiz, monkeypatch, capsys):
+    _guion(raiz, {"segmentos": [{"inicio": 0, "fin": 1, "texto": "a"}]})
+
+    _, _, code = _correr_cli_argv(raiz, monkeypatch, capsys, ["--estricto", "v09"])
+
+    assert code == 1
+
+
+# --- B3c (decisión pendiente): hoy --estricto NO falla si algo no corrió ----------
+
+def test_estricto_no_falla_solo_porque_un_chequeo_no_corrio(raiz, monkeypatch, capsys):
+    """Política actual (B3c, pendiente de decisión de Juani): `_estricto_falla` sólo
+    mira `hallazgos`, nunca `no_corrio`. Guion con roles completos (sin hallazgo de
+    D4) y SIN ningún artefacto (D1/D2/D3 "no corrieron"): --estricto sale con 0."""
+    _guion(raiz, {"segmentos": [
+        {"inicio": 0, "fin": 1, "texto": "a", "rol": "gancho"},
+        {"inicio": 1, "fin": 2, "texto": "b", "rol": "analogia"},
+        {"inicio": 2, "fin": 3, "texto": "c", "rol": "ejemplo"},
+        {"inicio": 3, "fin": 4, "texto": "d", "rol": "repaso"}]})
+
+    _, code = _correr_cli(raiz, monkeypatch, capsys, ["--estricto"])
+
+    assert code == 0
+
+
+# --- M12: --estricto tiene que fallar también por hallazgos de D1-D3, no sólo D4 --
+
+def test_estricto_falla_por_un_hallazgo_de_tiempo_muerto_sin_que_haya_problema_de_roles(
+        raiz, monkeypatch, capsys, tmp_path):
+    clip = tmp_path / "clip.mp4"
+    quieto = tmp_path / "quieto.mp4"
+    _clip(clip, "testsrc=s=320x240:r=30:d=1,format=yuv420p")
+    _clip(quieto, "color=c=black:s=320x240:r=30:d=8")
+    _concat_video(raiz / "videos" / "v09" / "video-argentina.mp4", [clip, quieto, clip])
+    _guion(raiz, {"segmentos": [
+        {"inicio": 0, "fin": 1, "texto": "a", "rol": "gancho"},
+        {"inicio": 1, "fin": 2, "texto": "b", "rol": "analogia"},
+        {"inicio": 2, "fin": 3, "texto": "c", "rol": "ejemplo"},
+        {"inicio": 3, "fin": 4, "texto": "d", "rol": "repaso"}]})
+
+    _, code = _correr_cli(raiz, monkeypatch, capsys, ["--estricto"])
+
+    assert code == 1
