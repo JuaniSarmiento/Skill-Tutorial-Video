@@ -20,7 +20,7 @@ uso:
                      [--brand brand.json] [--duracion S] [--fps 30] [--ancho 1920]
   escena.py contacto <spec.json>... -o hoja.png [--brand brand.json] [--palabras p.json]
 
-`tipo` es el nombre de una plantilla de assets/escenas/ (diagrama, presentacion, datos).
+`tipo` es el nombre de una plantilla de assets/escenas/ (diagrama, presentacion, datos, imagen).
 Corre con: uv run --with playwright python escena.py ...   (usa el Chrome instalado)
 """
 import copy
@@ -424,7 +424,7 @@ def _cli(argv) -> None:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="accion", required=True)
     r = sub.add_parser("render")
-    r.add_argument("plantilla", help="tipo (diagrama, presentacion, datos) o ruta a un .html")
+    r.add_argument("plantilla", help="tipo (diagrama, presentacion, datos, imagen) o ruta a un .html")
     r.add_argument("spec")
     r.add_argument("--duracion", type=float, help="pisa la duración del spec (ej: el slot de la voz)")
     r.add_argument("--fps", type=int, default=30)
@@ -456,7 +456,7 @@ def _cli(argv) -> None:
         for s in a.specs:
             spec = json.loads(Path(s).read_text())
             if not spec.get("tipo"):
-                ap.error(f"{s} no dice su 'tipo' (diagrama, presentacion, datos)")
+                ap.error(f"{s} no dice su 'tipo' (diagrama, presentacion, datos, imagen)")
             escenas.append((Path(s).stem + " " + spec["tipo"], ruta_plantilla(spec["tipo"]),
                             resolver_dibujos(resolver_spec(spec, voz), Path(s).resolve().parent)))
         print(hoja_contacto(escenas, a.salida, brand, a.columnas))
