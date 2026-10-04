@@ -62,11 +62,47 @@ metadata:
   `videos/<vNN>/zonas/NN.json`: una lista de momentos
   `{"t", "x", "y", "w", "h", "importancia"}`, donde `t` está en el eje del propio crudo (el
   mismo que `seg["inicio"]`/`seg["fin"]`, ANTES de `mpdecimate`) y `x`/`y`/`w`/`h` son una caja
-  en píxeles del crudo sin escalar (misma convención que el `"zoom": {x,y,w,h}` fijo).
-  Muestrea a pocos fps y en escala de grises a baja resolución para no depender de numpy y
-  analizar rápido (un crudo de 10 min a 1080p, en segundos). Sólo lee: no genera voces ni
-  renderiza nada. No decide cuáles momentos usar ni limita la frecuencia entre acercamientos:
-  eso es trabajo de S7b.
+  en píxeles del crudo sin escalar (misma convención que el `"zoom": {x,y,w,h}` fijo). Se
+  escala cada eje por separado (ancho y alto reales del crudo contra el ancho/alto de la
+  grilla reducida de análisis): con una sola escala para los dos ejes, redondear el alto a
+  un entero par corre la caja en resoluciones no 16:9 (hasta ~30px en 3440x1440).
+  Muestrea a pocos fps y en escala de grises, reducido con promedio de área (`flags=area`,
+  no vecino más cercano: a 14-16px de fuente, "vecino más cercano" se queda con 1 de cada
+  ~144 píxeles y el tipeo desaparece) para no depender de numpy y analizar rápido (un crudo
+  de 10 min a 1080p, en segundos).
+
+  El cambio entre dos cuadros se agrupa en **componentes conexas** (una dilatación chica
+  junta letras de la misma línea sin unir dos cambios que están lejos de verdad, como un
+  aviso en una esquina y la salida de un comando en otra) y cada componente se clasifica
+  por separado contra un "estado estable" que se va actualizando POR REGIÓN, no entero:
+  - **ruido** (cursor parpadeando, reloj): por debajo de un mínimo de píxeles cambiados,
+    no se guarda y no mueve la base en esa región -así no estira la caja de un momento
+    vecino que sí importa-.
+  - **scroll**: un componente de varias filas donde el contenido nuevo es, en lo esencial,
+    el viejo CORRIDO verticalmente (se prueban varios corrimientos y se mide cuánto no
+    calza ni corrido) no es un momento, pero sí actualiza la base (si no, todo lo que
+    venga después del scroll "cambiaría" para siempre contra la pantalla de antes). Mide
+    el desplazamiento del contenido, no el área de la caja: una terminal con texto
+    alineado a la izquierda da una caja angosta y alta que antes pasaba el filtro de
+    "área grande" por accidente.
+  - **parpadeo**: un cambio que ya volvió al estado estable en el cuadro siguiente (o que
+    es la repetición exacta de un parpadeo ya confirmado antes, incluso si cae justo en
+    el último cuadro de la secuencia y no hay un cuadro posterior para confirmarlo) es
+    ruido, no un momento.
+  - **momento de verdad**: lo que no entra en ninguna categoría anterior se guarda como
+    momento y la base de esa región pasa a ser el nuevo estado.
+
+  `importancia` mide píxeles CAMBIADOS de verdad en el componente (no el área de la
+  caja que lo encierra): así un comando tipeado (muchos píxeles de varios caracteres)
+  pesa más que un dígito de una barra de estado (un puñado de píxeles), aunque sus cajas
+  fueran del mismo tamaño -el área de la caja sola premiaba scrolls y cajas unidas-.
+
+  Sólo lee: no genera voces ni renderiza nada. No decide cuáles momentos usar ni limita la
+  frecuencia entre acercamientos: eso es trabajo de S7b. Si falta el crudo de un segmento,
+  si a un segmento le falta `inicio`/`fin` o tiene `inicio >= fin`, aborta nombrando el
+  segmento (sin traceback); si `fin` va más allá de la duración real del crudo es un
+  aviso, no un abort. Los `zonas/NN.json` de índices que ya no son de pantalla (guion
+  editado después de la última corrida) se borran al regenerar.
 
 ## Escenas: segmentos que no son pantalla grabada
 
