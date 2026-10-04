@@ -516,21 +516,27 @@ def test_wav_vacio_o_corrupto_dice_que_no_corrio_con_la_causa(raiz):
     assert any("voz-argentina.wav" in m and "no corrió" in m for m in no_corrio)
 
 
-# --- Decisión pendiente de Juani (#2, HITO2.md): D3 con voces FISH_LENTAS --------
+# --- Decisión de Juani (#2, HITO2.md, resuelta 03/10/2026): D3 con voces FISH_LENTAS --
 #
 # El pipeline real (preparar(), editar.py) deja LEAD (0.3s, línea ~64: silencio
-# antes de que arranque la voz en cada slot) + cola (1.0s para las voces de
-# FISH_LENTAS, fijado en la línea ~430 de preparar()) = 1.3s de silencio "de
-# diseño" en CADA borde entre segmentos. Como 1.3s > 0.9s (el umbral de D3),
-# `revisar` marca TODOS esos bordes como silencio. Este test documenta el
-# comportamiento ACTUAL sin resolver la decisión: si Juani decide que D3 no
-# tiene que contar ese silencio de diseño para las voces FISH_LENTAS, el cambio
-# es sólo en CHEQUEOS["D3"]/_silencios (o en cómo revisar() los llama), y este
-# test es el que hay que actualizar primero.
+# antes de que arranque la voz en cada slot) + cola (TAIL, 0.5s, IGUAL para
+# TODAS las voces desde esta decisión) = 0.8s de silencio "de diseño" en cada
+# borde entre segmentos. Como 0.8s < 0.9s (el umbral de D3), `revisar` YA NO
+# marca esos bordes como silencio, ni para FISH_LENTAS ni para ninguna voz.
 
-def test_fish_lentas_deja_1_3s_de_silencio_entre_segmentos_y_d3_lo_marca(raiz, tmp_path):
+def test_la_cola_es_la_misma_para_todas_las_voces():
+    """Decisión de Juani (03/10/2026): la cola pasa a ser TAIL (0.5s) para TODAS
+    las voces, incluidas las de FISH_LENTAS (antes 1.0s) y las rápidas (antes
+    0.6s). Ya no depende del nombre de la voz."""
+    assert editar._cola("profe") == editar.TAIL  # antes 1.0 (FISH_LENTAS)
+    assert editar._cola("joven") == editar.TAIL  # antes 1.0 (FISH_LENTAS) o 0.6 si fuera rápida
+    assert editar._cola("juani") == editar.TAIL  # sin cambios: ya era TAIL
+
+
+def test_fish_lentas_ya_no_da_falso_silencio_entre_segmentos(raiz, tmp_path):
     assert "profe" in editar.FISH_LENTAS  # profe es una voz de FISH_LENTAS
-    gap = editar.LEAD + editar._cola("profe")  # NOTE 11: misma fuente que preparar()
+    gap = editar.LEAD + editar.TAIL  # NOTE 11: misma fuente que preparar()
+    assert gap < 0.9  # bajo el umbral de D3: ya no es un silencio "real"
     habla = tmp_path / "habla.wav"
     silencio = tmp_path / "silencio.wav"
     _clip(habla, "sine=f=300:d=1")
@@ -543,8 +549,7 @@ def test_fish_lentas_deja_1_3s_de_silencio_entre_segmentos_y_d3_lo_marca(raiz, t
 
     hallazgos, _ = editar.revisar("v09", "profe")
 
-    silencios = [h for h in hallazgos if "silencio" in h]
-    assert len(silencios) == 2  # los DOS bordes entre los 3 segmentos, todos marcados
+    assert not any("silencio" in h for h in hallazgos)
 
 
 # --- R-5.5: estructura de clase por `rol` ------------------------------------------

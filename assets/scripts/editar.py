@@ -419,11 +419,14 @@ def spec_de_escena(seg: dict, slot: float, voz_palabras: list[dict]) -> dict:
 
 
 def _cola(voz_name: str) -> float:
-    """Margen después de la voz (NOTE 11): depende de si la voz es rápida
-    (FISH_SPEED >= 1.0), de FISH_LENTAS, o ninguna de las dos (TAIL). Única fuente
-    de esta cuenta: `preparar()` y el test de la decisión 2 (D3/FISH_LENTAS) la
-    usan a través de esta función, no de un número copiado a mano."""
-    return 0.6 if FISH_SPEED.get(voz_name, 0.8) >= 1.0 else (1.0 if voz_name in FISH_LENTAS else TAIL)
+    """Margen después de la voz: TAIL (0.5s) para TODAS las voces (decisión de
+    Juani, 03/10/2026). Antes era 1.0s para las voces de FISH_LENTAS y 0.6s para
+    las rápidas; con TAIL el hueco entre segmentos (LEAD + cola = 0.3 + 0.5 =
+    0.8s) queda bajo el umbral de D3 (0.9s), así que D3 ya no confunde ese
+    silencio de diseño con uno real. Única fuente de esta cuenta: `preparar()` y
+    el test de la decisión 2 (D3/FISH_LENTAS) la usan a través de esta función,
+    no de un número copiado a mano."""
+    return TAIL
 
 
 def preparar(vid: str, voz_name: str) -> list[tuple[dict, float, list | None]]:
