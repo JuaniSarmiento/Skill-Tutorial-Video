@@ -33,6 +33,7 @@ import tempfile
 import xml.etree.ElementTree as ET
 from contextlib import contextmanager
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 import encoder
 import palabras as _palabras
@@ -319,6 +320,9 @@ def avisar_si_falta_la_fuente(page, fuente) -> bool:
 # camino que un error de JS (page.on("pageerror")) y sale como ContratoError.
 # B6 (QA 03/10/2026): HTMLCanvasElement no es el único con getContext; OffscreenCanvas (que
 # puede pedir 'webgl' igual, sin estar en el DOM) la saltea si no se cubre también.
+# N8 (QA 04/10/2026): un Worker tiene su propio scope global (su propio OffscreenCanvas, sin
+# el parche de este hilo); ninguna plantilla necesita Worker/SharedWorker, así que se
+# bloquean directamente en vez de perseguir el WebGL dentro de cada scope posible.
 GUARDIA_WEBGL = """(function () {
   function bloquear(proto) {
     const orig = proto.getContext;
@@ -330,6 +334,9 @@ GUARDIA_WEBGL = """(function () {
   }
   bloquear(HTMLCanvasElement.prototype);
   if (typeof OffscreenCanvas !== 'undefined') bloquear(OffscreenCanvas.prototype);
+  window.Worker = function () { throw new Error('Worker no permitido: esta skill no usa workers'); };
+  if (typeof SharedWorker !== 'undefined')
+    window.SharedWorker = function () { throw new Error('SharedWorker no permitido: esta skill no usa workers'); };
 })();"""
 
 
@@ -346,14 +353,26 @@ def pagina_de_escena(browser, plantilla, spec: dict, brand: dict):
     errores = []
     page.on("pageerror", lambda e: errores.append(str(e)))
 
+    # N9 (QA 04/10/2026): "sólo file://" dejaba pasar CUALQUIER archivo local, no sólo los de
+    # la propia escena; file:///etc/hostname pasaba igual que base.css. Las raíces permitidas
+    # son el directorio de la plantilla (sus recursos: base.css, base.js, fuentes) y
+    # assets/escenas/ (si la plantilla vive afuera, ej. una pasada por ruta). Los SVG de los
+    # dibujos van embebidos en el spec (innerHTML), no se piden por red.
+    raices_permitidas = {ESCENAS.resolve(), Path(plantilla).resolve().parent}
+
+    def _archivo_permitido(url: str) -> bool:
+        ruta = Path(unquote(urlparse(url).path)).resolve()
+        return any(ruta == r or ruta.is_relative_to(r) for r in raices_permitidas)
+
     def _bloquear_red(route):
         """B1, defensa en profundidad: el saneado de resolver_dibujos es la primera barrera;
         esta es la segunda, para todas las plantillas. Nada sale al mundo (XHR/fetch/img/CSS):
-        sólo file:// de la propia escena. Un intento de red falla el render con ContratoError
-        en vez de pasar en silencio (antes un `catch` de la plantilla se lo tragaba).
+        sólo file:// dentro del directorio de la plantilla o de assets/escenas/. Un intento de
+        red falla el render con ContratoError en vez de pasar en silencio (antes un `catch` de
+        la plantilla se lo tragaba).
         """
         url = route.request.url
-        if url.startswith("file://"):
+        if url.startswith("file://") and _archivo_permitido(url):
             route.continue_()
         else:
             errores.append(f"intento de red bloqueado ({route.request.method} {url})")

@@ -4,6 +4,7 @@ Renders cortos (1 s, 12 fps, 960 de ancho) para no pasar de ~1 GB de RAM. Lo que
 se verifica es lo que un test puro no puede: que la página cumpla el contrato,
 que el mp4 dure lo que tiene que durar y que los cuadros cambien con t.
 """
+import base64
 import json
 import re
 import subprocess
@@ -105,6 +106,32 @@ def test_una_plantilla_que_llama_a_webgl_por_offscreencanvas_tambien_falla(tmp_p
         escena.render(html, {}, tmp_path / "out.mp4", fps=12, ancho=960)
 
 
+# N8 (QA 04/10/2026): un Worker tiene su propio scope global; el parche de OffscreenCanvas
+# en el hilo principal no lo cubre, así que desde un Worker se podía seguir pidiendo WebGL.
+# Ninguna plantilla necesita Worker/SharedWorker: se bloquean directamente.
+
+def test_una_plantilla_que_crea_un_worker_falla_con_contrato_error(tmp_path):
+    html = tmp_path / "worker.html"
+    html.write_text("""<script>
+      window.DURATION = 1;
+      window.seek = async t => { new Worker('data:text/javascript,'); };
+    </script>""")
+
+    with pytest.raises(escena.ContratoError, match="Worker"):
+        escena.render(html, {}, tmp_path / "out.mp4", fps=12, ancho=960)
+
+
+def test_una_plantilla_que_crea_un_sharedworker_falla_con_contrato_error(tmp_path):
+    html = tmp_path / "sharedworker.html"
+    html.write_text("""<script>
+      window.DURATION = 1;
+      window.seek = async t => { new SharedWorker('data:text/javascript,'); };
+    </script>""")
+
+    with pytest.raises(escena.ContratoError, match="Worker"):
+        escena.render(html, {}, tmp_path / "out.mp4", fps=12, ancho=960)
+
+
 def test_una_plantilla_que_usa_canvas_2d_no_se_ve_afectada_por_la_guardia_de_webgl(tmp_path):
     html = tmp_path / "canvas2d.html"
     html.write_text("""<script>
@@ -149,6 +176,55 @@ def test_un_intento_de_red_al_cargar_la_pagina_tambien_falla(tmp_path):
 
     with pytest.raises(escena.ContratoError, match="red"):
         escena.render(html, {"duracion": 1.0}, tmp_path / "out.mp4", fps=12, ancho=960)
+
+
+# N9 (QA 04/10/2026): _bloquear_red dejaba pasar CUALQUIER file://, no sólo los de la propia
+# escena (directorio de la plantilla o de assets/escenas/, sus recursos: base.css, base.js,
+# fuentes). Los SVG de los dibujos van embebidos en el spec (innerHTML), no se piden por red.
+#
+# fetch() no sirve para probar esto: el Fetch API rechaza el scheme file:// en el propio
+# navegador (TypeError "Failed to fetch"), sin pasar por page.route. Un <img> sí pasa por la
+# resolución normal de recursos (y por nuestro page.route): un PNG 1x1 real distingue
+# "la carga terminó bien" (onload) de "se abortó" (onerror) sin ambigüedad.
+PNG_1X1 = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")
+
+CARGAR_IMG = """<!doctype html><script>
+  window.DURATION = 1;
+  window.seek = async t => {{
+    await new Promise((res, rej) => {{
+      const img = new Image();
+      img.onload = res;
+      img.onerror = () => rej(new Error('la imagen no cargó (bloqueada o inexistente)'));
+      img.src = {src!r};
+    }});
+  }};
+</script>"""
+
+
+def test_una_imagen_file_fuera_del_directorio_de_la_plantilla_falla_con_contrato_error(tmp_path):
+    fuera = tmp_path / "fuera"
+    fuera.mkdir()
+    (fuera / "x.png").write_bytes(PNG_1X1)
+    sub = tmp_path / "plantilla"
+    sub.mkdir()
+    html = sub / "pagina.html"
+    html.write_text(CARGAR_IMG.format(src=f"file://{fuera / 'x.png'}"))
+
+    with pytest.raises(escena.ContratoError, match="bloque"):
+        escena.render(html, {"duracion": 1.0}, tmp_path / "out.mp4", fps=12, ancho=960)
+
+
+def test_una_imagen_file_dentro_del_directorio_de_la_plantilla_no_falla(tmp_path):
+    sub = tmp_path / "plantilla"
+    sub.mkdir()
+    (sub / "x.png").write_bytes(PNG_1X1)
+    html = sub / "pagina.html"
+    html.write_text(CARGAR_IMG.format(src=f"file://{sub / 'x.png'}"))
+
+    d = escena.render(html, {"duracion": 1.0}, tmp_path / "out.mp4", fps=12, ancho=960)
+
+    assert d == pytest.approx(1.0)
 
 
 def test_la_hoja_de_contacto_es_un_png_con_tres_cuadros_por_escena(tmp_path):
