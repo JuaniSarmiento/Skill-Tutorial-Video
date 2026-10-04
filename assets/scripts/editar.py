@@ -31,6 +31,7 @@ import subprocess
 import sys
 import threading
 import time
+import unicodedata
 import wave
 from pathlib import Path
 
@@ -680,12 +681,39 @@ def _specs_escena_vigentes(g: dict, voz_name: str, work: Path) -> tuple[list[Pat
     return vigentes, viejos
 
 
+ROLES_VALIDOS = ("gancho", "analogia", "ejemplo", "repaso")
+
+
+def _normalizar_rol(rol: str) -> str:
+    """B7: minúsculas y sin tildes, para que 'Analogía' valga como 'analogia'."""
+    sin_tildes = unicodedata.normalize("NFKD", rol.strip().lower())
+    return "".join(c for c in sin_tildes if not unicodedata.combining(c))
+
+
 def _hallazgos_roles(segmentos: list[dict]) -> list[str]:
-    """D4: estructura de clase de profe (gancho, analogía, ejemplo, repaso)."""
-    roles = [s.get("rol") for s in segmentos]
-    if not any(roles):
+    """D4: estructura de clase de profe (gancho, analogía, ejemplo, repaso).
+
+    B7: un rol que no es ninguno de los válidos avisa con su nombre y la lista de
+    válidos (y no cuenta como ninguno de ellos); uno que sólo difiere en mayúsculas
+    o tildes se normaliza con un aviso aparte.
+    """
+    crudos = [s.get("rol") for s in segmentos]
+    if not any(crudos):
         return ["el guion no declara roles"]
     hallazgos = []
+    roles = []
+    for crudo in crudos:
+        if crudo is None:
+            roles.append(None)
+            continue
+        normalizado = _normalizar_rol(crudo)
+        if normalizado != crudo:
+            hallazgos.append(f"rol {crudo!r} normalizado a {normalizado!r} (sin tildes/mayúsculas)")
+        if normalizado not in ROLES_VALIDOS:
+            hallazgos.append(f"rol desconocido {normalizado!r} (válidos: {', '.join(ROLES_VALIDOS)})")
+            roles.append(None)
+        else:
+            roles.append(normalizado)
     if roles[0] != "gancho":
         hallazgos.append(f"el primer segmento no es 'gancho' (rol={roles[0]!r})")
     if roles[-1] != "repaso":

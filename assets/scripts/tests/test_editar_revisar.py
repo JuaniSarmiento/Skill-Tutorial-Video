@@ -349,6 +349,59 @@ def test_sin_ninguna_analogia_se_reporta(raiz):
     assert any("analogia" in h for h in hallazgos)
 
 
+def test_sin_ningun_ejemplo_se_reporta(raiz):
+    """M5: si se borra este chequeo, falta ejemplo deja de reportarse."""
+    _guion(raiz, {"segmentos": [
+        {"inicio": 0, "fin": 1, "texto": "a", "rol": "gancho"},
+        {"inicio": 1, "fin": 2, "texto": "b", "rol": "analogia"},
+        {"inicio": 2, "fin": 3, "texto": "c", "rol": "repaso"}]})
+
+    hallazgos, _ = editar.revisar("v09", "argentina")
+
+    assert any("ejemplo" in h for h in hallazgos)
+
+
+def test_gancho_que_no_esta_primero_se_reporta_aunque_este_en_otra_posicion(raiz):
+    """M13: 'gancho' tiene que ser el PRIMER segmento, no estar en cualquier posición."""
+    _guion(raiz, {"segmentos": [
+        {"inicio": 0, "fin": 1, "texto": "a", "rol": "analogia"},
+        {"inicio": 1, "fin": 2, "texto": "b", "rol": "gancho"},
+        {"inicio": 2, "fin": 3, "texto": "c", "rol": "ejemplo"},
+        {"inicio": 3, "fin": 4, "texto": "d", "rol": "repaso"}]})
+
+    hallazgos, _ = editar.revisar("v09", "argentina")
+
+    assert any("primer segmento no es 'gancho'" in h for h in hallazgos)
+
+
+# --- B7: rol desconocido avisa, y se normalizan mayúsculas/tildes ------------------
+
+def test_rol_desconocido_avisa_con_los_roles_validos(raiz):
+    _guion(raiz, {"segmentos": [
+        {"inicio": 0, "fin": 1, "texto": "a", "rol": "gancho"},
+        {"inicio": 1, "fin": 2, "texto": "b", "rol": "profesor"},
+        {"inicio": 2, "fin": 3, "texto": "c", "rol": "ejemplo"},
+        {"inicio": 3, "fin": 4, "texto": "d", "rol": "repaso"}]})
+
+    hallazgos, _ = editar.revisar("v09", "argentina")
+
+    assert any("rol desconocido 'profesor'" in h and "gancho, analogia, ejemplo, repaso" in h
+               for h in hallazgos)
+
+
+def test_rol_con_mayusculas_y_tildes_se_normaliza_con_aviso(raiz):
+    _guion(raiz, {"segmentos": [
+        {"inicio": 0, "fin": 1, "texto": "a", "rol": "gancho"},
+        {"inicio": 1, "fin": 2, "texto": "b", "rol": "Analogía"},
+        {"inicio": 2, "fin": 3, "texto": "c", "rol": "ejemplo"},
+        {"inicio": 3, "fin": 4, "texto": "d", "rol": "repaso"}]})
+
+    hallazgos, _ = editar.revisar("v09", "argentina")
+
+    assert any("'Analogía'" in h and "'analogia'" in h for h in hallazgos)
+    assert not any("no hay ningún segmento con rol 'analogia'" in h for h in hallazgos)
+
+
 # --- R-5.1 / R-5.7: por línea de comandos, informe y código de salida --------------
 
 def _correr_cli(raiz, monkeypatch, capsys, argv_extra):
