@@ -213,6 +213,24 @@ def test_una_forma_solo_con_relleno_se_revela_progresivo_no_de_golpe(chrome, tmp
     assert 0 < temprano < maximo * 0.7, (temprano, maximo)
 
 
+# N4 (QA 04/10/2026): ningún test anterior distinguía "el trazo se dibuja progresivo" de
+# "el trazo aparece entero apenas arranca" (dashoffset siempre 0, o p en escalón 0/1 en vez
+# de ease-out): las mutaciones "dashoffset0" y "dibujogolpe" sobrevivían. Un SVG sólo con
+# trazo (sin .lleno) aísla la medición: a mitad de la entrada tiene que verse PARCIAL.
+
+def test_el_trazo_no_aparece_entero_de_golpe_a_mitad_de_la_entrada(chrome, tmp_path):
+    brand, spec = _dibujo_con_cue(
+        tmp_path, '<svg viewBox="0 0 200 200"><rect x="20" y="20" width="160" height="160" '
+                  'fill="none" stroke="currentColor" stroke-width="10"/></svg>')
+    entrada = brand["movimiento"]["entrada"]
+    with escena.pagina_de_escena(chrome, escena.ruta_plantilla("imagen"), spec, brand) as (page, _):
+        escena._cuadro(page, 1.0 + entrada * 0.5)
+        medio = _pixeles(page, "dibujo a", _fondo_rgb(brand))
+        escena._cuadro(page, 1.0 + entrada)
+        maximo = _pixeles(page, "dibujo a", _fondo_rgb(brand))
+    assert 0 < medio < maximo, (medio, maximo)
+
+
 # N2 (QA 04/10/2026, repro circulo.svg): el revelado con resorte (overshoot ~4%) de las
 # formas "otros" viola R-4.2: los píxeles no-fondo bajan varios cuadros, con el máximo bien
 # antes de t0+entrada. El revelado tiene que ser monótono (nunca bajar), con el máximo
