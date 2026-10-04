@@ -293,6 +293,37 @@ def test_sin_silencios_largos_no_hay_hallazgo_de_eso(raiz, tmp_path):
     assert not any("silencio" in h for h in hallazgos)
 
 
+def test_silencio_de_mas_de_0_9s_pero_menos_del_mutante_se_reporta(raiz, tmp_path):
+    """M6: entre 0.9s (correcto) y 1.15s (mutante), un silencio de 1.0s tiene que
+    reportarse."""
+    habla = tmp_path / "habla.wav"
+    silencio = tmp_path / "silencio.wav"
+    _clip(habla, "sine=f=300:d=1")
+    _clip(silencio, "anullsrc=r=22050:cl=mono:d=1.0")
+    _concat_wav(raiz / "videos" / "v09" / "voz-argentina.wav", [habla, silencio, habla])
+    _guion(raiz, {"segmentos": [{"inicio": 0, "fin": 1, "texto": "a"}]})
+
+    hallazgos, _ = editar.revisar("v09", "argentina")
+
+    assert any("silencio" in h for h in hallazgos)
+
+
+def test_voz_baja_pero_con_contenido_no_se_confunde_con_silencio(raiz, tmp_path):
+    """M7: silencedetect usa un umbral de sensibilidad estricto (-40dB). Un tramo con
+    voz de verdad pero floja (RMS ~ -31dB) no es silencio; con un umbral más laxo
+    (-20dB, mutante) se confundiría con silencio."""
+    habla = tmp_path / "habla.wav"
+    floja = tmp_path / "floja.wav"
+    _clip(habla, "sine=f=300:d=1")
+    _clip(floja, "sine=frequency=300:duration=1.5,volume=-10dB")
+    _concat_wav(raiz / "videos" / "v09" / "voz-argentina.wav", [habla, floja, habla])
+    _guion(raiz, {"segmentos": [{"inicio": 0, "fin": 1, "texto": "a"}]})
+
+    hallazgos, _ = editar.revisar("v09", "argentina")
+
+    assert not any("silencio" in h for h in hallazgos)
+
+
 # --- R-5.5: estructura de clase por `rol` ------------------------------------------
 
 def test_sin_ningun_rol_avisa_una_sola_linea(raiz):
