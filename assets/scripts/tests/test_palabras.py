@@ -254,6 +254,9 @@ def test_un_articulo_largo_no_ancla_pero_otra_palabra_si(dicho, cue, t):
     ("ponés 1000 pesos", "mil pesos", 0.5),
     ("pasaron veintiún años", "21 años", 0.5),
     ("más de diecisiete mil", "17000", 1.0),        # al revés: Whisper lo escribió en letras
+    ("más de 17 mil", "diecisiete mil", 1.0),        # Whisper mezcla: dígitos + "mil" (S8)
+    ("llegás a 4 mil dólares", "cuatro mil dólares", 1.0),
+    ("son 2 mil seiscientos", "2600", 0.5),          # y la cola en letras sigue sumando
 ])
 def test_un_numero_compuesto_en_palabras_es_el_mismo_que_en_digitos(dicho, cue, t):
     assert _resuelve(_oido(dicho), cue) == t
@@ -263,6 +266,7 @@ def test_un_numero_compuesto_en_palabras_es_el_mismo_que_en_digitos(dicho, cue, 
     ("tenés 2 .700", "dos mil seiscientos"),
     ("tiene 36 años", "treinta y cinco"),
     ("ponés 100 pesos", "mil pesos"),
+    ("más de 17 mil", "diecisiete"),        # "17 mil" es 17000, no 17
 ])
 def test_un_numero_en_palabras_distinto_del_oido_falla(dicho, cue):
     with pytest.raises(ValueError, match="no se dice"):
