@@ -61,7 +61,10 @@ def _sin_encoder_ambiente(monkeypatch):
 
 
 FIXTURES = Path(__file__).parent / "fixtures" / "s0"
-GUION_EJEMPLO = Path(__file__).resolve().parents[2] / "guion-ejemplo" / "explicador-interes-compuesto.json"
+# Copia congelada del guion de ejemplo tal como estaba al cerrar el Hito 1: el ejemplo de
+# `assets/guion-ejemplo/` sigue evolucionando (S8 lo reescribió con escenas `imagen`) y la
+# base tiene que medir siempre el mismo guion.
+GUION_EJEMPLO = FIXTURES / "guion-escenas.json"
 
 GUION_ESCENAS = json.loads(GUION_EJEMPLO.read_text())
 

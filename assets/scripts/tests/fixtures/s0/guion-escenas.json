@@ -1,0 +1,67 @@
+{
+ "segmentos": [
+  {
+   "escena": {
+    "tipo": "presentacion",
+    "kicker": "Finanzas en un minuto",
+    "titulo": {"texto": "El interés compuesto"},
+    "subtitulo": {"texto": "Por qué los ahorros crecen más rápido de lo que parece", "cue": "La respuesta"}
+   },
+   "texto": "¿Por qué los ahorros a largo plazo crecen tanto? La respuesta tiene nombre: interés compuesto."
+  },
+  {
+   "escena": {
+    "tipo": "presentacion",
+    "titulo": {"texto": "Simple contra compuesto"},
+    "puntos": [
+     {"texto": "Simple: ganás sobre lo que pusiste", "cue": "interés simple"},
+     {"texto": "Compuesto: ganás también sobre lo ganado", "cue": "interés compuesto"}
+    ]
+   },
+   "texto": "Con interés simple, cada año ganás sobre la plata que pusiste al principio. Con interés compuesto, los intereses se suman al capital, y al año siguiente ganás también sobre ellos."
+  },
+  {
+   "escena": {
+    "tipo": "diagrama",
+    "titulo": {"texto": "Un ciclo que se repite"},
+    "nodos": [
+     {"id": "c", "texto": "Capital", "detalle": "$ 1.000", "cue": "tu capital"},
+     {"id": "i", "texto": "Interés", "detalle": "+ 10 %", "cue": "un interés"},
+     {"id": "n", "texto": "Capital nuevo", "detalle": "$ 1.100", "cue": "capital nuevo"}
+    ],
+    "flechas": [
+     {"de": "c", "a": "i", "texto": "rinde", "cue": "rinde"},
+     {"de": "i", "a": "n", "texto": "se suma", "cue": "se suma"}
+    ]
+   },
+   "texto": "Pensalo como un ciclo. Tu capital rinde un interés. Ese interés se suma, y el capital nuevo vuelve a rendir. Cada vuelta arranca de un número más grande."
+  },
+  {
+   "escena": {
+    "tipo": "datos",
+    "kicker": "Mil pesos al 10 % anual",
+    "titulo": {"texto": "El tiempo hace el trabajo"},
+    "prefijo": "$ ",
+    "barras": [
+     {"etiqueta": "Hoy", "valor": 1000, "cue": "Hoy"},
+     {"etiqueta": "10 años", "valor": 2594, "cue": "una década"},
+     {"etiqueta": "20 años", "valor": 6727, "cue": "dos décadas"},
+     {"etiqueta": "30 años", "valor": 17449, "cue": "tres décadas", "destacar": true}
+    ],
+    "nota": "Interés compuesto anual, sin aportes extra"
+   },
+   "texto": "Hagamos números. Hoy ponés mil pesos al diez por ciento anual. Pasada una década, tenés dos mil seiscientos. A las dos décadas, seis mil setecientos. Y a las tres décadas, más de diecisiete mil."
+  },
+  {
+   "escena": {
+    "tipo": "presentacion",
+    "titulo": {"texto": "Para llevarte"},
+    "puntos": [
+     {"texto": "Empezar temprano pesa más que poner mucho", "cue": "empezar temprano"},
+     {"texto": "El que multiplica es el tiempo", "cue": "el tiempo"}
+    ]
+   },
+   "texto": "Para llevarte: empezar temprano pesa más que poner mucho, porque el que multiplica es el tiempo."
+  }
+ ]
+}
