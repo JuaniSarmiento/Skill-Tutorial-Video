@@ -620,6 +620,13 @@ class RevisarError(Exception):
     """Error claro de `revisar` (B3a/B8): se informa sin traceback y sale != 0."""
 
 
+class ChequeoError(Exception):
+    """NOTE 1: un chequeo (D1/D3) no pudo correr sobre el artefacto que tenía
+    (ffmpeg devolvió un código de error, p.ej. video/wav vacío o corrupto). Nunca
+    se confunde con "corrió y no encontró nada": `revisar()` la convierte en un
+    'no corrió' con la causa."""
+
+
 FLAGS_REVISAR = ("--estricto",)
 USO_REVISAR = "uso: editar.py revisar <vNN> [voz] [--estricto]"
 
@@ -666,6 +673,9 @@ def _freezes(video: Path, n: float) -> list[tuple[float, float]]:
     res = subprocess.run(
         ["ffmpeg", "-nostats", "-i", str(video), "-vf", f"freezedetect=n=-60dB:d={n:.3f}", "-f", "null", "-"],
         capture_output=True, text=True)
+    if res.returncode != 0:  # NOTE 1: video vacío/corrupto, no "sin congelados"
+        causa = res.stderr.strip().splitlines()[-1] if res.stderr.strip() else f"código {res.returncode}"
+        raise ChequeoError(causa)
     inicios = [float(m) for m in re.findall(r"freeze_start:\s*([\d.]+)", res.stderr)]
     fines = [float(m) for m in re.findall(r"freeze_end:\s*([\d.]+)", res.stderr)]
     if len(inicios) > len(fines):
@@ -695,6 +705,9 @@ def _silencios(wav: Path, d: float = 0.9) -> list[tuple[float, float]]:
     res = subprocess.run(
         ["ffmpeg", "-nostats", "-i", str(wav), "-af", f"silencedetect=noise=-40dB:d={d:.3f}", "-f", "null", "-"],
         capture_output=True, text=True)
+    if res.returncode != 0:  # NOTE 1: wav vacío/corrupto, no "sin silencios"
+        causa = res.stderr.strip().splitlines()[-1] if res.stderr.strip() else f"código {res.returncode}"
+        raise ChequeoError(causa)
     inicios = [float(m) for m in re.findall(r"silence_start:\s*([\d.]+)", res.stderr)]
     fines = [float(m) for m in re.findall(r"silence_end:\s*([\d.]+)", res.stderr)]
     return list(zip(inicios, fines))
@@ -827,8 +840,11 @@ def revisar(vid: str, voz_name: str = "argentina", n: float = N_CAMBIO_VISUAL) -
 
     video = work / f"video-{voz_name}.mp4"
     if video.exists():
-        for inicio, fin in CHEQUEOS["D1"](video, n):
-            hallazgos.append(f"tiempo muerto: {inicio:.1f}s–{fin:.1f}s sin cambio visual (> {n:.0f}s) en {video.name}")
+        try:
+            for inicio, fin in CHEQUEOS["D1"](video, n):
+                hallazgos.append(f"tiempo muerto: {inicio:.1f}s–{fin:.1f}s sin cambio visual (> {n:.0f}s) en {video.name}")
+        except ChequeoError as e:
+            no_corrio.append(f"tiempo muerto: no corrió, {video.name} parece vacío o corrupto ({e})")
     else:
         no_corrio.append(f"tiempo muerto: no corrió, falta {video} (correr 'editar.py imagen {vid} {voz_name}')")
 
@@ -857,8 +873,11 @@ def revisar(vid: str, voz_name: str = "argentina", n: float = N_CAMBIO_VISUAL) -
 
     voz_wav = work / f"voz-{voz_name}.wav"
     if voz_wav.exists():
-        for inicio, fin in CHEQUEOS["D3"](voz_wav, 0.9):
-            hallazgos.append(f"silencio: {inicio:.1f}s–{fin:.1f}s en la voz (> 0.9s) en {voz_wav.name}")
+        try:
+            for inicio, fin in CHEQUEOS["D3"](voz_wav, 0.9):
+                hallazgos.append(f"silencio: {inicio:.1f}s–{fin:.1f}s en la voz (> 0.9s) en {voz_wav.name}")
+        except ChequeoError as e:
+            no_corrio.append(f"silencios: no corrió, {voz_wav.name} parece vacío o corrupto ({e})")
     else:
         no_corrio.append(f"silencios: no corrió, falta {voz_wav} (correr 'editar.py voz {vid} {voz_name}')")
 

@@ -135,6 +135,18 @@ def test_sin_tiempo_muerto_largo_no_hay_hallazgo_de_eso(raiz, tmp_path):
     assert not any("tiempo muerto" in h for h in hallazgos)
 
 
+# --- NOTE 1: ffmpeg que falla (video vacío/corrupto) no es "sin hallazgos" --------
+
+def test_video_vacio_o_corrupto_dice_que_no_corrio_con_la_causa(raiz):
+    (raiz / "videos" / "v09" / "video-argentina.mp4").touch()  # 0 bytes: ffmpeg falla
+    _guion(raiz, {"segmentos": [{"inicio": 0, "fin": 1, "texto": "a"}]})
+
+    hallazgos, no_corrio = editar.revisar("v09", "argentina")
+
+    assert not any("tiempo muerto" in h for h in hallazgos)  # NUNCA "sin hallazgos" por error
+    assert any("video-argentina.mp4" in m and "no corrió" in m for m in no_corrio)
+
+
 # --- B1: congelado hasta el final (freeze_start sin freeze_end) ---------------------
 
 def test_congelado_hasta_el_final_del_video_se_reporta(raiz, tmp_path):
@@ -444,6 +456,18 @@ def test_voz_baja_pero_con_contenido_no_se_confunde_con_silencio(raiz, tmp_path)
     hallazgos, _ = editar.revisar("v09", "argentina")
 
     assert not any("silencio" in h for h in hallazgos)
+
+
+# --- NOTE 1: ffmpeg que falla (wav vacío/corrupto) no es "sin hallazgos" ----------
+
+def test_wav_vacio_o_corrupto_dice_que_no_corrio_con_la_causa(raiz):
+    (raiz / "videos" / "v09" / "voz-argentina.wav").touch()  # 0 bytes: ffmpeg falla
+    _guion(raiz, {"segmentos": [{"inicio": 0, "fin": 1, "texto": "a"}]})
+
+    hallazgos, no_corrio = editar.revisar("v09", "argentina")
+
+    assert not any("silencio" in h for h in hallazgos)  # NUNCA "sin hallazgos" por error
+    assert any("voz-argentina.wav" in m and "no corrió" in m for m in no_corrio)
 
 
 # --- Decisión pendiente de Juani (#2, HITO2.md): D3 con voces FISH_LENTAS --------
