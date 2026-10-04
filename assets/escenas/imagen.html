@@ -129,6 +129,15 @@ pantalla). Un rótulo va debajo del dibujo que nombra ("de").
       });
       d.el.innerHTML = d.markup || '<svg viewBox="0 0 200 200"></svg>';
       const svg = d.el.querySelector('svg');
+      // B4(c) (QA 03/10/2026): un SVG sin "viewBox" no tiene recuadro definido; se calcula
+      // desde el bbox del contenido. Sin contenido medible, falla nombrando el dibujo.
+      if (!svg.hasAttribute('viewBox')) {
+        const caja = svg.getBBox();
+        if (!(caja.width > 0) || !(caja.height > 0))
+          throw new Error(`dibujo ${JSON.stringify(d.id)}: el SVG no tiene "viewBox" y no se ` +
+                          'le pudo calcular uno (sin contenido medible)');
+        svg.setAttribute('viewBox', `${caja.x} ${caja.y} ${caja.width} ${caja.height}`);
+      }
       const todos = [...svg.querySelectorAll('path, line, polyline, polygon, circle, rect, ellipse')];
       d.trazos = todos.filter(el => !el.classList.contains('lleno'));
       d.trazos.forEach(el => { el.dataset.largo = el.getTotalLength(); });

@@ -159,3 +159,31 @@ def test_cambiar_el_acento_cambia_el_dibujo_en_foco_y_deja_el_resto_igual(chrome
     foco_b, no_foco_b = _render_en(chrome, "#2255FF", t)
     assert foco_a != foco_b, "el dibujo en foco tiene que cambiar con el acento"
     assert no_foco_a == no_foco_b, "el dibujo que no está en foco no puede cambiar"
+
+
+# --- B4(c): SVG sin viewBox (QA 03/10/2026) ------------------------------------
+
+def _un_dibujo(chrome, tmp_path, svg_contenido):
+    svg = tmp_path / "dibujo.svg"
+    svg.write_text(svg_contenido)
+    brand = escena.cargar_brand(None)
+    spec = escena.resolver_dibujos(
+        {"titulo": {"texto": "x"}, "duracion": 1.0, "dibujos": [{"id": "a", "svg": str(svg), "cue": 0.1}]})
+    return brand, spec
+
+
+def test_svg_sin_viewbox_pero_con_contenido_medible_se_calcula_del_bbox(chrome, tmp_path):
+    brand, spec = _un_dibujo(chrome, tmp_path, '<svg><rect x="40" y="40" width="20" height="20" fill="currentColor"/></svg>')
+    with escena.pagina_de_escena(chrome, escena.ruta_plantilla("imagen"), spec, brand) as (page, d):
+        escena._cuadro(page, d - 0.05)
+        ancho, alto = page.evaluate(
+            "() => { const s = document.querySelector('[data-caja^=\"dibujo\"] svg').viewBox.baseVal;"
+            " return [s.width, s.height]; }")
+    assert ancho > 0 and alto > 0
+
+
+def test_svg_sin_viewbox_y_sin_contenido_medible_falla_nombrando_el_dibujo(chrome, tmp_path):
+    brand, spec = _un_dibujo(chrome, tmp_path, "<svg></svg>")
+    with pytest.raises(escena.ContratoError, match="viewBox"):
+        with escena.pagina_de_escena(chrome, escena.ruta_plantilla("imagen"), spec, brand) as (page, d):
+            escena._cuadro(page, d - 0.05)
