@@ -146,29 +146,16 @@ def test_aplicar_ducking_deja_cada_meseta_en_la_ganancia_que_le_toca(tmp_path):
 
 
 def test_aplicar_ducking_la_transicion_es_rampa_no_escalon(tmp_path):
-    tono = _tono(tmp_path, "tono.wav", 3.0)
-    base = _rms_en(tono, 0.5)
-    vts = [(0.0, 1.0, "silencio"), (1.0, 2.0, "voz"), (2.0, 3.0, "silencio")]
-    out = tmp_path / "out.wav"
-
-    musica.aplicar_ducking(tono, vts, {"silencio": 0.0, "voz": -20.0}, out, ramp=0.2)
-
-    # justo en el cambio (t=1.0, mitad de la rampa de 0.2s): ni la meseta de antes ni la de
-    # después, algo entre medio (si fuera escalón, caería en una de las dos puntas).
-    en_el_cambio = _rms_en(out, 1.0, ventana=0.01)
-    assert base * 0.15 < en_el_cambio < base * 0.85
-
-
-def test_aplicar_ducking_la_rampa_progresa_de_a_poco_y_no_salta_de_golpe(tmp_path):
-    # N3(a) (QA 03/10/2026): el test anterior medía con una ventana de RMS (0.01s) tan
-    # ancha como la mitad de la rampa (ramp=0.2 -> r/2=0.1): esa ventana promedia un
-    # escalón seco (sin rampa) con la meseta de ANTES y la de DESPUÉS y da el mismo
-    # resultado "entre medio" que una rampa real, así que un escalón también la pasaba.
-    # Acá se muestrean varios puntos chicos (ventana 0.005s) atravesando la rampa y se
-    # pide que progresen de forma monótona SIN llegar de entrada a ninguna de las dos
-    # mesetas: un escalón pondría los puntos de antes exactamente en la meseta de antes
-    # y los de después exactamente en la de después, violando la monotonía estricta
-    # entre ellos (todos saltan juntos en el mismo instante).
+    # N3(a) (QA 03/10/2026): la versión original de este test medía con una ventana de RMS
+    # (0.01s) tan ancha como la mitad de la rampa (ramp=0.2 -> r/2=0.1): esa ventana promedia
+    # un escalón seco (sin rampa) con la meseta de ANTES y la de DESPUÉS y da el mismo
+    # resultado "entre medio" que una rampa real, así que un escalón TAMBIÉN la pasaba (no
+    # ejercitaba nada). Acá se muestrean varios puntos chicos (ventana 0.005s) atravesando
+    # la rampa y se pide que progresen de forma monótona SIN llegar de entrada a ninguna de
+    # las dos mesetas: un escalón pondría los puntos de antes exactamente en la meseta de
+    # antes y los de después exactamente en la de después (todos saltan juntos), violando
+    # la monotonía estricta entre ellos. Verificado a mano: con ramp=0 (escalón puro) este
+    # test falla en el primer assert.
     tono = _tono(tmp_path, "tono.wav", 3.0)
     base = _rms_en(tono, 0.5)
     vts = [(0.0, 1.0, "silencio"), (1.0, 2.0, "voz"), (2.0, 3.0, "silencio")]

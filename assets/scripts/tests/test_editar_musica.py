@@ -105,6 +105,22 @@ def test_voz_con_musica_ilegible_aborta_y_no_escribe_el_final(tutorial):
     assert not (work / "final-juani.mp4").exists()
 
 
+def test_voz_con_musica_faltante_aborta_antes_de_generar_la_voz(tutorial):
+    # N3(b) (QA 03/10/2026): R-2.6 dice "al arrancar, ni la voz" pero no había ningún test
+    # que lo comprobara: los de arriba sólo miran que no quede final-juani.mp4, y eso
+    # también sería cierto si resolver_archivo se llamara DESPUÉS de generar la voz (el
+    # aborto llegaría más tarde, pero el final tampoco se escribiría). Este test mira
+    # voz-juani.wav específicamente: si alguien mueve resolver_archivo después del loop de
+    # voces, este test (no los de arriba) lo detecta.
+    tmp_path, work = tutorial
+    _guion(tmp_path, musica={"archivo": "musica/no-existe.mp3"})
+
+    with pytest.raises(SystemExit):
+        editar.voz("v09", "juani")
+
+    assert not (work / "voz-juani.wav").exists()
+
+
 # --- N4 (QA 03/10/2026): "musica": false arriba y "musica": {} -----------------------
 
 def test_voz_con_musica_false_arriba_del_guion_se_trata_como_sin_musica(tutorial):
