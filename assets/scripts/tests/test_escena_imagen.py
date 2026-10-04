@@ -141,6 +141,31 @@ def test_svg_absoluto_no_se_ve_afectado_por_base_dir(tmp_path):
     assert "markup" in out["dibujos"][0]
 
 
+# --- B4(b): colores fijos (sin recoloreado al brand) rechazados (QA 03/10/2026) ----
+
+@pytest.mark.parametrize("valor", ["#ff0000", "rgb(255, 0, 0)", "red", "hsl(0, 100%, 50%)"])
+def test_fill_con_color_fijo_rechazado(tmp_path, valor):
+    contenido = f'<svg viewBox="0 0 10 10"><path d="M0 0L1 1" fill="{valor}"/></svg>'
+    spec = _spec_con_svg(tmp_path, contenido)
+    with pytest.raises(ValueError, match="malo.svg"):
+        escena.resolver_dibujos(spec)
+
+
+def test_stroke_con_color_fijo_rechazado(tmp_path):
+    contenido = '<svg viewBox="0 0 10 10"><path d="M0 0L1 1" stroke="#00ff00" fill="none"/></svg>'
+    spec = _spec_con_svg(tmp_path, contenido)
+    with pytest.raises(ValueError, match="malo.svg"):
+        escena.resolver_dibujos(spec)
+
+
+@pytest.mark.parametrize("fill, stroke", [("none", "currentColor"), ("currentColor", "none")])
+def test_fill_y_stroke_de_la_convencion_se_aceptan(tmp_path, fill, stroke):
+    contenido = f'<svg viewBox="0 0 10 10"><path d="M0 0L1 1" fill="{fill}" stroke="{stroke}"/></svg>'
+    spec = _spec_con_svg(tmp_path, contenido, "bueno.svg")
+    out = escena.resolver_dibujos(spec)
+    assert "M0 0L1 1" in out["dibujos"][0]["markup"]
+
+
 def test_use_con_href_interno_se_acepta(tmp_path):
     contenido = ('<svg viewBox="0 0 10 10">'
                  '<defs><path id="p" d="M0 0L10 10"/></defs>'

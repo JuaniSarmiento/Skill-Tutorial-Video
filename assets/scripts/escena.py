@@ -130,6 +130,10 @@ ATRIBUTOS_PERMITIDOS = {
 }
 # atributos cuyo valor puede referenciar una url(): sólo url(#id) interno, nunca de red
 ATRIBUTOS_CON_POSIBLE_URL = {"fill", "stroke"}
+# B4(b) (QA 03/10/2026): fill/stroke con un color fijo no se recolorea al brand; la
+# convención (ver imagen.html) es "none" o "currentColor". Un color fijo falla claro en vez
+# de quedar pegado para siempre al color con el que se dibujó el SVG original.
+COLORES_PERMITIDOS = {"none", "currentColor"}
 DOCTYPE_O_ENTIDAD = re.compile(r"<!\s*(DOCTYPE|ENTITY)", re.IGNORECASE)
 
 
@@ -168,6 +172,11 @@ def sanear_svg(contenido: str, ruta) -> str:
             if nombre_attr in ATRIBUTOS_CON_POSIBLE_URL and "url(" in valor and "url(#" not in valor:
                 raise ValueError(f"SVG {ruta!r}: elemento {nombre!r} con {attr}={valor!r}; "
                                  "url() sólo puede referenciar un #id interno")
+            if (nombre_attr in ATRIBUTOS_CON_POSIBLE_URL and "url(" not in valor
+                    and valor not in COLORES_PERMITIDOS):
+                raise ValueError(
+                    f"SVG {ruta!r}: elemento {nombre!r} con {attr}={valor!r}; "
+                    'usá "currentColor" (se recolorea al brand) o "none", nunca un color fijo')
     return ET.tostring(raiz, encoding="unicode")
 
 
