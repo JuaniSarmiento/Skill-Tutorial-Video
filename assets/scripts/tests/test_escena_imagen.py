@@ -225,3 +225,26 @@ def test_use_con_href_interno_se_acepta(tmp_path):
     out = escena.resolver_dibujos(spec)
 
     assert 'href="#p"' in out["dibujos"][0]["markup"]
+
+
+# --- N6 (QA 04/10/2026): Heroicons (y similares) se rechazaban por aria-hidden/data-slot; ----
+# son metadata inerte (no afecta el render), se descartan en silencio en vez de fallar.
+
+def test_aria_hidden_se_descarta_en_silencio(tmp_path):
+    contenido = ('<svg viewBox="0 0 10 10" fill="none" aria-hidden="true">'
+                 '<path d="M0 0L1 1" stroke="currentColor" data-slot="icon"/></svg>')
+    spec = _spec_con_svg(tmp_path, contenido, "bueno.svg")
+
+    out = escena.resolver_dibujos(spec)
+
+    assert "M0 0L1 1" in out["dibujos"][0]["markup"]
+
+
+def test_currentcolor_en_minuscula_se_acepta(tmp_path):
+    # CSS no distingue mayúsculas en los nombres de color/keyword.
+    contenido = '<svg viewBox="0 0 10 10"><path d="M0 0L1 1" fill="currentcolor"/></svg>'
+    spec = _spec_con_svg(tmp_path, contenido, "bueno.svg")
+
+    out = escena.resolver_dibujos(spec)
+
+    assert "M0 0L1 1" in out["dibujos"][0]["markup"]

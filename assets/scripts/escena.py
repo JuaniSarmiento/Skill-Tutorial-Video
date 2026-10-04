@@ -180,6 +180,10 @@ def sanear_svg(contenido: str, ruta) -> str:
                 "(puede ir una sola vez en el <svg> raíz)")
         for attr, valor in el.attrib.items():
             nombre_attr = _local(attr)
+            # N6 (QA 04/10/2026): metadata inerte (no afecta el render ni corre nada) de
+            # sets como Heroicons (aria-hidden, data-slot); se descarta en silencio.
+            if nombre_attr.startswith("aria-") or nombre_attr.startswith("data-"):
+                continue
             if nombre_attr.startswith("on"):
                 raise ValueError(f"SVG {ruta!r}: elemento {nombre!r} con atributo de evento {attr!r} no permitido")
             if nombre_attr not in ATRIBUTOS_PERMITIDOS:
@@ -192,8 +196,10 @@ def sanear_svg(contenido: str, ruta) -> str:
             if nombre_attr in ATRIBUTOS_CON_POSIBLE_URL and "url(" in valor and "url(#" not in valor:
                 raise ValueError(f"SVG {ruta!r}: elemento {nombre!r} con {attr}={valor!r}; "
                                  "url() sólo puede referenciar un #id interno")
+            # N6: "currentcolor"/"none" en minúscula también son válidos (CSS no distingue
+            # mayúsculas en keywords).
             if (nombre_attr in ATRIBUTOS_CON_POSIBLE_URL and "url(" not in valor
-                    and valor not in COLORES_PERMITIDOS):
+                    and valor.lower() not in {c.lower() for c in COLORES_PERMITIDOS}):
                 raise ValueError(
                     f"SVG {ruta!r}: elemento {nombre!r} con {attr}={valor!r}; "
                     'usá "currentColor" (se recolorea al brand) o "none", nunca un color fijo')
