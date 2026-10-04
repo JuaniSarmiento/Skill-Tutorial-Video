@@ -24,6 +24,7 @@ se renderiza con el motor de escenas (escena.py) y dura su slot, igual que los d
 escenas, editar.py corre con: uv run --with playwright --with faster-whisper --with "av<19" python editar.py ...
 voces: argentina (PRINCIPAL: Fish, femenina argentina, speed 0.80, la mas expresiva medida) | joven (Fish, "Narrador Joven argentino") | profe (Fish, Profesora Argentina, la mas plana) | daniela (Piper local) | juani (wavs importados en videos/<vNN>/juani/NN.wav) | elevenlabs (API, key en ~/.config/elevenlabs/api_key) | fish (Fish Audio, Profesora Argentina, key en ~/.config/fish/api_key)
 """
+import hashlib
 import json
 import os
 import re
@@ -452,7 +453,10 @@ def escenas(vid: str, voz_name: str = "argentina") -> list[Path]:
     for i, (seg, slot, pal) in enumerate(preparar(vid, voz_name)):
         if es_escena(seg):
             r = out / f"{i:02d}.json"
-            r.write_text(json.dumps(spec_de_escena(seg, slot, pal), ensure_ascii=False, indent=1))
+            # _voz/_segmento_hash (NOTE 2/3a, revisar): atan el spec a esta voz y a
+            # este segmento del guion, para que `revisar` sepa si sigue valiendo.
+            spec = {**spec_de_escena(seg, slot, pal), "_voz": voz_name, "_segmento_hash": _hash_segmento(seg)}
+            r.write_text(json.dumps(spec, ensure_ascii=False, indent=1))
             rutas.append(r)
     return rutas
 
@@ -669,8 +673,11 @@ def _huecos_escena(spec: dict, n: float) -> list[tuple[float, float]]:
     B9: mismo criterio de borde que D1 (estrictamente MÁS de n, no "n o más").
     """
     import escena
+    duracion = spec["duracion"]
+    if not isinstance(duracion, (int, float)) or isinstance(duracion, bool):
+        raise ValueError(f"'duracion' no es un número (vino {duracion!r})")
     tiempos = sorted(e["t"] for e in escena._con_cue(spec, []))
-    puntos = [0.0, *tiempos, spec["duracion"]]
+    puntos = [0.0, *tiempos, duracion]
     return [(a, b) for a, b in zip(puntos, puntos[1:]) if b - a > n]
 
 
@@ -684,38 +691,53 @@ def _silencios(wav: Path, d: float = 0.9) -> list[tuple[float, float]]:
     return list(zip(inicios, fines))
 
 
-def _specs_escena_vigentes(g: dict, voz_name: str, work: Path) -> tuple[list[Path], list[str]]:
-    """B5: de los specs en `escenas/`, los que valen para medir con el guion y la
-    voz ACTUALES: sólo los que corresponden (por índice de segmento) a una escena
-    del guion de hoy, y cuya "duracion" coincide con el slot medido en
-    `slots-<voz>.json` (si ese artefacto existe). `escenas/NN.json` no lleva la
-    voz en el nombre (otros comandos como `contacto`/`imagen` leen ese directorio
-    tal cual), así que un spec desactualizado o de otra voz se detecta por el slot,
-    no por el nombre de archivo.
+def _hash_segmento(seg: dict) -> str:
+    """Identifica el CONTENIDO de un segmento de escena del guion (NOTE 2): si el
+    segmento cambia, el hash cambia, sin importar qué pasó con los slots. `escenas()`
+    lo guarda en el spec que escribe; `_specs_escena_vigentes` lo vuelve a calcular
+    sobre el guion de HOY para comparar."""
+    return hashlib.sha256(json.dumps(seg, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:16]
 
-    Devuelve (vigentes, viejos): `viejos` son los nombres de archivo que había que
-    ignorar porque no corresponden a la voz pedida.
+
+def _specs_escena_vigentes(g: dict, voz_name: str, work: Path) -> tuple[list[Path], list[str]]:
+    """B5/B5-bis: de los índices de escena del guion de HOY, cuáles specs en
+    `escenas/` sirven para medir con la voz pedida.
+
+    Un spec sirve si: existe, es JSON válido, se generó para ESTA voz (`_voz`,
+    etiqueta que deja `escenas()`) y coincide con el segmento de HOY (`_segmento_hash`,
+    NOTE 2: ya no depende de `slots-<voz>.json`, que además lo escribe `imagen`, no
+    `escenas` — NOTE 4). Un índice de escena SIN spec en absoluto no se saltea en
+    silencio (B5-bis): se informa igual, con el nombre que le faltó.
+
+    Devuelve (vigentes, problemas): `problemas` son razones ya armadas con el
+    nombre del archivo (o el que debería existir), para cada índice de escena que
+    no se pudo usar.
     """
     escenas_dir = work / "escenas"
     indices = [i for i, seg in enumerate(g["segmentos"]) if es_escena(seg)]
-    slots_path = work / f"slots-{voz_name}.json"
-    slots = json.loads(slots_path.read_text()) if slots_path.exists() else None
     vigentes: list[Path] = []
-    viejos: list[str] = []
+    problemas: list[str] = []
     for i in indices:
-        ruta = escenas_dir / f"{i:02d}.json"
+        seg = g["segmentos"][i]
+        nombre = f"{i:02d}.json"
+        ruta = escenas_dir / nombre
         if not ruta.exists():
+            problemas.append(f"{nombre}: falta el spec")
             continue
-        if slots is not None and i < len(slots):
-            try:
-                dur = json.loads(ruta.read_text()).get("duracion")
-            except json.JSONDecodeError:
-                dur = None
-            if dur is None or abs(dur - slots[i]) > 0.01:
-                viejos.append(ruta.name)
-                continue
+        try:
+            spec = json.loads(ruta.read_text())
+        except json.JSONDecodeError:
+            problemas.append(f"{nombre}: JSON inválido")
+            continue
+        if spec.get("_voz") != voz_name:
+            problemas.append(f"{nombre}: no corresponde a la voz {voz_name!r} "
+                             f"(generado para {spec.get('_voz')!r})")
+            continue
+        if spec.get("_segmento_hash") != _hash_segmento(seg):
+            problemas.append(f"{nombre}: desactualizado (el guion cambió)")
+            continue
         vigentes.append(ruta)
-    return vigentes, viejos
+    return vigentes, problemas
 
 
 ROLES_VALIDOS = ("gancho", "analogia", "ejemplo", "repaso")
@@ -807,21 +829,22 @@ def revisar(vid: str, voz_name: str = "argentina", n: float = N_CAMBIO_VISUAL) -
             no_corrio.append(f"cambio visual en escenas: no corrió, faltan los specs resueltos en {escenas_dir} "
                              f"(correr 'editar.py escenas {vid} {voz_name}')")
         else:
-            vigentes, viejos = _specs_escena_vigentes(g, voz_name, work)
+            vigentes, problemas = _specs_escena_vigentes(g, voz_name, work)
             for ruta in vigentes:
                 try:
                     spec = json.loads(ruta.read_text())
                     huecos = CHEQUEOS["D2"](spec, n)
-                except KeyError as e:
+                except (KeyError, ValueError) as e:
                     no_corrio.append(f"cambio visual en escenas: no corrió para {ruta.name}, "
-                                     f"falta {e} en el spec (correr 'editar.py escenas {vid} {voz_name}')")
+                                     f"{e} (correr 'editar.py escenas {vid} {voz_name}')")
                     continue
                 for desde, hasta in huecos:
                     hallazgos.append(f"{ruta.name}: {desde:.1f}s–{hasta:.1f}s sin elemento nuevo (> {n:.0f}s)")
-            if viejos:
-                no_corrio.append("cambio visual en escenas: no corrió para " + ", ".join(viejos) +
-                                 f", no corresponden a la voz {voz_name!r} (desactualizados: correr "
-                                 f"'editar.py escenas {vid} {voz_name}')")
+            # B5-bis: cada problema (spec faltante, JSON inválido, de otra voz,
+            # desactualizado) se informa, no se saltea en silencio.
+            for problema in problemas:
+                no_corrio.append(f"cambio visual en escenas: no corrió para {problema} "
+                                 f"(correr 'editar.py escenas {vid} {voz_name}')")
 
     voz_wav = work / f"voz-{voz_name}.wav"
     if voz_wav.exists():

@@ -76,20 +76,32 @@ def raiz(tmp_path, monkeypatch):
     return tmp_path
 
 
-def test_revisar_llama_a_cada_chequeo_del_registro(raiz, monkeypatch):
+def test_revisar_usa_el_resultado_de_cada_chequeo_del_registro(raiz, monkeypatch):
+    """NOTE 9 (QA): no alcanza con probar que revisar() LLAMA a cada entrada de
+    CHEQUEOS (un mutante puede llamarla y descartar el resultado). Cada espía
+    devuelve una marca bien distinguible, y el test comprueba que esa marca
+    llega de verdad a `hallazgos` (lo que termina en el informe)."""
     (raiz / "videos" / "v09" / "video-argentina.mp4").write_bytes(b"")
     (raiz / "videos" / "v09" / "voz-argentina.wav").write_bytes(b"")
+    seg = {"escena": {"tipo": "presentacion"}, "texto": "a", "rol": "gancho"}
     escenas_dir = raiz / "videos" / "v09" / "escenas"
     escenas_dir.mkdir()
-    (escenas_dir / "00.json").write_text(json.dumps({"duracion": 1.0}))
-    (raiz / "guion" / "v09.json").write_text(json.dumps({"segmentos": [
-        {"escena": {"tipo": "presentacion"}, "texto": "a", "rol": "gancho"}]}))
+    (escenas_dir / "00.json").write_text(json.dumps({
+        "duracion": 1.0, "_voz": "argentina", "_segmento_hash": editar._hash_segmento(seg)}))
+    (raiz / "guion" / "v09.json").write_text(json.dumps({"segmentos": [seg]}))
 
-    llamados = set()
-    for id_regla in editar.CHEQUEOS:
-        espia = (lambda id_regla: lambda *a, **k: (llamados.add(id_regla), [])[1])(id_regla)
+    marcadores = {
+        "D1": lambda *a, **k: [(123.0, 456.0)],
+        "D2": lambda *a, **k: [(123.0, 456.0)],
+        "D3": lambda *a, **k: [(123.0, 456.0)],
+        "D4": lambda *a, **k: ["MARCA-D4"],
+    }
+    for id_regla, espia in marcadores.items():
         monkeypatch.setitem(editar.CHEQUEOS, id_regla, espia)
 
-    editar.revisar("v09", "argentina")
+    hallazgos, _ = editar.revisar("v09", "argentina")
 
-    assert llamados == set(editar.CHEQUEOS), f"CHEQUEOS no llamados por revisar(): {set(editar.CHEQUEOS) - llamados}"
+    assert any("tiempo muerto" in h and "123.0s" in h and "456.0s" in h for h in hallazgos), hallazgos
+    assert any("00.json" in h and "123.0s" in h and "456.0s" in h for h in hallazgos), hallazgos
+    assert any("silencio" in h and "123.0s" in h and "456.0s" in h for h in hallazgos), hallazgos
+    assert "MARCA-D4" in hallazgos

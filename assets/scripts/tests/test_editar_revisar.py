@@ -23,6 +23,18 @@ def _guion(raiz, g):
     (raiz / "guion" / "v09.json").write_text(json.dumps(g))
 
 
+def _spec_vigente(raiz, voz, indice, seg, **campos):
+    """Escribe un spec de escena YA vigente (B5/NOTE 2/3a): con las mismas
+    etiquetas que `escenas()` deja de verdad (`_voz`, `_segmento_hash`), atado al
+    segmento `seg` del guion y a la voz `voz`. Así los tests de D2 no dependen de
+    cómo se decide "vigente" por dentro."""
+    spec = {**campos, "_voz": voz, "_segmento_hash": editar._hash_segmento(seg)}
+    escenas_dir = raiz / "videos" / "v09" / "escenas"
+    escenas_dir.mkdir(parents=True, exist_ok=True)
+    (escenas_dir / f"{indice:02d}.json").write_text(json.dumps(spec))
+    return spec
+
+
 def _clip(path, fuente):
     subprocess.run(["ffmpeg", "-loglevel", "error", "-f", "lavfi", "-i", fuente, "-y", str(path)], check=True)
 
@@ -147,12 +159,10 @@ def test_video_con_textura_sutil_que_cambia_no_es_tiempo_muerto(raiz, tmp_path):
 # --- R-5.3: huecos entre entradas de elementos, desde los specs resueltos ----------
 
 def test_un_hueco_de_mas_de_n_segundos_en_una_escena_se_reporta(raiz):
-    escenas_dir = raiz / "videos" / "v09" / "escenas"
-    escenas_dir.mkdir(parents=True)
-    spec = {"tipo": "presentacion", "duracion": 10.0,
-            "puntos": [{"texto": "a", "cue": "a", "t": 1.0}]}
-    (escenas_dir / "00.json").write_text(json.dumps(spec))
-    _guion(raiz, {"segmentos": [{"escena": {"tipo": "presentacion"}, "texto": "a"}]})
+    seg = {"escena": {"tipo": "presentacion"}, "texto": "a"}
+    _guion(raiz, {"segmentos": [seg]})
+    _spec_vigente(raiz, "argentina", 0, seg, tipo="presentacion", duracion=10.0,
+                  puntos=[{"texto": "a", "cue": "a", "t": 1.0}])
 
     hallazgos, no_corrio = editar.revisar("v09", "argentina")
 
@@ -161,12 +171,10 @@ def test_un_hueco_de_mas_de_n_segundos_en_una_escena_se_reporta(raiz):
 
 
 def test_elementos_repartidos_sin_huecos_largos_no_da_hallazgo(raiz):
-    escenas_dir = raiz / "videos" / "v09" / "escenas"
-    escenas_dir.mkdir(parents=True)
-    spec = {"tipo": "presentacion", "duracion": 6.0,
-            "puntos": [{"texto": "a", "cue": "a", "t": 1.0}, {"texto": "b", "cue": "b", "t": 5.0}]}
-    (escenas_dir / "00.json").write_text(json.dumps(spec))
-    _guion(raiz, {"segmentos": [{"escena": {"tipo": "presentacion"}, "texto": "a b"}]})
+    seg = {"escena": {"tipo": "presentacion"}, "texto": "a b"}
+    _guion(raiz, {"segmentos": [seg]})
+    _spec_vigente(raiz, "argentina", 0, seg, tipo="presentacion", duracion=6.0,
+                  puntos=[{"texto": "a", "cue": "a", "t": 1.0}, {"texto": "b", "cue": "b", "t": 5.0}])
 
     hallazgos, _ = editar.revisar("v09", "argentina")
 
@@ -176,26 +184,34 @@ def test_elementos_repartidos_sin_huecos_largos_no_da_hallazgo(raiz):
 def test_hueco_de_mas_de_n_pero_menos_del_mutante_se_reporta(raiz):
     """M9/M11: entre N=6 (correcto) y 7.9/8.5 (mutantes), un hueco de 7s tiene que
     reportarse."""
-    escenas_dir = raiz / "videos" / "v09" / "escenas"
-    escenas_dir.mkdir(parents=True)
-    spec = {"tipo": "presentacion", "duracion": 10.0,
-            "puntos": [{"texto": "a", "cue": "a", "t": 1.0}, {"texto": "b", "cue": "b", "t": 8.0}]}
-    (escenas_dir / "00.json").write_text(json.dumps(spec))
-    _guion(raiz, {"segmentos": [{"escena": {"tipo": "presentacion"}, "texto": "a b"}]})
+    seg = {"escena": {"tipo": "presentacion"}, "texto": "a b"}
+    _guion(raiz, {"segmentos": [seg]})
+    _spec_vigente(raiz, "argentina", 0, seg, tipo="presentacion", duracion=10.0,
+                  puntos=[{"texto": "a", "cue": "a", "t": 1.0}, {"texto": "b", "cue": "b", "t": 8.0}])
 
     hallazgos, _ = editar.revisar("v09", "argentina")
 
     assert any("00.json" in h and "sin elemento nuevo" in h for h in hallazgos)
 
 
+# --- M4: D2 con el mismo criterio de borde exacto (6.0s), sin pasar por ffmpeg ------
+
+def test_hueco_de_exactamente_n_no_es_hallazgo():
+    """M4: en el límite EXACTO, D2 tiene que usar '>', nunca '>=' (igual que D1).
+    Llama directo a la función pura: no depende de redondeo de video/audio real."""
+    assert editar._huecos_escena({"duracion": 6.0, "puntos": []}, 6.0) == []
+
+
+def test_hueco_de_apenas_mas_de_n_es_hallazgo():
+    assert editar._huecos_escena({"duracion": 6.001, "puntos": []}, 6.0) == [(0.0, 6.001)]
+
+
 # --- B6: el hueco también se mide desde 0, y una escena sin ninguna cue es hueco ---
 
 def test_escena_sin_ninguna_cue_mas_larga_que_n_es_hallazgo(raiz):
-    escenas_dir = raiz / "videos" / "v09" / "escenas"
-    escenas_dir.mkdir(parents=True)
-    spec = {"tipo": "presentacion", "duracion": 10.0, "puntos": []}
-    (escenas_dir / "00.json").write_text(json.dumps(spec))
-    _guion(raiz, {"segmentos": [{"escena": {"tipo": "presentacion"}, "texto": "a"}]})
+    seg = {"escena": {"tipo": "presentacion"}, "texto": "a"}
+    _guion(raiz, {"segmentos": [seg]})
+    _spec_vigente(raiz, "argentina", 0, seg, tipo="presentacion", duracion=10.0, puntos=[])
 
     hallazgos, _ = editar.revisar("v09", "argentina")
 
@@ -203,12 +219,10 @@ def test_escena_sin_ninguna_cue_mas_larga_que_n_es_hallazgo(raiz):
 
 
 def test_hueco_desde_el_0_hasta_la_primera_entrada_se_mide(raiz):
-    escenas_dir = raiz / "videos" / "v09" / "escenas"
-    escenas_dir.mkdir(parents=True)
-    spec = {"tipo": "presentacion", "duracion": 10.0,
-            "puntos": [{"texto": "a", "cue": "a", "t": 7.0}]}
-    (escenas_dir / "00.json").write_text(json.dumps(spec))
-    _guion(raiz, {"segmentos": [{"escena": {"tipo": "presentacion"}, "texto": "a"}]})
+    seg = {"escena": {"tipo": "presentacion"}, "texto": "a"}
+    _guion(raiz, {"segmentos": [seg]})
+    _spec_vigente(raiz, "argentina", 0, seg, tipo="presentacion", duracion=10.0,
+                  puntos=[{"texto": "a", "cue": "a", "t": 7.0}])
 
     hallazgos, _ = editar.revisar("v09", "argentina")
 
@@ -226,12 +240,10 @@ def test_sin_specs_resueltos_y_con_escena_en_el_guion_dice_que_no_corrio(raiz):
 # --- B4: spec con cue sin "t" o sin "duracion": hallazgo/no_corrio claro, sin traceback ---
 
 def test_spec_con_cue_sin_t_dice_que_no_corrio_nombrando_el_archivo(raiz):
-    escenas_dir = raiz / "videos" / "v09" / "escenas"
-    escenas_dir.mkdir(parents=True)
-    spec = {"tipo": "presentacion", "duracion": 10.0,
-            "puntos": [{"texto": "a", "cue": "a"}]}  # sin "t": no se resolvió
-    (escenas_dir / "00.json").write_text(json.dumps(spec))
-    _guion(raiz, {"segmentos": [{"escena": {"tipo": "presentacion"}, "texto": "a"}]})
+    seg = {"escena": {"tipo": "presentacion"}, "texto": "a"}
+    _guion(raiz, {"segmentos": [seg]})
+    _spec_vigente(raiz, "argentina", 0, seg, tipo="presentacion", duracion=10.0,
+                  puntos=[{"texto": "a", "cue": "a"}])  # sin "t": no se resolvió
 
     hallazgos, no_corrio = editar.revisar("v09", "argentina")
 
@@ -240,11 +252,10 @@ def test_spec_con_cue_sin_t_dice_que_no_corrio_nombrando_el_archivo(raiz):
 
 
 def test_spec_sin_duracion_dice_que_no_corrio_nombrando_el_archivo(raiz):
-    escenas_dir = raiz / "videos" / "v09" / "escenas"
-    escenas_dir.mkdir(parents=True)
-    spec = {"tipo": "presentacion", "puntos": [{"texto": "a", "cue": "a", "t": 1.0}]}  # sin "duracion"
-    (escenas_dir / "00.json").write_text(json.dumps(spec))
-    _guion(raiz, {"segmentos": [{"escena": {"tipo": "presentacion"}, "texto": "a"}]})
+    seg = {"escena": {"tipo": "presentacion"}, "texto": "a"}
+    _guion(raiz, {"segmentos": [seg]})
+    _spec_vigente(raiz, "argentina", 0, seg, tipo="presentacion",
+                  puntos=[{"texto": "a", "cue": "a", "t": 1.0}])  # sin "duracion"
 
     hallazgos, no_corrio = editar.revisar("v09", "argentina")
 
@@ -252,14 +263,48 @@ def test_spec_sin_duracion_dice_que_no_corrio_nombrando_el_archivo(raiz):
     assert not any("00.json" in h for h in hallazgos)
 
 
-# --- B5: sólo se miden los specs que corresponden al guion y la voz actuales ------
+# --- NOTE 5: spec JSON roto o con "duracion" no numérica: no_corrio, no traceback --
 
-def test_spec_de_un_segmento_que_ya_no_es_escena_se_ignora(raiz):
+def test_spec_con_json_invalido_dice_que_no_corrio_nombrando_el_archivo(raiz):
+    seg = {"escena": {"tipo": "presentacion"}, "texto": "a"}
+    _guion(raiz, {"segmentos": [seg]})
     escenas_dir = raiz / "videos" / "v09" / "escenas"
     escenas_dir.mkdir(parents=True)
-    spec = {"tipo": "presentacion", "duracion": 10.0, "puntos": []}  # sería hallazgo si se midiera
-    (escenas_dir / "00.json").write_text(json.dumps(spec))
-    _guion(raiz, {"segmentos": [{"inicio": 0, "fin": 1, "texto": "a"}]})  # ya no es escena
+    (escenas_dir / "00.json").write_text("{ esto no es json")
+
+    hallazgos, no_corrio = editar.revisar("v09", "argentina")
+
+    assert any("00.json" in m and "JSON inválido" in m for m in no_corrio)
+    assert not any("00.json" in h for h in hallazgos)
+
+
+def test_spec_con_duracion_no_numerica_dice_que_no_corrio_nombrando_el_archivo(raiz):
+    seg = {"escena": {"tipo": "presentacion"}, "texto": "a"}
+    _guion(raiz, {"segmentos": [seg]})
+    _spec_vigente(raiz, "argentina", 0, seg, tipo="presentacion", duracion="10",
+                  puntos=[{"texto": "a", "cue": "a", "t": 1.0}])
+
+    hallazgos, no_corrio = editar.revisar("v09", "argentina")
+
+    assert any("00.json" in m for m in no_corrio)
+    assert not any("00.json" in h for h in hallazgos)
+
+
+# --- B5/B5-bis: sólo se miden los specs que corresponden al guion y la voz de hoy -
+
+def test_spec_de_un_segmento_que_ya_no_es_escena_se_ignora(raiz):
+    """También fija N19: con dos segmentos donde sólo el de índice 1 es escena,
+    un spec viejo en 00.json (índice que HOY no es escena) no puede filtrarse: si
+    `_specs_escena_vigentes` mirara todos los índices (mutante `range(100)`) en vez
+    de sólo los que son escena, este "00.json" aparecería en algún lado."""
+    seg_normal = {"inicio": 0, "fin": 1, "texto": "a"}
+    seg_escena = {"escena": {"tipo": "presentacion"}, "texto": "b"}
+    _guion(raiz, {"segmentos": [seg_normal, seg_escena]})
+    escenas_dir = raiz / "videos" / "v09" / "escenas"
+    escenas_dir.mkdir(parents=True)
+    # spec viejo en el índice que HOY no es escena: nunca debería mirarse
+    (escenas_dir / "00.json").write_text(json.dumps({"duracion": 10.0, "puntos": []}))
+    _spec_vigente(raiz, "argentina", 1, seg_escena, tipo="presentacion", duracion=1.0, puntos=[])
 
     hallazgos, no_corrio = editar.revisar("v09", "argentina")
 
@@ -267,18 +312,56 @@ def test_spec_de_un_segmento_que_ya_no_es_escena_se_ignora(raiz):
     assert not any("00.json" in m for m in no_corrio)
 
 
-def test_spec_que_no_coincide_con_los_slots_de_la_voz_pedida_no_se_mide(raiz):
-    escenas_dir = raiz / "videos" / "v09" / "escenas"
-    escenas_dir.mkdir(parents=True)
-    spec = {"tipo": "presentacion", "duracion": 10.0, "puntos": []}  # sería hallazgo si se midiera
-    (escenas_dir / "00.json").write_text(json.dumps(spec))
-    (raiz / "videos" / "v09" / "slots-argentina.json").write_text(json.dumps([3.0]))  # no coincide (10.0)
-    _guion(raiz, {"segmentos": [{"escena": {"tipo": "presentacion"}, "texto": "a"}]})
+def test_escena_sin_spec_dice_que_no_corrio_sin_saltearla_en_silencio(raiz):
+    """BLOCKING B5-bis (R-5.6): una escena del guion de HOY sin ningún spec en
+    escenas/ no puede saltearse en silencio; tiene que decir "no corrió" para ESE
+    índice, nombrándolo."""
+    seg0 = {"escena": {"tipo": "presentacion"}, "texto": "a", "rol": "gancho"}
+    seg1 = {"texto": "b", "rol": "analogia"}
+    seg2 = {"escena": {"tipo": "presentacion"}, "texto": "c", "rol": "ejemplo"}
+    seg3 = {"texto": "d", "rol": "repaso"}
+    _guion(raiz, {"segmentos": [seg0, seg1, seg2, seg3]})
+    # sólo hay spec para la escena 00; la escena 02 no tiene ningún spec
+    _spec_vigente(raiz, "argentina", 0, seg0, tipo="presentacion", duracion=4.0,
+                  puntos=[{"cue": "x", "t": 2.0}])
+
+    hallazgos, no_corrio = editar.revisar("v09", "argentina")
+
+    assert any("02.json" in m and "falta el spec" in m for m in no_corrio)
+    assert not any("sin hallazgos" in h for h in hallazgos)  # no es "informe vacío"
+
+
+def test_spec_desactualizado_por_el_guion_dice_que_no_corrio(raiz):
+    """NOTE 2: un spec viejo cuyos slots (en el diseño anterior) también eran
+    viejos coincidía igual. Ahora el spec queda atado al CONTENIDO del segmento
+    (hash), no a un número de duración: si el guion cambió, no coincide más,
+    aunque nadie haya tocado `slots-<voz>.json`."""
+    seg_viejo = {"escena": {"tipo": "presentacion"}, "texto": "texto viejo"}
+    seg_nuevo = {"escena": {"tipo": "presentacion"}, "texto": "texto nuevo, el guion cambió"}
+    _spec_vigente(raiz, "argentina", 0, seg_viejo, tipo="presentacion", duracion=10.0, puntos=[])
+    _guion(raiz, {"segmentos": [seg_nuevo]})  # el guion de HOY ya no es seg_viejo
 
     hallazgos, no_corrio = editar.revisar("v09", "argentina")
 
     assert not any("00.json" in h for h in hallazgos)
-    assert any("00.json" in m for m in no_corrio)
+    assert any("00.json" in m and "desactualizado" in m for m in no_corrio)
+
+
+def test_spec_de_otra_voz_sin_imagen_previa_no_se_mide(raiz):
+    """NOTE 3a/4: un spec generado por `escenas()` para OTRA voz, sin que
+    `imagen` haya corrido nunca para la voz pedida (o sea, sin
+    `slots-<voz>.json`), no se mide igual. El remedio correcto es correr
+    `escenas` (que es quien etiqueta el spec), no `imagen` (NOTE 4)."""
+    seg = {"escena": {"tipo": "presentacion"}, "texto": "a"}
+    _guion(raiz, {"segmentos": [seg]})
+    _spec_vigente(raiz, "profe", 0, seg, tipo="presentacion", duracion=10.0, puntos=[])  # para "profe"
+
+    hallazgos, no_corrio = editar.revisar("v09", "argentina")  # pedido para "argentina"
+
+    assert not any("00.json" in h for h in hallazgos)
+    problema = next(m for m in no_corrio if "00.json" in m)
+    assert "no corresponde a la voz" in problema
+    assert "editar.py escenas" in problema  # NOTE 4: el remedio correcto, no 'imagen'
 
 
 # --- R-5.4: silencios > 0.9s en voz-<voz>.wav (no en el final) ---------------------
