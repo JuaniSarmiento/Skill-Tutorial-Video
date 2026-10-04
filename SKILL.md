@@ -53,6 +53,20 @@ metadata:
   10 LU en los silencios (`debajo_de_la_voz_lu` sólo ajusta el primero). El final sigue dando
   -16 LUFS / TP ≤ -1.5 dBTP igual que sin música. Sin la clave `musica`, el audio sale idéntico
   al de antes de esta función (G3).
+- **Fuente de datos del zoom** (`editar.py zonas`, `zonas.py`): `rec.py` no guarda dónde tipea
+  ni dónde clickea (grabó con `-draw_mouse 0`), así que los momentos clave para el zoom
+  automático (S7b) salen de **detectar cambios entre los cuadros del CRUDO** (decisión Q5 de
+  Juani, `docs/explicador/HITO2.md`): funciona con lo que ya está grabado, en Linux y en
+  Windows. `editar.py zonas vNN` analiza, por cada segmento de pantalla (los títulos y las
+  escenas no usan crudo), el tramo `[inicio, fin)` de su crudo y deja
+  `videos/<vNN>/zonas/NN.json`: una lista de momentos
+  `{"t", "x", "y", "w", "h", "importancia"}`, donde `t` está en el eje del propio crudo (el
+  mismo que `seg["inicio"]`/`seg["fin"]`, ANTES de `mpdecimate`) y `x`/`y`/`w`/`h` son una caja
+  en píxeles del crudo sin escalar (misma convención que el `"zoom": {x,y,w,h}` fijo).
+  Muestrea a pocos fps y en escala de grises a baja resolución para no depender de numpy y
+  analizar rápido (un crudo de 10 min a 1080p, en segundos). Sólo lee: no genera voces ni
+  renderiza nada. No decide cuáles momentos usar ni limita la frecuencia entre acercamientos:
+  eso es trabajo de S7b.
 
 ## Escenas: segmentos que no son pantalla grabada
 
