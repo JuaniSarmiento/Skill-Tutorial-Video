@@ -84,6 +84,30 @@ def test_voz_sin_ningun_artefacto_pero_con_otra_voz_presente_es_error(raiz, tmp_
     assert "argentina" in str(exc.value)
 
 
+# --- NOTE 3b: _voces_con_artefactos también mira la carpeta <voz>/ (ej. "juani") --
+
+def test_voces_con_artefactos_reconoce_la_carpeta_de_la_voz(tmp_path):
+    (tmp_path / "juani").mkdir()
+    (tmp_path / "juani" / "00.wav").write_bytes(b"")
+
+    assert "juani" in editar._voces_con_artefactos(tmp_path)
+
+
+def test_voces_con_artefactos_no_confunde_escenas_ni_seg_con_una_voz(tmp_path):
+    (tmp_path / "escenas").mkdir()
+    (tmp_path / "seg").mkdir()
+
+    assert editar._voces_con_artefactos(tmp_path) == set()
+
+
+def test_voces_con_artefactos_reconoce_solo_slots(tmp_path):
+    """N17: si se borra el glob de slots-*.json, una voz para la que sólo corrió
+    `imagen` (y no `voz`/`escenas`) deja de reconocerse."""
+    (tmp_path / "slots-mendoza.json").write_text("[]")
+
+    assert "mendoza" in editar._voces_con_artefactos(tmp_path)
+
+
 # --- R-5.2: tiempo muerto (freezedetect) sobre video-<voz>.mp4 ----------------------
 
 def test_tiempo_muerto_de_mas_de_n_segundos_se_reporta(raiz, tmp_path):

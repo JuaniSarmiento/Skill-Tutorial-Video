@@ -632,10 +632,15 @@ def _estricto_falla(hallazgos: list[str], no_corrio: list[str]) -> bool:
     return bool(hallazgos)
 
 
+# carpetas de trabajo que NO son el nombre de una voz (NOTE 3b)
+_DIRS_RESERVADOS = {"escenas", "seg"}
+
+
 def _voces_con_artefactos(work: Path) -> set[str]:
     """Nombres de voz para los que existe al menos un artefacto en `work`
-    (video-<voz>.mp4, voz-<voz>.wav o slots-<voz>.json). B3a: sirve para avisar de
-    un nombre de voz tipeado mal cuando sí hay artefactos de otra voz."""
+    (video-<voz>.mp4, voz-<voz>.wav, slots-<voz>.json, o la carpeta <voz>/ de wavs
+    importados — NOTE 3b, p.ej. "juani"). B3a: sirve para avisar de un nombre de
+    voz tipeado mal cuando sí hay artefactos de otra voz."""
     voces = set()
     for ruta in work.glob("video-*.mp4"):
         voces.add(ruta.stem.removeprefix("video-"))
@@ -643,6 +648,10 @@ def _voces_con_artefactos(work: Path) -> set[str]:
         voces.add(ruta.stem.removeprefix("voz-"))
     for ruta in work.glob("slots-*.json"):
         voces.add(ruta.stem.removeprefix("slots-"))
+    if work.is_dir():
+        for ruta in work.iterdir():
+            if ruta.is_dir() and ruta.name not in _DIRS_RESERVADOS:
+                voces.add(ruta.name)
     return voces
 
 
