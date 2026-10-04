@@ -383,7 +383,33 @@ def test_validar_guion_con_tipo_desconocido_en_un_segmento_lo_nombra():
     g = {"segmentos": [{"texto": "a"}, {"texto": "b", "transicion": "transicon"}]}
     with pytest.raises(transiciones.TransicionError) as e:
         transiciones.validar(g)
-    assert "transicon" in str(e.value)
+
+
+# --- validar(): NOTES de QA -- "transicion" sin "tipo" y "duracion" inválida -----
+# abortan ANTES de armar tramos (no ZeroDivisionError/KeyError a mitad del render),
+# nombrando el segmento.
+
+def test_validar_guion_con_transicion_sin_tipo_en_un_segmento_lo_nombra():
+    g = {"segmentos": [{"texto": "a"}, {"texto": "b", "transicion": {"duracion": 0.4}}]}
+    with pytest.raises(transiciones.TransicionError) as e:
+        transiciones.validar(g)
+    assert "01" in str(e.value) and "tipo" in str(e.value)
+
+
+def test_validar_guion_con_transicion_sin_tipo_en_el_default_rompe():
+    g = {"transicion": {"duracion": 0.4}, "segmentos": [{"texto": "a"}]}
+    with pytest.raises(transiciones.TransicionError) as e:
+        transiciones.validar(g)
+    assert "tipo" in str(e.value)
+
+
+@pytest.mark.parametrize("duracion_invalida", [0, -0.5, "rapido"])
+def test_validar_guion_con_duracion_invalida_en_un_segmento_lo_nombra(duracion_invalida):
+    g = {"segmentos": [{"texto": "a"},
+                       {"texto": "b", "transicion": {"tipo": "barrido", "duracion": duracion_invalida}}]}
+    with pytest.raises(transiciones.TransicionError) as e:
+        transiciones.validar(g)
+    assert "01" in str(e.value) and "duracion" in str(e.value)
 
 
 # --- avisar_si_tapa_cue(): R-6.5, la primera cue de la escena entrante -------------

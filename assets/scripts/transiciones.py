@@ -67,17 +67,38 @@ def duracion_efectiva(duracion: float, slot_saliente: float, slot_entrante: floa
     return duracion
 
 
+def _validar_forma(transicion: dict, contexto: str) -> None:
+    """Valida un dict "transicion" ya normalizado (R-6.7 + NOTES de QA): tipo
+    desconocido, "transicion" sin "tipo" (daba KeyError a mitad de `resolver`), o
+    "duracion" que no es un número > 0 (0, negativa o texto daban
+    ZeroDivisionError/ValueError a mitad del render). `contexto` nombra DÓNDE
+    está (el segmento, o "el default") para el mensaje de error."""
+    if "tipo" not in transicion:
+        raise TransicionError(f"{contexto} declara 'transicion' sin 'tipo': {transicion!r}")
+    validar_tipo(transicion["tipo"])
+    if "duracion" in transicion:
+        cruda = transicion["duracion"]
+        try:
+            pedida = float(cruda)
+        except (TypeError, ValueError):
+            pedida = None
+        if pedida is None or pedida <= 0:
+            raise TransicionError(f"{contexto} pide una 'duracion' de transición inválida: "
+                                   f"{cruda!r} (tiene que ser un número > 0)")
+
+
 def validar(g: dict) -> None:
-    """R-6.7: aborta (TransicionError) ANTES de generar nada si algún tipo de
-    transición del guion (el default de arriba o el de cualquier segmento) es
-    desconocido."""
+    """R-6.7 + NOTES de QA: aborta (TransicionError) ANTES de generar nada si
+    algún "transicion" del guion (el default de arriba o el de cualquier
+    segmento) tiene un tipo desconocido, no declara "tipo", o pide una
+    "duracion" inválida."""
     default = normalizar(g.get("transicion"))
     if default is not None:
-        validar_tipo(default["tipo"])
-    for seg in g["segmentos"]:
+        _validar_forma(default, "el default de 'transicion' (arriba del guion)")
+    for i, seg in enumerate(g["segmentos"]):
         propia = normalizar(seg.get("transicion"))
         if propia is not None:
-            validar_tipo(propia["tipo"])
+            _validar_forma(propia, f"el segmento {i:02d}")
 
 
 def avisar_si_tapa_cue(i: int, spec_entrante: dict | None, mitad: float) -> None:
