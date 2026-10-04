@@ -129,6 +129,36 @@ def test_los_puntos_quedan_centrados_bajo_el_titulo_y_no_amontonados_arriba(chro
     assert abs((arriba + abajo) / 2 - 670) <= 40, (arriba, abajo)
 
 
+# Mejora de diseño (visto en el video real, final-argentina.mp4): una portada con
+# subtítulo reservaba el lugar del subtítulo en el alto de la cabecera desde el
+# arranque (aunque todavía no hubiera entrado por su cue), así que mientras el
+# subtítulo no aparecía el kicker+título+barra quedaban pegados arriba con media
+# pantalla vacía debajo. El subtítulo tiene que entrar SIN correr el centrado de lo
+# que ya está a la vista.
+
+def test_la_portada_con_subtitulo_queda_centrada_antes_de_que_aparezca_el_subtitulo(chrome):
+    spec = {"kicker": "Interés compuesto", "titulo": {"texto": "Ahorrar 10 años le gana a ahorrar 30"},
+            "subtitulo": {"texto": "Si arrancás antes", "cue": 4.0}, "duracion": 5.0}
+    with escena.pagina_de_escena(chrome, escena.ruta_plantilla("presentacion"), spec,
+                                 escena.cargar_brand(None)) as (page, d):
+        page.evaluate("t => window.seek(t)", 1.0)  # antes de la cue del subtítulo (4.0)
+        info = page.evaluate("""() => {
+            const k = document.querySelector('.kicker');
+            const b = document.querySelector('.barra');
+            return {top: k.getBoundingClientRect().top, bottom: b.getBoundingClientRect().bottom};
+        }""")
+    centro = (info["top"] + info["bottom"]) / 2
+    assert abs(centro - 540) <= 40, info
+
+
+def test_la_portada_sin_puntos_es_mas_grande_que_una_cabecera_comun(chrome):
+    spec = {"kicker": "Interés compuesto", "titulo": {"texto": "Ahorrar 10 años le gana a ahorrar 30"},
+            "duracion": 3.0}
+    px = _al_final(chrome, "presentacion", spec,
+                   "() => parseFloat(getComputedStyle(document.querySelector('.titulo')).fontSize)")
+    assert px > 76, "tiene que ser más grande que el título de una cabecera común (76 px)"
+
+
 # --- casos de borde: lo que muestra la escena tiene que ser el dato ----------
 
 def _al_final(chrome, tipo, spec, js):
