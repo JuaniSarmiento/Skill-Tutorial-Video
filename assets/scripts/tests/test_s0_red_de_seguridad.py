@@ -20,6 +20,15 @@ una diferencia máxima entre muestras de 7094 sobre una escala de 32768 (no 7)-.
 video no cambió (el fix es sólo de audio); el audio_md5 de las dos bases sí, y se regeneró con
 este mismo render (igual que se armó la base original). G1/G2/G4 no dependen de esto: miden
 cuadros y tiempos, no el contenido exacto de las muestras.
+
+Base regenerada el 04/10/2026: el camino SIN música (decisión del orquestador, ronda 3 de QA
+de S2) ahora normaliza con el mismo loudnorm de dos pasadas + limitador de TRUE PEAK que el
+camino CON música (antes era una sola pasada de loudnorm). El motivo: un slot largo con muy
+poca voz medía I=-10.3 LUFS (muy por arriba de -16±1), porque loudnorm de una pasada normaliza
+por el contenido CON voz, no por el silencio que lo rodea en todo el slot. Esto es un cambio
+INTENCIONAL del AUDIO (no del video): el framemd5 de las dos bases se verificó IGUAL al de
+antes de este cambio (no se tocó nada del camino de video); sólo el audio_md5 cambió, y se
+regeneró con este mismo render. G1/G2/G4 tampoco dependen de esto.
 """
 import hashlib
 import json
