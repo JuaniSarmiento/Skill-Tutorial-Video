@@ -16,3 +16,6 @@ secretos.txt
 __pycache__/
 *.pyc
 .DS_Store
+
+# entorno de Python de presentaciones/
+.venv/

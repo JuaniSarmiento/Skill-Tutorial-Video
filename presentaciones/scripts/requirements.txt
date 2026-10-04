@@ -1,0 +1,4 @@
+python-pptx>=0.6.21
+matplotlib>=3.7
+Pillow>=9.0
+PyYAML>=6.0

@@ -1,0 +1,34 @@
+# Ejemplo mínimo (3 diapositivas) para mostrar que la skill no depende de la Unidad 10.
+#   python ../../scripts/build.py presentacion.yaml -o salida --pdf --hoja
+nombre: listas
+titulo: Listas en Python
+pie: "Programación I · Unidad 5: Listas"
+revisor: Nombre Apellido
+codigo: codigo
+
+diapositivas:
+  - tipo: portada
+    materia: Programación I
+    unidad: "Unidad 5: Listas"
+    titulo: Listas en Python
+    descripcion:
+      - Qué es una lista, cómo se agregan elementos y cómo se recorre con un for.
+
+  - tipo: codigo_salida
+    titulo: Crear, agregar y recorrer
+    codigo: listas.py
+    salida: listas.py
+    tarjetas:
+      - titulo: Índices
+        texto: "`frutas[0]` es el primer elemento y `frutas[-1]`, el último."
+      - titulo: append() modifica la lista
+        acento: naranja
+        texto: "No devuelve una lista nueva: agrega `\"kiwi\"` al final de la misma lista."
+
+  - tipo: viñetas
+    titulo: Para recordar
+    items:
+      - "Una lista guarda varios valores en orden y se escribe entre corchetes."
+      - "`len()` devuelve la cantidad de elementos."
+      - "Para mostrar los elementos de una lista se usa una estructura repetitiva."
+    nota: "Consigna de la unidad: siempre que se pida mostrar una lista, usar un bucle."

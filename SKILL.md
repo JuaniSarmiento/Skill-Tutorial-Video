@@ -1,11 +1,16 @@
 ---
 name: tutorial-video-agente
 description: >
-  Arma una playlist de video-tutoriales donde un agente de IA (opencode/Claude Code) resuelve un proyecto
-  en la terminal: graba la pantalla, maneja el agente con xdotool, edita por segmentos con narración TTS
-  intercambiable (Piper, ElevenLabs, Fish Audio) y publica en YouTube o Google Drive.
+  Produce videos educativos con edición profesional: tutoriales de pantalla grabada (un agente de IA o
+  código en VS Code), explicadores de cualquier tema con escenas animadas, y videos de cátedra con
+  diapositivas. Narración TTS intercambiable o voz grabada propia, música, efectos, transiciones y
+  revisión automática; publica en YouTube o Google Drive. Incluye `presentaciones/`, que arma
+  diapositivas .pptx/.pdf con el estilo institucional de UTN TUPaD desde un YAML (código y salidas
+  reales, pila y árbol de recursión desde una traza).
   Trigger: "grabá un tutorial", "video de opencode haciendo X", "narrá con voz", "armá la playlist",
-  "subí los videos a YouTube/Drive", "cambiá la voz de los videos".
+  "subí los videos a YouTube/Drive", "cambiá la voz de los videos", "video explicando X", "grabá el
+  video de la unidad N", "armá diapositivas para el video/la clase/la microteaching", "slides estilo
+  UTN/TUPaD", "pasá este guion a diapositivas".
 license: Apache-2.0
 metadata:
   author: juanisarmiento
@@ -213,15 +218,25 @@ pueden mezclar con segmentos de pantalla en el mismo guion. Ejemplo completo, si
 - **`av<19`**: la faster-whisper actual rompe con `av` 19 (`metadata_errors`). Va pineado en
   los comandos de abajo.
 
-## Diapositivas de cátedra: skill `presentaciones-tupad`
+## Diapositivas de cátedra: `presentaciones/`
 
-Para videos de una materia de UTN TUPaD, las diapositivas las arma la skill
-**`presentaciones-tupad`** (`~/.claude/skills/presentaciones-tupad/`), no las escenas de arriba:
-es el estilo institucional (azul UTN, tarjetas, código sobre gris, pie con logo y numeración) y
-genera `.pptx` editable + `.pdf` desde un YAML. Las escenas animadas quedan para videos propios.
+Para videos de una materia de UTN TUPaD, las diapositivas las arma el módulo
+**`presentaciones/`** de esta skill (antes era la skill aparte `presentaciones-tupad`), no las
+escenas de arriba: es el estilo institucional (azul UTN, tarjetas, código sobre gris, pie con
+logo y numeración) y genera `.pptx` editable + `.pdf` desde un YAML. Las escenas animadas quedan
+para videos propios. **Leé `presentaciones/SKILL.md` antes de armar o corregir diapositivas**: su
+flujo (preflight, spec, build, revisar cada diapositiva por imagen) es obligatorio.
+
+```bash
+P=<skill>/presentaciones
+# una vez: python3 -m venv $P/.venv && $P/.venv/bin/pip install -r $P/scripts/requirements.txt
+$P/.venv/bin/python $P/scripts/preflight.py
+$P/.venv/bin/python $P/scripts/build.py presentacion.yaml -o salida --pdf --hoja
+```
 
 - **Si la cátedra ya tiene la presentación**, se usa esa (es material que el alumno también lee).
-  Si no la hay o hay que corregirla, se arma con `presentaciones-tupad` (leé su `SKILL.md`).
+  Si no la hay o hay que corregirla, se arma o se corrige desde su YAML (no editando el `.pptx` a
+  mano: si se regenera, los retoques manuales se pierden).
 - **El código y las salidas salen de ejecutar los `.py`**, y la pila de llamadas o el árbol de
   recursión se dibujan desde una traza real (`imagen: {diagrama: pila|arbol, ...}`). Las salidas
   de la diapositiva y las de la terminal del video coinciden porque salen del mismo programa.

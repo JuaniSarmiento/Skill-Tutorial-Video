@@ -1,0 +1,143 @@
+# Reproduce las diapositivas del video «Actividad 1 – Video 1: Introducción a la recursividad»
+# (Programación I, Unidad 10). Generar con:
+#   python ../../scripts/build.py presentacion.yaml -o salida --pdf --hoja
+nombre: diapositivas
+titulo: Introducción a la recursividad
+pie: "Programación I · Unidad 10: Recursividad · Actividad 1 · Video 1"
+revisor: Juan Ignacio Sarmiento
+codigo: codigo            # carpeta de los .py, relativa a este archivo
+
+diapositivas:
+  - tipo: portada
+    materia: Programación I
+    unidad: "Unidad 10: Recursividad"
+    actividad: Actividad 1
+    titulo: Introducción a la recursividad
+    descripcion:
+      - Qué es una función recursiva, cuáles son sus dos componentes y cómo la ejecuta Python.
+      - "Ejemplo: cuenta_regresiva. La pila de llamadas y qué pasa cuando falta el caso base."
+
+  - tipo: tarjetas
+    titulo: ¿Qué es la recursividad?
+    tamano: 18
+    filas:
+      - - titulo: Definición
+          texto: La recursividad es una técnica en la que una función se llama a sí misma para resolver un problema.
+      - - titulo: La idea
+          texto:
+            - Cada llamada resuelve una parte más pequeña del problema.
+            - El conjunto de todas las llamadas llega a la solución final.
+        - titulo: Otra forma de repetir
+          texto:
+            - Es otra manera de lograr repetición, sin usar bucles.
+            - Sirve para problemas que se pueden expresar en términos de versiones más pequeñas de sí mismos.
+
+  - tipo: numerados
+    titulo: "Analogía: las muñecas rusas"
+    imagen: ../../assets/portada-marcos.png
+    fondo_imagen: navy
+    pasos:
+      - titulo: Abrir
+        texto: Para llegar al centro se abre una muñeca, que contiene otra más pequeña.
+      - titulo: La última no se abre
+        texto: "La muñeca más chica ya no se abre: es el caso base."
+        acento: naranja
+      - titulo: Cerrar en orden inverso
+        texto: Recién entonces se cierran todas, de la más chica a la más grande.
+
+  - tipo: libre
+    titulo: Los dos componentes de una función recursiva
+    bloques:
+      - fila:
+          - ancho: 5.6
+            bloques:
+              - tarjeta: Caso base (condición de corte)
+                acento: naranja
+                tamano: 16
+                texto: "La situación más simple: se resuelve directamente y detiene la recursión."
+              - tarjeta: Paso recursivo
+                tamano: 16
+                texto: La función se llama a sí misma con una versión más pequeña del problema, acercándose al caso base.
+          - ancho: 6.13
+            bloques:
+              - codigo: {archivo: cuenta_regresiva.py, bloque: 1, rotulo: cuenta_regresiva.py}
+                tamano: 17
+              - texto:
+                  - "{naranja}**`if n == 0:`**{/}  caso base: muestra «¡Despegue!» y no se vuelve a llamar."
+                  - "{acento}**`else:`**{/}  paso recursivo: muestra n y se llama con n - 1."
+                tamano: 14
+
+  - tipo: libre
+    titulo: "Ejemplo: cuenta_regresiva(3)"
+    bloques:
+      - fila:
+          - ancho: 5.6
+            bloques:
+              - codigo: cuenta_regresiva.py
+              - salida: cuenta_regresiva.py
+          - ancho: 6.13
+            bloques:
+              - titulo: Prueba de escritorio
+                tabla:
+                  encabezado: [Paso, n, Acción]
+                  anchos: [0.8, 0.7, 4.63]
+                  centrar: [1, 2]
+                  resaltar: [4]
+                  filas:
+                    - ["1", "3", "Imprime 3 y llama a cuenta_regresiva(2)"]
+                    - ["2", "2", "Imprime 2 y llama a cuenta_regresiva(1)"]
+                    - ["3", "1", "Imprime 1 y llama a cuenta_regresiva(0)"]
+                    - ["4", "0", "Imprime «¡Despegue!» (caso base)"]
+              - texto: "Cuatro líneas de salida: 3, 2, 1 y «¡Despegue!». Cada llamada es una muñeca más chica."
+                tamano: 14
+                color: gris
+
+  - tipo: libre
+    titulo: La pila de llamadas
+    bloques:
+      - fila:
+          - bloques:
+              - tarjeta: Se apilan
+                texto: Cada llamada que todavía no terminó queda guardada en la pila, con su propio n.
+                tamano: 14
+          - bloques:
+              - tarjeta: Caso base
+                acento: naranja
+                texto: cuenta_regresiva(0) imprime «¡Despegue!» y no llama a nadie más.
+                tamano: 14
+          - bloques:
+              - tarjeta: Se desapilan
+                texto: "Las llamadas terminan en orden inverso al de su creación: la última en entrar es la primera en salir."
+                tamano: 14
+      - imagen:
+          diagrama: pila        # se traza ejecutando cuenta_regresiva(3) de verdad
+          archivo: cuenta_regresiva.py
+          llamada: cuenta_regresiva(3)
+          formato: "n = {n}"
+        epigrafe: "Pila de llamadas durante cuenta_regresiva(3): pasos 1 a 4, se apilan; pasos 5 a 8, terminan."
+
+  - tipo: libre
+    titulo: ¿Qué pasa si falta el caso base?
+    bloques:
+      - fila:
+          - ancho: 5.6
+            bloques:
+              - codigo: cuenta_regresiva_sin_caso_base.py
+              - aviso: Recursión infinita
+                tamano: 14
+                texto:
+                  - "Sin caso base, la función no deja de llamarse: n pasa por 0 y sigue con los negativos."
+                  - Python corta la ejecución con un RecursionError.
+          - ancho: 6.13
+            bloques:
+              - salida: {archivo: cuenta_regresiva_sin_caso_base.py, primeras: 5, ultimas: 3}
+              - texto: Lo mismo ocurre si el caso base existe pero nunca se alcanza, porque el problema no se reduce.
+                tamano: 14
+                color: gris
+
+  - tipo: sintesis
+    titulo: Síntesis
+    botones: [Caso base, Paso recursivo, Pila de llamadas, RecursionError]
+    texto:
+      - "Lectura obligatoria: apunte de la Actividad 1, «Introducción a la recursividad» (secciones 10, 10.1 y 10.2)."
+      - "Próximo video: Recursividad en Python, con el factorial paso a paso."
