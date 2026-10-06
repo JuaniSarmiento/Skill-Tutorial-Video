@@ -132,3 +132,85 @@ def test_un_programa_que_no_termina_falla_en_vez_de_colgar(tmp_path):
     p.write_text("while True:\n    pass\n")
     with pytest.raises(ValueError, match="p.py"):
         codigo.ejecutar(p, timeout=1)
+
+
+# --- el spec de la escena --------------------------------------------------------------
+
+NUEVO = "memo = {}\n\n\ndef fib(n):\n    if n in memo:\n        return memo[n]\n    memo[n] = n\n    return n\n"
+
+
+@pytest.fixture
+def carpeta(archivo):
+    (archivo.parent / "nuevo.py").write_text(NUEVO)
+    (archivo.parent / "corre.py").write_text("print('hola')\nprint(2692537, 'llamadas')\n")
+    return archivo.parent
+
+
+def _texto_filas(spec, cual):
+    return [(f[cual], _texto(f["tokens"])) for f in spec["_codigo"]["filas"] if f[cual] is not None]
+
+
+def test_el_codigo_de_la_escena_es_el_del_archivo_con_sus_numeros(carpeta):
+    spec = codigo.resolver({"tipo": "codigo", "archivo": "fib.py", "desde": 4, "hasta": 6}, carpeta)
+    assert spec["_codigo"]["archivo"] == "fib.py"
+    assert _texto_filas(spec, "antes") == codigo.fragmento(carpeta / "fib.py", 4, 6)
+    assert _texto_filas(spec, "despues") == codigo.fragmento(carpeta / "fib.py", 4, 6)
+
+
+def test_con_diff_las_filas_son_la_union_y_cada_lado_es_su_archivo(carpeta):
+    spec = codigo.resolver({"tipo": "codigo", "archivo": "fib.py",
+                            "pasos": [{"modo": "diff", "archivo": "nuevo.py", "cue": 1.0}]}, carpeta)
+    assert _texto_filas(spec, "antes") == codigo.fragmento(carpeta / "fib.py")
+    assert _texto_filas(spec, "despues") == codigo.fragmento(carpeta / "nuevo.py")
+    assert spec["pasos"][0]["_archivo"] == "nuevo.py"
+
+
+def test_resaltar_apunta_a_las_filas_de_lo_que_se_ve_en_ese_momento(carpeta):
+    spec = codigo.resolver({"tipo": "codigo", "archivo": "fib.py", "pasos": [
+        {"modo": "resaltar", "lineas": "7", "cue": 0.5},                  # "    return n" del original
+        {"modo": "diff", "archivo": "nuevo.py", "cue": 1.0},
+        {"modo": "resaltar", "lineas": "7-8", "cue": 2.0}]}, carpeta)     # "memo[n] = n" y "return n" del nuevo
+    filas = spec["_codigo"]["filas"]
+    a0, a1 = spec["pasos"][0]["_filas"]
+    b0, b1 = spec["pasos"][2]["_filas"]
+    assert [_texto(f["tokens"]) for f in filas[a0:a1 + 1]] == ["    return n"]
+    assert [_texto(f["tokens"]) for f in filas[b0:b1 + 1]] == ["    memo[n] = n", "    return n"]
+
+
+def test_un_resaltado_fuera_de_lo_que_se_ve_falla(carpeta):
+    with pytest.raises(ValueError, match="9"):
+        codigo.resolver({"tipo": "codigo", "archivo": "fib.py", "desde": 4, "hasta": 6,
+                         "pasos": [{"modo": "resaltar", "lineas": "9", "cue": 0.5}]}, carpeta)
+
+
+def test_la_salida_es_la_real_del_programa_que_nombra_el_paso(carpeta):
+    spec = codigo.resolver({"tipo": "codigo", "archivo": "fib.py",
+                            "pasos": [{"modo": "salida", "ejecutar": "corre.py", "cue": 1.0}]}, carpeta)
+    assert spec["pasos"][0]["_salida"] == {"comando": "$ python3 corre.py", "lineas": ["hola", "2692537 llamadas"]}
+
+
+def test_el_pseudocodigo_explicito_va_sin_archivo_y_sin_resaltar(carpeta):
+    spec = codigo.resolver({"tipo": "codigo", "pseudocodigo": "si n en memo:\n    devolver memo[n]"}, carpeta)
+    assert spec["_codigo"]["archivo"] == "pseudocódigo"
+    assert [f["tokens"] for f in spec["_codigo"]["filas"]] == [[["", "si n en memo:"]], [["", "    devolver memo[n]"]]]
+
+
+@pytest.mark.parametrize("spec, dice", [
+    ({"tipo": "codigo"}, "archivo"),
+    ({"tipo": "codigo", "archivo": "fib.py", "pseudocodigo": "x"}, "pseudocodigo"),
+    ({"tipo": "codigo", "archivo": "fib.py", "_codigo": {}}, "_codigo"),
+    ({"tipo": "codigo", "archivo": "fib.py", "pasos": [{"modo": "bailar", "cue": 1}]}, "tipeo"),
+    ({"tipo": "codigo", "archivo": "fib.py", "pasos": [{"modo": "diff", "archivo": "nuevo.py", "cue": 1},
+                                                       {"modo": "tipeo", "cue": 2}]}, "antes del diff"),
+    ({"tipo": "codigo", "archivo": "fib.py", "pasos": [{"modo": "resaltar", "lineas": "1", "cue": 2, "t": 2},
+                                                       {"modo": "resaltar", "lineas": "1", "cue": 1, "t": 1}]}, "orden"),
+])
+def test_un_spec_mal_armado_falla_diciendo_que_falta(carpeta, spec, dice):
+    with pytest.raises(ValueError, match=dice):
+        codigo.resolver(spec, carpeta)
+
+
+def test_resolver_no_toca_el_spec_original(carpeta):
+    spec = {"tipo": "codigo", "archivo": "fib.py", "pasos": [{"modo": "resaltar", "lineas": "1", "cue": 1}]}
+    codigo.resolver(spec, carpeta)
+    assert spec == {"tipo": "codigo", "archivo": "fib.py", "pasos": [{"modo": "resaltar", "lineas": "1", "cue": 1}]}

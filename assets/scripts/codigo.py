@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Escena `codigo` (H4, HITO3.md): lo que se prepara en Python antes de abrir Chrome."""
+import copy
 import os
 import shutil
 import subprocess
@@ -134,3 +135,95 @@ def ejecutar(ruta, timeout: int = 60) -> dict:
             texto = texto.replace(base + os.sep, "").replace(base, NEUTRA)
         texto = texto.replace(str(Path.home()), "~")
     return {"comando": f"$ python3 {ruta.name}", "lineas": texto.rstrip("\n").splitlines()}
+
+
+MODOS = ("tipeo", "resaltar", "diff", "salida")
+
+
+def _ruta(nombre, base_dir) -> Path:
+    p = Path(nombre)
+    return p if p.is_absolute() else Path(base_dir) / p
+
+
+def _rango(lineas) -> tuple[int, int]:
+    partes = str(lineas).split("-")
+    if not 1 <= len(partes) <= 2 or not all(p.strip().isdigit() for p in partes):
+        raise ValueError(f"'lineas' de resaltar va como \"7\" o \"5-6\", vino {lineas!r}")
+    return int(partes[0]), int(partes[-1])
+
+
+def resolver(spec: dict, base_dir) -> dict:
+    """Copia del spec de la escena `codigo` con todo lo que el navegador no tiene que hacer:
+
+      _codigo        {"archivo": nombre, "filas": [{"tokens", "antes", "despues"}]}: las
+                     filas son la unión del código de antes y después del diff (sin diff,
+                     las mismas), con el número de línea real de cada lado (None si no está)
+      pasos[diff]    "_archivo": el nombre del archivo nuevo
+      pasos[resaltar] "_filas": [primera, última] fila, contando en lo que se ve en ese
+                     momento (antes o después del diff, según el orden de los pasos)
+      pasos[salida]  "_salida": la salida real de ejecutar el programa
+
+    Las rutas relativas (archivo, diff.archivo, salida.ejecutar) son relativas a `base_dir`.
+    """
+    if "_codigo" in spec:
+        raise ValueError("'_codigo' no es un campo del spec: lo genera resolver() desde el archivo")
+    if ("archivo" in spec) == ("pseudocodigo" in spec):
+        raise ValueError("la escena codigo lleva 'archivo' (código real, con 'desde'/'hasta' o 'lineas' "
+                         "opcionales) o, sólo para pseudocódigo explícito, 'pseudocodigo'; uno de los dos")
+    out = copy.deepcopy(spec)
+    pasos = out.get("pasos", [])
+    for p in pasos:
+        if p.get("modo") not in MODOS:
+            raise ValueError(f"paso con modo {p.get('modo')!r}: los modos son {', '.join(MODOS)}")
+    modos = [p["modo"] for p in pasos]
+    for m in ("tipeo", "diff", "salida"):
+        if modos.count(m) > 1:
+            raise ValueError(f"la escena codigo lleva un solo paso {m!r}")
+    if "tipeo" in modos and "diff" in modos and modos.index("tipeo") > modos.index("diff"):
+        raise ValueError("el tipeo va antes del diff: se tipea el código de partida")
+    ts = [p["t"] for p in pasos if isinstance(p.get("t"), (int, float))]
+    if ts != sorted(ts):
+        raise ValueError("los pasos van en el orden en que suenan sus cues")
+
+    if "archivo" in out:
+        nombre = Path(out["archivo"]).name
+        antes = codigo_de(_ruta(out["archivo"], base_dir), out)
+    else:
+        nombre, antes = None, list(enumerate(str(out["pseudocodigo"]).splitlines(), 1))
+    despues = antes
+    diff = next((p for p in pasos if p["modo"] == "diff"), None)
+    if diff is not None:
+        if "archivo" not in diff:
+            raise ValueError("el paso diff nombra el 'archivo' con el código nuevo")
+        despues = codigo_de(_ruta(diff["archivo"], base_dir), diff)
+        diff["_archivo"] = Path(diff["archivo"]).name
+    filas, renglones = [], []
+    for _, i, j in diff_lineas([l for _, l in antes], [l for _, l in despues]):
+        renglones.append(antes[i][1] if i is not None else despues[j][1])
+        filas.append({"antes": antes[i][0] if i is not None else None,
+                      "despues": despues[j][0] if j is not None else None})
+    for f, tokens in zip(filas, tokenizar(renglones, nombre)):
+        f["tokens"] = tokens
+
+    lado = "antes"
+    for p in pasos:
+        if p["modo"] == "diff":
+            lado = "despues"
+        elif p["modo"] == "resaltar":
+            desde, hasta = _rango(p.get("lineas"))
+            numeros = [f[lado] for f in filas if f[lado] is not None]
+            if desde > hasta or not set(range(desde, hasta + 1)) <= set(numeros):
+                raise ValueError(f"resaltar {p['lineas']!r}: en ese momento se ven las líneas "
+                                 f"{min(numeros)}-{max(numeros)}")
+            idx = [k for k, f in enumerate(filas) if f[lado] is not None and desde <= f[lado] <= hasta]
+            p["_filas"] = [idx[0], idx[-1]]
+        elif p["modo"] == "salida":
+            if "ejecutar" not in p:
+                raise ValueError("el paso salida nombra el programa a 'ejecutar' (su salida real)")
+            p["_salida"] = ejecutar(_ruta(p["ejecutar"], base_dir))
+    out["_codigo"] = {"archivo": nombre or "pseudocódigo", "filas": filas}
+    return out
+
+
+def codigo_de(ruta: Path, d: dict) -> list[tuple[int, str]]:
+    return fragmento(ruta, d.get("desde"), d.get("hasta"), d.get("lineas"))
