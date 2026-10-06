@@ -81,6 +81,7 @@ tenue. Si no entran a 300 px la escena falla nombrando el número: acortalo ("1,
     numeros.forEach((n, i) => {
       n.el = crear('div', 'bloque', fila);
       n.el.dataset.caja = i ? 'contra' : 'numero';
+      n.el.dataset.t = n.t0;
       n.cifra = crear('span', 'cifra', n.el, n.texto);
       n.cifra.style.color = i ? 'var(--tenue)' : 'var(--acento)';
       if (n.unidad) crear('span', 'unidad', n.el, n.unidad);
@@ -98,6 +99,7 @@ tenue. Si no entran a 300 px la escena falla nombrando el número: acortalo ("1,
     if (S.subtitulo) {
       sub = crear('div', 'lema', document.body, S.subtitulo.texto || S.subtitulo);
       sub.dataset.caja = 'subtitulo';
+      sub.dataset.t = tSub;
       altoSub = sub.getBoundingClientRect().height + 48;
     }
     const alto = fila.getBoundingClientRect().height;
@@ -116,7 +118,7 @@ tenue. Si no entran a 300 px la escena falla nombrando el número: acortalo ("1,
     if (portada && header) {
       header.className = 'portada';
       barra = crear('div', 'barra', header);
-      if (S.subtitulo) { sub = crear('div', 'sub', header, S.subtitulo.texto || S.subtitulo); sub.dataset.caja = 'subtitulo'; }
+      if (S.subtitulo) { sub = crear('div', 'sub', header, S.subtitulo.texto || S.subtitulo); sub.dataset.caja = 'subtitulo'; sub.dataset.t = tSub; }
     }
     const lista = crear('section', 'puntos');
     // la lista arranca debajo de la cabecera medida (al menos un renglón al piso)
@@ -128,6 +130,7 @@ tenue. Si no entran a 300 px la escena falla nombrando el número: acortalo ("1,
       const num = crear('div', 'num', fila, String(i + 1).padStart(2, '0'));
       const txt = crear('div', 'txt', fila, p.texto);
       txt.dataset.caja = 'punto ' + (i + 1);
+      txt.dataset.t = p.t0;   // la puerta (verificar.py) mide que no se vea antes
       return { fila, num, txt, t0: p.t0 };
     });
     // achicar hasta que la lista entre en su caja, sin bajar del piso legible; al piso,

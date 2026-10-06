@@ -134,6 +134,7 @@ pantalla). Un rótulo va debajo del dibujo que nombra ("de").
     for (const d of dibujos) {
       d.el = crear('div', 'dibujo');
       d.el.dataset.caja = 'dibujo ' + d.id;
+      d.el.dataset.t = d.t0;   // la puerta (verificar.py) mide que no se vea antes
       Object.assign(d.el.style, {
         left: (d.cx - d.lado / 2) + 'px', top: (d.cy - d.lado / 2) + 'px',
         width: d.lado + 'px', height: d.lado + 'px',
@@ -177,6 +178,7 @@ pantalla). Un rótulo va debajo del dibujo que nombra ("de").
       r.el = crear('div', 'rotulo', document.body, r.lineas.join('\n'));
       r.el.style.fontSize = ROTULO_PX + 'px';
       r.el.dataset.caja = 'rotulo ' + r.texto;
+      r.el.dataset.t = r.t0;
       r.el.style.left = (d ? d.cx : 960) + 'px';
       r.el.style.top = (d ? d.cy + d.lado / 2 + 16 : 1000) + 'px';
     }

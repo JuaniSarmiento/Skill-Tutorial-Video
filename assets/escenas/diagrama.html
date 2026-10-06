@@ -168,6 +168,7 @@ El último elemento que entró es el foco y lleva el color de acento; el resto, 
       if (f.texto) {
         f.etq = crear('div', 'etq mono', document.body, f.texto);
         f.etq.dataset.caja = 'flecha ' + f.texto;
+        f.etq.dataset.t = f.t0;   // la puerta (verificar.py) mide que no se vea antes
         const nx = -dy / d, ny = dx / d, lado = ny > 0 ? -1 : 1;   // la etiqueta va del lado de arriba
         // a un costado de la línea: media etiqueta en la dirección de la normal, y aire
         const r = f.etq.getBoundingClientRect();
@@ -179,6 +180,7 @@ El último elemento que entró es el foco y lleva el color de acento; el resto, 
     for (const n of nodos) {
       n.el = crear('div', 'nodo');
       n.el.dataset.caja = 'nodo ' + n.id;
+      n.el.dataset.t = n.t0;
       Object.assign(n.el.style, { width: n.w + 'px', height: n.h + 'px', left: (n.cx - n.w / 2) + 'px', top: (n.cy - n.h / 2) + 'px' });
       crear('div', 'txt', n.el, n.lineas.join('\n')).style.fontSize = px + 'px';
       if (n.detalle) crear('div', 'det', n.el, n.detalle);

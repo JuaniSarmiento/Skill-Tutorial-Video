@@ -93,9 +93,11 @@ Si los números no entran ni a 24 px, la escena falla en vez de pisarlos.
       Object.assign(b.el.style, { left: (b.cx - ancho / 2) + 'px', width: ancho + 'px' });
       b.val = crear('div', 'valor', document.body, formato(b.valor, b.dec));
       b.val.dataset.caja = 'valor ' + b.etiqueta;
+      b.val.dataset.t = b.t0;   // la puerta (verificar.py) mide que no se vea antes
       Object.assign(b.val.style, { left: b.cx + 'px', fontSize: pxVal + 'px' });
       b.cat = crear('div', 'cat', document.body, b.etiqueta);
       b.cat.dataset.caja = 'categoria ' + b.etiqueta;
+      b.cat.dataset.t = b.t0;
       Object.assign(b.cat.style, { left: (b.cx - cabe / 2) + 'px', width: cabe + 'px', top: (G.abajo + 24) + 'px', fontSize: pxCat + 'px' });
       if (b.cat.scrollWidth > b.cat.clientWidth + 1 || b.cat.getBoundingClientRect().height > pxCat * 1.25 * 2 + 1)
         throw new Error(`el rótulo ${JSON.stringify(b.etiqueta)} no entra en dos renglones de ${pxCat} px: acortalo`);

@@ -21,6 +21,7 @@ a un `t` en segundos) y window.BRAND (paleta, tipografía, movimiento).
 uso:
   escena.py render   <tipo|plantilla.html> <spec.json> -o out.mp4 [--palabras p.json]
                      [--brand brand.json] [--duracion S] [--fps 30] [--ancho 1920]
+                     [--sin-verificar]   (por defecto corre antes la puerta de verificar.py)
   escena.py contacto <spec.json>... -o hoja.png [--brand brand.json] [--palabras p.json]
 
 `tipo` es el nombre de una plantilla de assets/escenas/ (diagrama, presentacion, datos, imagen).
@@ -431,7 +432,7 @@ def _cuadro(page, t: float) -> bytes:
 
 
 def render(plantilla, spec: dict, salida, brand: dict | None = None, palabras=None,
-           fps: int = 30, ancho: int = ANCHO_BASE, base_dir=None) -> float:
+           fps: int = 30, ancho: int = ANCHO_BASE, base_dir=None, verificar: bool = True) -> float:
     """Renderiza la escena a `salida` y devuelve su duración (cuadros / fps).
 
     Se escribe a un .parcial.mp4 y se renombra al final: si algo falla a mitad, no
@@ -439,6 +440,10 @@ def render(plantilla, spec: dict, salida, brand: dict | None = None, palabras=No
 
     `base_dir` (B3): directorio contra el que se resuelven los "svg" relativos de
     dibujos[] (el directorio del spec.json); sin él, el cwd de quien llama.
+
+    `verificar` (H2): antes de renderizar corre la puerta de verificar.py sobre la misma
+    página (textos que se pisan o se salen, contraste, elementos antes de su cue) y, si
+    encuentra algo, levanta VerificacionError sin renderizar. False la saltea.
     """
     spec = resolver_dibujos(resolver_spec(spec, palabras), base_dir)
     brand = brand or cargar_brand(None)
@@ -447,6 +452,13 @@ def render(plantilla, spec: dict, salida, brand: dict | None = None, palabras=No
     parcial = salida.with_name(salida.stem + ".parcial" + salida.suffix)
     try:
         with navegador() as b, pagina_de_escena(b, plantilla, spec, brand) as (page, duracion):
+            if verificar:   # H2: la puerta check, antes de abrir ffmpeg (no queda ni el .parcial)
+                import verificar as _verificar
+                hallazgos = _verificar.verificar_pagina(page, duracion, spec, Path(plantilla).name)
+                if hallazgos:
+                    raise _verificar.VerificacionError(
+                        f"{Path(plantilla).name} no pasa la verificación antes del render "
+                        f"(--sin-verificar para saltearla):\n" + _verificar.informe(hallazgos))
             tiempos = tiempos_de_cuadros(duracion, fps)
             ff = subprocess.Popen(comando_ffmpeg(parcial, fps, ancho), stdin=subprocess.PIPE, stderr=subprocess.PIPE)
             try:
@@ -498,6 +510,8 @@ def _cli(argv) -> None:
     r.add_argument("--duracion", type=float, help="pisa la duración del spec (ej: el slot de la voz)")
     r.add_argument("--fps", type=int, default=30)
     r.add_argument("--ancho", type=int, default=ANCHO_BASE, help="960 para pruebas rápidas")
+    r.add_argument("--sin-verificar", action="store_true",
+                   help="saltea la puerta check (verificar.py) antes del render")
     c = sub.add_parser("contacto")
     c.add_argument("specs", nargs="+", help="specs JSON con 'tipo' (los que deja editar.py escenas)")
     c.add_argument("--columnas", type=int, default=3)
@@ -517,8 +531,12 @@ def _cli(argv) -> None:
         spec = json.loads(Path(a.spec).read_text())
         if a.duracion is not None:
             spec["duracion"] = a.duracion
-        d = render(ruta_plantilla(a.plantilla), spec, a.salida, brand, voz, a.fps, a.ancho,
-                   base_dir=Path(a.spec).resolve().parent)
+        import verificar
+        try:
+            d = render(ruta_plantilla(a.plantilla), spec, a.salida, brand, voz, a.fps, a.ancho,
+                       base_dir=Path(a.spec).resolve().parent, verificar=not a.sin_verificar)
+        except verificar.VerificacionError as e:
+            sys.exit(f"escena.py render: {e}")
         print(f"{a.salida}: {d:.2f} s")
     else:
         escenas = []
