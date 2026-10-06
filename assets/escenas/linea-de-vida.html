@@ -1,0 +1,115 @@
+<!doctype html>
+<!--
+Escena "linea-de-vida": un eje de años/edades con tramos que se dibujan, uno por fila
+(H5, HITO3.md; ejemplo de HITO3.md: Ana 25→35, Sofía 35→65).
+
+spec:
+  {"tipo": "linea-de-vida",
+   "kicker": "...", "titulo": {"texto": "..."},                        (opcionales)
+   "eje": {"desde": 20, "hasta": 70, "unidad": "años"},                (opcional: si
+   falta, el rango sale del mínimo/máximo de los tramos)
+   "tramos": [{"nombre": "Ana", "desde": 25, "hasta": 35, "cue": "ana ahorra diez años"},
+              {"nombre": "Sofía", "desde": 35, "hasta": 65, "cue": "sofía treinta años"}]}
+
+Cada tramo se dibuja (DrawSVG) de izquierda a derecha en su propia cue; el eje (con una
+marca en cada edad que aparece en algún tramo) está desde el arranque.
+-->
+<meta charset="utf-8">
+<link rel="stylesheet" href="base.css">
+<style>
+  svg { position: absolute; inset: 0; width: 1920px; height: 1080px; overflow: visible; }
+  .nombre { position: absolute; transform: translateY(-50%); font-weight: 650; font-size: 32px; white-space: nowrap; }
+  .rango { position: absolute; transform: translateY(-50%); font-family: var(--fuente-mono); font-weight: 500;
+           font-size: 24px; color: var(--tenue); white-space: nowrap; }
+  .marca { position: absolute; transform: translate(-50%, 0); font-family: var(--fuente-mono); font-weight: 500;
+           font-size: 22px; color: var(--tenue); white-space: nowrap; }
+</style>
+<script src="vendor/gsap/gsap.min.js"></script>
+<script src="vendor/gsap/DrawSVGPlugin.min.js"></script>
+<script src="base.js"></script>
+<script>
+  gsap.registerPlugin(DrawSVGPlugin);
+  const { S, crear, cabecera, tiempo, BANDA } = E;
+  const NS = 'http://www.w3.org/2000/svg';
+  const tramos = (S.tramos || []).map(t => ({ ...t, t0: tiempo(t, 0) }));
+  if (!tramos.length) throw new Error('la escena "linea-de-vida" necesita al menos un "tramo"');
+  const eje = S.eje || {};
+  const min = eje.desde ?? Math.min(...tramos.map(t => t.desde));
+  const max = eje.hasta ?? Math.max(...tramos.map(t => t.hasta));
+  if (!(max > min)) throw new Error(`el eje necesita hasta > desde (vino ${min}..${max})`);
+  const AREA = { x0: 220, x1: 1760, y0: 320, y1: BANDA - 50 };
+  const sx = v => AREA.x0 + (v - min) / (max - min) * (AREA.x1 - AREA.x0);
+  const FILA_MAX = 120, FILA_MIN = 64, GAP = 22;
+  let dibujarCab;
+
+  function layout(cab) {
+    const minimo = tramos.length * FILA_MIN + (tramos.length - 1) * GAP;
+    AREA.y0 = cab.techo(AREA.y0, minimo, AREA.y1);
+    const disponible = AREA.y1 - AREA.y0;
+    for (let fila = FILA_MAX; fila >= FILA_MIN; fila -= 2) {
+      const alto = tramos.length * fila + (tramos.length - 1) * GAP;
+      if (alto <= disponible) return fila;
+    }
+    throw new Error(`la línea de vida no entra legible: ${tramos.length} tramos no caben ` +
+                    `en ${Math.round(disponible)}px a ${FILA_MIN}px cada uno: usá menos tramos`);
+  }
+
+  E.contrato(tramos.map(t => t.t0), () => {
+    const cab = cabecera(S.titulo, S.kicker);
+    dibujarCab = cab.dibujar;
+    const fila = layout(cab);
+    const svg = document.createElementNS(NS, 'svg');
+    document.body.appendChild(svg);
+
+    const ejeY = AREA.y1;
+    const ejeLinea = document.createElementNS(NS, 'line');
+    Object.entries({ x1: AREA.x0, y1: ejeY, x2: AREA.x1, y2: ejeY, stroke: 'var(--borde)', 'stroke-width': 3 })
+      .forEach(([k, v]) => ejeLinea.setAttribute(k, v));
+    svg.appendChild(ejeLinea);
+    const marcas = [...new Set(tramos.flatMap(t => [t.desde, t.hasta]))].sort((a, b) => a - b);
+    for (const v of marcas) {
+      const x = sx(v);
+      const tick = document.createElementNS(NS, 'line');
+      Object.entries({ x1: x, y1: ejeY - 8, x2: x, y2: ejeY + 8, stroke: 'var(--borde)', 'stroke-width': 3 })
+        .forEach(([k, w]) => tick.setAttribute(k, w));
+      svg.appendChild(tick);
+      const m = crear('div', 'marca', document.body, String(v) + (eje.unidad ? ` ${eje.unidad}` : ''));
+      m.style.left = x + 'px';
+      m.style.top = (ejeY + 14) + 'px';
+      m.dataset.caja = 'marca ' + v;
+    }
+
+    tramos.forEach((t, i) => {
+      const cy = AREA.y0 + i * (fila + GAP) + fila / 2;
+      t.linea = document.createElementNS(NS, 'line');
+      Object.entries({ x1: sx(t.desde), y1: cy, x2: sx(t.hasta), y2: cy,
+                      stroke: 'var(--acento)', 'stroke-width': Math.min(14, fila * 0.16), 'stroke-linecap': 'round' })
+        .forEach(([k, v]) => t.linea.setAttribute(k, v));
+      svg.appendChild(t.linea);
+      gsap.set(t.linea, { drawSVG: '0%' });
+
+      t.nombreEl = crear('div', 'nombre', document.body, t.nombre || '');
+      t.nombreEl.style.left = sx(t.desde) + 'px';
+      t.nombreEl.style.top = (cy - Math.min(14, fila * 0.16) / 2 - 24) + 'px';
+      t.nombreEl.dataset.caja = 'nombre ' + (t.nombre || i);
+      t.nombreEl.dataset.t = t.t0;
+
+      t.rangoEl = crear('div', 'rango', document.body, `${t.desde} → ${t.hasta}`);
+      t.rangoEl.style.left = sx(t.hasta) + 14 + 'px';
+      t.rangoEl.style.top = cy + 'px';
+      t.rangoEl.dataset.caja = 'rango ' + (t.nombre || i);
+      t.rangoEl.dataset.t = t.t0;
+    });
+    void fila;
+  }, t => {
+    dibujarCab(t);
+    for (const tr of tramos) {
+      const p = E.salida((t - tr.t0) / 0.9);
+      const visible = t >= tr.t0;
+      tr.linea.style.opacity = visible ? 1 : 0;
+      gsap.set(tr.linea, { drawSVG: (p * 100).toFixed(2) + '%' });
+      tr.nombreEl.style.opacity = E.aparecer(t, tr.t0);
+      tr.rangoEl.style.opacity = p >= 0.98 ? E.aparecer(t, tr.t0 + 0.6) : 0;
+    }
+  });
+</script>
