@@ -31,7 +31,7 @@ Si los números no entran ni a 24 px, la escena falla en vez de pisarlos.
            font-size: 64px; font-weight: 700; letter-spacing: -.02em; }
   .cat { position: absolute; text-align: center; line-height: 1.2;
          font-size: 36px; font-weight: 500; color: var(--tenue); }
-  .nota { position: absolute; right: 140px; font-size: 20px; color: var(--tenue); }
+  .nota { position: absolute; right: 140px; font-size: 24px; color: var(--tenue); }
 </style>
 <script src="base.js"></script>
 <script>
@@ -62,7 +62,7 @@ Si los números no entran ni a 24 px, la escena falla en vez de pisarlos.
   // abajo: se calcula al armar, justo encima de los rótulos y la nota (antes de la banda)
   const G = { x0: 220, x1: 1700, arriba: 330, abajo: 740 };
   const VALOR = 64;                   // px de las cifras: Barlow es más angosta que Inter
-  const AIRE_CAT = 24, AIRE_NOTA = 20;
+  const AIRE_CAT = 24, AIRE_NOTA = 17;   // -3 vs antes: la nota pasó de 20 a 24 px (D7, texto chico)
   const ALTO_MIN = 200;   // px de gráfico: ~60 % del alto normal (330, H2); con menos, las barras no se comparan
   const positivo = Math.max(0, ...barras.map(b => b.valor));
   const negativo = Math.min(0, ...barras.map(b => b.valor));

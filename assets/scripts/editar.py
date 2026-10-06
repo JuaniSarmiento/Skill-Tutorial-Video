@@ -1143,6 +1143,13 @@ def _desborde_escena(ruta: Path) -> list[str]:
     return [f"desborde: {h.texto}" for h in _verificacion_de_escena(ruta) if h.tipo in ("solape", "desborde")]
 
 
+def _texto_chico_escena(ruta: Path) -> list[str]:
+    """D7 (H5 ronda 2, HITO3.md): textos visibles que miden menos de 24 px (umbral
+    configurable en verificar.hallazgos_del_cuadro); un kicker o etiqueta en mono de
+    24 px pasa."""
+    return [f"texto chico: {h.texto}" for h in _verificacion_de_escena(ruta) if h.tipo == "texto_chico"]
+
+
 # R-5.8: cada regla Dn de la sección "Director" (SKILL.md) tiene acá su chequeo de
 # verdad. `revisar()` llama a cada uno A TRAVÉS de este registro (no por su nombre
 # de función directamente): test_docs_director.py lo comprueba reemplazando cada
@@ -1154,6 +1161,7 @@ CHEQUEOS = {
     "D4": _hallazgos_roles,
     "D5": _contraste_escena,
     "D6": _desborde_escena,
+    "D7": _texto_chico_escena,
 }
 
 
@@ -1215,10 +1223,10 @@ def revisar(vid: str, voz_name: str = "argentina", n: float = N_CAMBIO_VISUAL) -
                     continue
                 for desde, hasta in huecos:
                     hallazgos.append(f"{ruta.name}: {desde:.1f}s–{hasta:.1f}s sin elemento nuevo (> {n:.0f}s)")
-                # D5/D6: legibilidad, con la misma puerta que corre antes del render. Si no
+                # D5/D6/D7: legibilidad, con la misma puerta que corre antes del render. Si no
                 # puede correr (Chrome, un spec roto), es "no corrió" con la causa.
                 try:
-                    for clave in ("D5", "D6"):
+                    for clave in ("D5", "D6", "D7"):
                         hallazgos.extend(CHEQUEOS[clave](ruta))
                 except Exception as e:  # noqa: BLE001 — cualquier causa se informa, no se traga
                     no_corrio.append(f"legibilidad en escenas: no corrió para {ruta.name} ({e})")

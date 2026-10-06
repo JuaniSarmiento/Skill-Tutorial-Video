@@ -100,6 +100,7 @@ def test_revisar_usa_el_resultado_de_cada_chequeo_del_registro(raiz, monkeypatch
         "D4": lambda *a, **k: ["MARCA-D4"],
         "D5": lambda *a, **k: ["MARCA-D5"],
         "D6": lambda *a, **k: ["MARCA-D6"],
+        "D7": lambda *a, **k: ["MARCA-D7"],
     }
     for id_regla, espia in marcadores.items():
         monkeypatch.setitem(editar.CHEQUEOS, id_regla, espia)
@@ -112,3 +113,4 @@ def test_revisar_usa_el_resultado_de_cada_chequeo_del_registro(raiz, monkeypatch
     assert "MARCA-D4" in hallazgos
     assert any("MARCA-D5" in h for h in hallazgos), hallazgos
     assert any("MARCA-D6" in h for h in hallazgos), hallazgos
+    assert any("MARCA-D7" in h for h in hallazgos), hallazgos

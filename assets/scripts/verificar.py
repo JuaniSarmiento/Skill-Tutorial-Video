@@ -34,6 +34,7 @@ BANDA = int(ALTO * 0.83)   # px: debajo van los subtítulos (E.BANDA de base.js)
 VISIBLE = 0.05             # opacidad desde la que un texto "se ve" y puede pisar a otro
 ASENTADO = 0.99            # opacidad desde la que se mide el contraste (no a mitad de fundido)
 TOLERANCIA = 1.0           # px de redondeo del layout
+UMBRAL_TEXTO_CHICO = 24.0  # px: mínimo legible en celular (D7, HITO3.md); kicker/etiquetas en mono de 24 px pasan
 
 Hallazgo = namedtuple("Hallazgo", "tipo texto")
 
@@ -100,7 +101,8 @@ def _pisan(a: dict, b: dict) -> bool:
             and min(a["y1"], b["y1"]) - max(a["y0"], b["y0"]) > TOLERANCIA)
 
 
-def hallazgos_del_cuadro(escena: str, t: float, cajas: list[dict], textos: list[dict]) -> list[Hallazgo]:
+def hallazgos_del_cuadro(escena: str, t: float, cajas: list[dict], textos: list[dict],
+                         umbral_texto_chico: float = UMBRAL_TEXTO_CHICO) -> list[Hallazgo]:
     """Hallazgos de un cuadro ya medido.
 
     cajas:  [{n, x0, y0, x1, y1, op, texto, desborda, t}] de cada [data-caja]
@@ -135,6 +137,9 @@ def hallazgos_del_cuadro(escena: str, t: float, cajas: list[dict], textos: list[
         if razon < minimo:
             out.append(Hallazgo("contraste", f"{donde}: {x['n']!r} tiene contraste {razon:.2f}:1 "
                                              f"(mínimo {minimo}:1 a {x['px']:.0f} px)"))
+        if x["px"] < umbral_texto_chico:
+            out.append(Hallazgo("texto_chico", f"{donde}: {x['n']!r} mide {x['px']:.0f} px "
+                                               f"(mínimo {umbral_texto_chico:.0f} px, D7)"))
     return out
 
 

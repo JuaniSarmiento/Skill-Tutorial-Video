@@ -128,15 +128,36 @@ def test_un_texto_con_contraste_2_a_1_es_hallazgo_con_la_razon_medida():
 def test_texto_grande_con_3_5_a_1_pasa_y_chico_no():
     gris, fondo = "rgb(130, 130, 130)", "rgb(30, 30, 30)"   # ~4,1:1
     assert verificar.hallazgos_del_cuadro("x", 1.0, [], [_texto("grande", gris, fondo, px=40)]) == []
-    assert _tipos(verificar.hallazgos_del_cuadro("x", 1.0, [], [_texto("chico", gris, fondo, px=20)])) == ["contraste"]
+    # px=30 (no 20): acá se prueba sólo el umbral de CONTRASTE, no "texto chico" (más abajo)
+    assert _tipos(verificar.hallazgos_del_cuadro("x", 1.0, [], [_texto("chico", gris, fondo, px=30)])) == ["contraste"]
 
 
 def test_el_color_semitransparente_se_mezcla_con_el_fondo_antes_de_medir():
-    # blanco al 20 % sobre negro es un gris oscuro: no llega a 4,5
-    textos = [_texto("nota", "rgba(255, 255, 255, 0.2)", "rgb(0, 0, 0)", px=20)]
+    # blanco al 20 % sobre negro es un gris oscuro: no llega a 4,5 (px=26: sólo contraste)
+    textos = [_texto("nota", "rgba(255, 255, 255, 0.2)", "rgb(0, 0, 0)", px=26)]
     assert _tipos(verificar.hallazgos_del_cuadro("x", 1.0, [], textos)) == ["contraste"]
 
 
 def test_un_texto_entrando_a_mitad_de_fundido_no_se_mide():
     textos = [_texto("punto 1", "rgb(119, 119, 119)", "rgb(37, 37, 37)", op=0.5)]
     assert verificar.hallazgos_del_cuadro("x", 1.0, [], textos) == []
+
+
+# --- texto chico (H5 ronda 2, HITO3.md): legible en un celular --------------------------
+
+def test_un_texto_de_16px_es_texto_chico():
+    # blanco sobre negro: contraste de sobra, así que el único hallazgo es el tamaño
+    textos = [_texto("etiqueta", "rgb(255, 255, 255)", "rgb(0, 0, 0)", px=16)]
+    h = verificar.hallazgos_del_cuadro("x", 1.0, [], textos)
+    assert _tipos(h) == ["texto_chico"]
+    assert "etiqueta" in h[0].texto and "16" in h[0].texto
+
+
+def test_una_etiqueta_mono_de_24px_pasa():
+    textos = [_texto("kicker", "rgb(255, 255, 255)", "rgb(0, 0, 0)", px=24)]
+    assert verificar.hallazgos_del_cuadro("x", 1.0, [], textos) == []
+
+
+def test_el_umbral_de_texto_chico_es_configurable():
+    textos = [_texto("etiqueta", "rgb(255, 255, 255)", "rgb(0, 0, 0)", px=16)]
+    assert verificar.hallazgos_del_cuadro("x", 1.0, [], textos, umbral_texto_chico=12) == []
