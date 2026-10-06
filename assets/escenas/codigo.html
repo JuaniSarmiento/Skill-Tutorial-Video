@@ -1,0 +1,367 @@
+<!doctype html>
+<!--
+Escena "codigo" (H4): un editor con el código REAL de un archivo, tipeado, resaltado, con
+diff y con la salida real del programa, sin grabar VS Code.
+
+spec:
+  {"tipo": "codigo",
+   "kicker": "Recursividad", "titulo": {"texto": "Memoización"},     (opcionales)
+   "archivo": "codigo/fibonacci_memo.py", "desde": 4, "hasta": 11,  ("lineas": "4-11" es lo mismo;
+                                                                      sin rango, el archivo entero)
+   "pseudocodigo": "si n está en memo: ...",   (en vez de "archivo", sólo para pseudocódigo explícito)
+   "pasos": [                                  (en el orden en que suenan; cada uno en su cue)
+     {"modo": "tipeo", "cue": "escribimos", "por": "caracter"},        ("renglon": de a un renglón)
+     {"modo": "resaltar", "lineas": "5-6", "cue": "si ya está en memo"},
+     {"modo": "diff", "archivo": "otro.py", "cue": "cambiamos"},      (con desde/hasta/lineas opcionales)
+     {"modo": "salida", "ejecutar": "fibonacci_llamadas.py", "contar": true, "cue": "lo corremos"}]}
+
+Lo que no hace el navegador lo hace codigo.resolver() en Python antes de abrir Chrome:
+leer el archivo, tokenizar con Pygments, el diff por líneas (LCS) y ejecutar el programa.
+La página recibe "_codigo" (filas con tokens y número de línea de cada lado del diff) y,
+en cada paso, "_filas" (resaltar), "_archivo" (diff) o "_salida" (salida).
+
+- tipeo: el código de partida aparece carácter a carácter (o por renglón) desde su cue y
+  termina ANTES de la cue del paso siguiente (o del final): el ritmo se apura si hace falta.
+  La sangría aparece entera, como en un editor.
+- resaltar: un recuadro en acento sobre las líneas (los números que se ven en ese momento) y
+  el resto en tenue; un segundo resaltado mueve el recuadro.
+- diff: lo que se va se pone rojo y se cierra; después entra lo nuevo en verde.
+- salida: una terminal debajo con el comando y la salida real, renglón por renglón. Con
+  "contar", el último número de cada renglón cuenta hasta su valor (el texto final es la
+  salida real, sin reformatear).
+
+El código va tan grande como entre (de 46 px a 28): la línea más larga tiene que entrar a lo
+ancho y todas las líneas (más las de la salida) a lo alto antes de la banda de subtítulos. Si
+no entra a 28 px la escena falla nombrando la línea: mostrá menos (desde/hasta).
+-->
+<meta charset="utf-8">
+<link rel="stylesheet" href="base.css">
+<style>
+  .panel { position: absolute; background: var(--superficie); border: 1px solid var(--borde); border-radius: 20px; }
+  .barra { height: 56px; display: flex; align-items: center; gap: 12px; padding: 0 28px;
+           border-bottom: 1px solid var(--borde); }
+  .punto { width: 14px; height: 14px; border-radius: 50%; background: var(--borde); flex: none; }
+  .pestana { margin-left: 18px; font-family: var(--fuente-mono); font-size: 22px; font-weight: 600;
+             color: var(--texto); padding: 8px 2px; border-bottom: 3px solid var(--acento); white-space: nowrap; }
+  .cuerpo { position: relative; padding: 20px 40px; }
+  .codigo, .term { font-family: var(--fuente-mono); font-weight: 500; letter-spacing: 0;
+                   font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0; }
+  .fila { position: relative; display: flex; overflow: hidden; border-radius: 6px; }
+  .fila.quitada { background: var(--fondo-quitar); }
+  .fila.agregada { background: var(--fondo-agregar); }
+  .num { flex: none; text-align: right; color: var(--tenue); white-space: pre; }
+  .txt { flex: 1; min-width: 0; white-space: pre; overflow: hidden; color: var(--texto); }
+  .marca { position: absolute; left: 22px; right: 22px; border-radius: 10px; opacity: 0;
+           background: var(--fondo-marca);
+           box-shadow: inset 6px 0 0 var(--acento); }
+  .cursor { position: absolute; width: 4px; border-radius: 2px; background: var(--acento); opacity: 0; }
+  /* Paleta de tokens: ver PALETA en el script (derivada del brand, resuelta a rgb). */
+  .tk-kw { color: var(--tk-kw); font-weight: 600; }
+  .tk-fn { color: var(--texto); font-weight: 600; }
+  .tk-bi { color: var(--tk-bi); }
+  .tk-str { color: var(--tk-str); }
+  .tk-num { color: var(--tk-num); }
+  .tk-com { color: var(--tenue); }
+  .tk-op { color: var(--tk-op); }
+  .term .barra { height: 40px; }
+  .term .barra .etq { font-family: var(--fuente-mono); font-size: 20px; font-weight: 600; letter-spacing: .12em;
+                      text-transform: uppercase; color: var(--tenue); }
+  .term .cuerpo { padding: 14px 40px; }
+  .linea { white-space: pre; overflow: hidden; color: var(--texto); }
+  .prompt { color: var(--acento); }
+  .cuenta { color: var(--acento); font-weight: 600; }
+</style>
+<body>
+<script src="vendor/gsap/gsap.min.js"></script>
+<script src="contador.js"></script>
+<script src="base.js"></script>
+<script>
+  const { S, crear, tiempo, cabecera, clamp, BANDA } = E;
+  const raizCss = getComputedStyle(document.documentElement);
+  // pesos que nada pidió todavía: se piden ya, así document.fonts.ready (que espera
+  // E.lineaDeTiempo) los espera también y las medidas usan la fuente real
+  for (const f of ['500 100px ' + raizCss.getPropertyValue('--fuente-mono'), '600 100px ' + raizCss.getPropertyValue('--fuente-mono'),
+                   '800 100px ' + raizCss.getPropertyValue('--fuente-titulos')])
+    document.fonts.load(f);
+
+  // Paleta derivada del brand: el acento para las palabras clave y, para el resto, el mismo
+  // acento rotado de tono (oklch relativo), así cambia entera si cambia el acento. Se resuelve
+  // a rgb() pintando un píxel en un canvas 2D: getComputedStyle devuelve oklch()/color(srgb)
+  // tal cual, y la puerta (verificar.py) mide contraste sobre rgb().
+  const PALETA = {
+    'tk-kw': 'var(--acento)',
+    'tk-bi': 'oklch(from var(--acento) l calc(c * 0.75) calc(h + 250))',
+    'tk-str': 'oklch(from var(--acento) l calc(c * 0.85) calc(h + 75))',
+    'tk-num': 'oklch(from var(--acento) l calc(c * 0.8) calc(h + 180))',
+    'tk-op': 'color-mix(in srgb, var(--texto) 66%, var(--superficie))',
+    'fondo-marca': 'color-mix(in srgb, var(--acento) 14%, var(--superficie))',
+    'fondo-quitar': 'color-mix(in srgb, var(--quitar, #E5534B) 26%, var(--superficie))',
+    'fondo-agregar': 'color-mix(in srgb, var(--agregar, #46A758) 24%, var(--superficie))',
+  };
+  (() => {
+    const ctx = document.createElement('canvas').getContext('2d', { willReadFrequently: true });
+    const sonda = document.createElement('i');
+    document.body.appendChild(sonda);
+    for (const [nombre, css] of Object.entries(PALETA)) {
+      sonda.style.color = css;
+      ctx.clearRect(0, 0, 1, 1);
+      ctx.fillStyle = getComputedStyle(sonda).color;
+      ctx.fillRect(0, 0, 1, 1);
+      const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+      document.documentElement.style.setProperty('--' + nombre, `rgb(${r}, ${g}, ${b})`);
+    }
+    sonda.remove();
+  })();
+
+  const PX_MAX = 46, PX_MIN = 28;        // px del código: tan grande como entre, nunca menos de 28
+  const LH = 1.4, LH_TERM = 1.3;         // alto de renglón (en veces el px) del editor y de la terminal
+  const ANCHO_MAX = 1920 - 2 * 140, ANCHO_MIN = 1000;
+  const CAB = 56, PAD_V = 20, PAD_H = 40, HUECO_NUM = 32;   // px fijos del editor
+  const CAB_T = 40, PAD_T = 14, ENTRE = 20;                 // px fijos de la terminal y el aire entre los dos
+  const RITMO = 26;                      // caracteres por segundo del tipeo, si hay tiempo
+  const DIM = 0.38;                      // opacidad de lo que NO está resaltado
+  const C = S._codigo;
+  if (!C) throw new Error('la escena codigo necesita el spec resuelto por codigo.resolver() (falta "_codigo")');
+  const filas = C.filas;
+  const pasos = (S.pasos || []).map((p, i) => ({ ...p, t0: tiempo(p, 0.8 + i * 2) }));
+  const siguiente = p => { const s = pasos.find(q => q.t0 > p.t0); return s ? s.t0 : (S.duracion ?? Infinity); };
+  const ease3 = gsap.parseEase('power3.out'), ease2 = gsap.parseEase('power2.inOut');
+
+  E.lineaDeTiempo(() => {
+    const tl = gsap.timeline();
+    const cab = cabecera(S.titulo, S.kicker);
+    const tipeo = pasos.find(p => p.modo === 'tipeo');
+    const diff = pasos.find(p => p.modo === 'diff');
+    const salida = pasos.find(p => p.modo === 'salida');
+    const resaltados = pasos.filter(p => p.modo === 'resaltar');
+    const S_ = salida ? salida._salida : null;
+
+    // --- tamaño: la línea más larga a lo ancho, todas las líneas a lo alto ---------------
+    const medidor = crear('span', 'codigo', document.body, 'M'.repeat(50));
+    medidor.style.fontSize = '100px';
+    const cw1 = medidor.getBoundingClientRect().width / 50 / 100;   // ancho de un carácter por px de letra
+    medidor.remove();
+    const textoDe = f => f.tokens.map(t => t[1]).join('');
+    const nAntes = filas.filter(f => f.antes != null).length, nDespues = filas.filter(f => f.despues != null).length;
+    const nFilas = Math.max(nAntes, nDespues);
+    const digitos = String(Math.max(...filas.map(f => Math.max(f.antes || 0, f.despues || 0)))).length;
+    const larga = filas.reduce((a, f) => textoDe(f).length > textoDe(a).length ? f : a, filas[0]);
+    const cols = textoDe(larga).length;
+    const lineasT = S_ ? [S_.comando, ...S_.lineas] : [];
+    const colsT = Math.max(0, ...lineasT.map(l => l.length));
+    const techo = S.titulo ? cab.techo(200, 0, BANDA) : 72;
+    const alto = BANDA - 24 - techo;
+    const fijoAlto = CAB + 2 * PAD_V + (S_ ? ENTRE + CAB_T + 2 * PAD_T : 0);
+    const porPxAlto = nFilas * LH + (S_ ? lineasT.length * LH_TERM : 0);
+    const pxAncho = (ANCHO_MAX - 2 * PAD_H - HUECO_NUM) / ((digitos + cols + 0.5) * cw1);
+    const pxAnchoT = colsT ? (ANCHO_MAX - 2 * PAD_H) / ((colsT + 0.5) * cw1) : Infinity;
+    const pxAlto = (alto - fijoAlto) / porPxAlto;
+    const px = Math.floor(Math.min(PX_MAX, pxAncho, pxAnchoT, pxAlto) * 2) / 2;
+    if (px < PX_MIN) {
+      if (pxAncho < PX_MIN)
+        throw new Error(`la línea ${larga.despues ?? larga.antes} de ${C.archivo} (${cols} caracteres) no entra a lo ancho ni a ${PX_MIN} px: partila o mostrá otro tramo`);
+      if (pxAnchoT < PX_MIN)
+        throw new Error(`un renglón de la salida (${colsT} caracteres) no entra a lo ancho ni a ${PX_MIN} px`);
+      throw new Error(`${nFilas} líneas de código${S_ ? ` y ${lineasT.length} de terminal` : ''} no entran a lo alto ni a ${PX_MIN} px: ` +
+                      'mostrá menos líneas (desde/hasta) o sacá el título');
+    }
+    const lh = px * LH, cw = cw1 * px, gutter = digitos * cw + HUECO_NUM;
+    const ancho = Math.min(ANCHO_MAX, Math.max(ANCHO_MIN, 2 * PAD_H + gutter + (cols + 1) * cw, 2 * PAD_H + (colsT + 1) * cw));
+    const altoEditor = CAB + 2 * PAD_V + nFilas * lh;
+    const altoTerm = S_ ? CAB_T + 2 * PAD_T + lineasT.length * px * LH_TERM : 0;
+    const total = altoEditor + (S_ ? ENTRE + altoTerm : 0);
+    const izq = (1920 - ancho) / 2, arriba = techo + Math.max(0, (alto - total) / 2);
+
+    // --- el editor -----------------------------------------------------------------------
+    const editor = crear('div', 'panel');
+    Object.assign(editor.style, { left: izq + 'px', top: arriba + 'px', width: ancho + 'px' });
+    const barra = crear('div', 'barra', editor);
+    for (let i = 0; i < 3; i++) crear('span', 'punto', barra);
+    const pestana = crear('span', 'pestana', barra, C.archivo);
+    pestana.dataset.caja = 'archivo';
+    const cuerpo = crear('div', 'cuerpo codigo', editor);
+    Object.assign(cuerpo.style, { height: (2 * PAD_V + nFilas * lh) + 'px', fontSize: px + 'px', lineHeight: lh + 'px' });
+    const marca = crear('div', 'marca', cuerpo);
+    const cursor = crear('div', 'cursor', cuerpo);
+    Object.assign(cursor.style, { height: (px * 1.2) + 'px' });
+    const R = filas.map((f, i) => {
+      const el = crear('div', 'fila', cuerpo);
+      el.style.height = lh + 'px';
+      const num = crear('span', 'num', el);
+      num.style.width = gutter + 'px';
+      num.style.paddingRight = HUECO_NUM + 'px';
+      const txt = crear('span', 'txt', el);
+      txt.dataset.caja = 'código ' + (i + 1);
+      const spans = f.tokens.map(([clase, texto]) => ({ el: crear('span', clase ? 'tk-' + clase : '', txt, texto), texto }));
+      const texto = textoDe(f);
+      return { f, el, num, txt, spans, texto, sangria: texto.length - texto.trimStart().length };
+    });
+    const escribir = (r, n) => {   // los primeros n caracteres del renglón, repartidos en sus tokens
+      let quedan = n;
+      for (const s of r.spans) { const k = clamp(quedan, 0, s.texto.length); s.el.textContent = s.texto.slice(0, k); quedan -= k; }
+    };
+    // dónde cae cada fila de cada lado del diff (las que no están de ese lado miden 0)
+    const tops = lado => { let y = PAD_V; return R.map(r => { const y0 = y; if (r.f[lado] != null) y += lh; return y0; }); };
+    const top = { antes: tops('antes'), despues: tops('despues') };
+
+    // sin terminal todavía, el editor va centrado solo; cuando entra la terminal, sube
+    const solo = S_ ? techo + Math.max(0, (alto - altoEditor) / 2) - arriba : 0;
+    const tEntrada = 0.15;
+    tl.fromTo(editor, { opacity: 0, y: solo + 30 }, { opacity: 1, y: solo, duration: 0.6, ease: 'power3.out' }, tEntrada);
+
+    // --- tipeo -----------------------------------------------------------------------------
+    let T = null;
+    if (tipeo) {
+      const parte = R.filter(r => r.f.antes != null);
+      const costo = parte.map(r => r.texto.length - r.sangria + 1);   // +1: el salto de línea también lleva su tiempo
+      const totalC = costo.reduce((a, b) => a + b, 0);
+      const porRenglon = tipeo.por === 'renglon';
+      const ventana = siguiente(tipeo) - tipeo.t0 - 0.35;
+      if (ventana < 0.15)
+        throw new Error(`el tipeo en ${tipeo.t0.toFixed(2)} s no tiene tiempo antes de la cue siguiente`);
+      const dur = Math.max(0.15, Math.min(ventana, porRenglon ? parte.length * 0.22 : totalC / RITMO));
+      let acum = 0;
+      const inicio = costo.map(c => { const a = acum; acum += c; return a; });
+      parte.forEach((r, i) => {
+        r.entra = tipeo.t0 + (porRenglon ? i / parte.length : inicio[i] / totalC) * dur;
+        r.txt.dataset.t = r.entra;
+      });
+      T = { parte, costo, inicio, totalC, porRenglon, dur, fin: tipeo.t0 + dur };
+    }
+
+    // --- resaltar --------------------------------------------------------------------------
+    // eventos que cambian qué se resalta: cada resaltar, y el diff (que lo apaga)
+    const eventos = pasos.filter(p => p.modo === 'resaltar' || p.modo === 'diff');
+    let prendida = false;
+    for (const p of eventos) {
+      if (p.modo === 'diff') {
+        if (prendida) tl.to(marca, { opacity: 0, duration: 0.25 }, p.t0);
+        prendida = false;
+        continue;
+      }
+      const lado = diff && p.t0 >= diff.t0 ? 'despues' : 'antes';
+      const [a, b] = p._filas;
+      const geo = { top: top[lado][a] - 4, height: top[lado][b] - top[lado][a] + lh + 8 };
+      if (!prendida) {
+        tl.set(marca, geo, p.t0).to(marca, { opacity: 1, duration: 0.3, ease: 'power2.out' }, p.t0);
+      } else {
+        tl.to(marca, { ...geo, duration: 0.45, ease: 'power3.inOut' }, p.t0);
+      }
+      prendida = true;
+    }
+    const nivelDe = (p, i) => (!p || p.modo === 'diff') ? 1 : (i >= p._filas[0] && i <= p._filas[1] ? 1 : DIM);
+    const nivel = (i, t) => {
+      const k = eventos.findLastIndex(p => p.t0 <= t);
+      if (k < 0) return 1;
+      const a = nivelDe(eventos[k - 1], i), b = nivelDe(eventos[k], i);
+      return a + (b - a) * ease2(clamp((t - eventos[k].t0) / 0.35));
+    };
+
+    // --- diff ------------------------------------------------------------------------------
+    const tCambio = diff ? diff.t0 + 1.1 : Infinity;   // cuando lo nuevo empieza a entrar
+    if (diff) {
+      for (const r of R) {
+        if (r.f.despues == null) {
+          tl.to(r.el, { opacity: 0, duration: 0.25 }, diff.t0 + 0.55)
+            .to(r.el, { height: 0, duration: 0.3, ease: 'power2.inOut' }, diff.t0 + 0.8);
+        } else if (r.f.antes == null) {
+          r.txt.dataset.t = tCambio;
+          tl.fromTo(r.el, { height: 0, opacity: 0 }, { height: lh, duration: 0.3, ease: 'power2.inOut', immediateRender: true }, tCambio)
+            .to(r.el, { opacity: 1, duration: 0.3 }, tCambio + 0.3);
+        }
+      }
+    }
+
+    // --- la terminal -----------------------------------------------------------------------
+    let Tm = null;
+    if (S_) {
+      const term = crear('div', 'panel term');
+      Object.assign(term.style, { left: izq + 'px', top: (arriba + altoEditor + ENTRE) + 'px', width: ancho + 'px' });
+      crear('span', 'etq', crear('div', 'barra', term), 'terminal');
+      const tc = crear('div', 'cuerpo', term);
+      Object.assign(tc.style, { fontSize: px + 'px', lineHeight: (px * LH_TERM) + 'px' });
+      const cmd = crear('div', 'linea', tc);
+      cmd.dataset.caja = 'comando';
+      cmd.dataset.t = salida.t0;
+      crear('span', 'prompt', cmd, '$ ');
+      const cmdTxt = crear('span', '', cmd);
+      const orden = S_.comando.replace(/^\$ /, '');
+      const CUENTA = 1.2, PASO = 0.12, ARRANCA = 0.75;
+      const largo = ARRANCA + Math.max(0, S_.lineas.length - 1) * PASO + (salida.contar ? CUENTA : 0.15);
+      const ventana = siguiente(salida) - salida.t0 - 0.2;
+      if (ventana <= 0.3) throw new Error(`la salida en ${salida.t0.toFixed(2)} s no tiene tiempo antes de la cue siguiente`);
+      const k = Math.min(1, ventana / largo);
+      const lineas = S_.lineas.map((texto, j) => {
+        const el = crear('div', 'linea', tc);
+        el.dataset.caja = 'salida ' + (j + 1);
+        const entra = salida.t0 + (ARRANCA + j * PASO) * k;
+        el.dataset.t = entra;
+        // con "contar", el último número entero del renglón cuenta hasta su valor
+        const m = salida.contar ? [...texto.matchAll(/\d+/g)].pop() : null;
+        let cuenta = null;
+        if (m) {   // el número que cuenta, en su propio span (en acento); el resto del renglón, tal cual
+          el.append(texto.slice(0, m.index));
+          cuenta = crear('span', 'cuenta', el, m[0]);
+          el.append(texto.slice(m.index + m[0].length));
+        } else el.textContent = texto;
+        return { el, texto, entra, m, cuenta };
+      });
+      tl.to(editor, { y: 0, duration: 0.5, ease: 'power3.inOut' }, salida.t0)
+        .fromTo(term, { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.45, ease: 'power3.out' }, salida.t0 + 0.2);
+      Tm = { cmdTxt, orden, lineas, t0: salida.t0, k, CUENTA };
+    }
+
+    const fin = Math.max(T ? T.fin + 0.6 : 0, diff ? tCambio + 0.6 : 0, ...pasos.map(p => p.t0 + 0.6),
+                         Tm ? Math.max(...Tm.lineas.map(l => l.entra)) + Tm.CUENTA * Tm.k : 0, tEntrada + 0.6);
+    tl.to({}, { duration: Math.max(fin + 2, S.duracion ?? 0) - fin }, fin);   // la timeline cubre la escena entera
+
+    // --- lo que es función directa de t (tipeo, cursor, tenue, números, conteo) -------------
+    function pintar(t) {
+      cab.dibujar(t);
+      let actual = null;
+      R.forEach((r, i) => {
+        let ve = 1, n = r.texto.length;
+        if (T && r.f.antes != null) {
+          ve = t >= r.entra ? 1 : 0;
+          if (!T.porRenglon) {
+            const j = T.parte.indexOf(r);
+            const k = T.totalC * clamp((t - tipeo.t0) / T.dur);
+            n = Math.min(r.texto.length, r.sangria + Math.max(0, Math.floor(k - T.inicio[j])));
+            if (ve && t < T.fin) actual = { i, n };
+          }
+        }
+        escribir(r, n);
+        const o = ve * nivel(i, t);
+        r.txt.style.opacity = o;
+        r.num.style.opacity = o;
+        const nuevo = t >= tCambio;
+        r.el.classList.toggle('quitada', diff != null && r.f.despues == null && t >= diff.t0);
+        r.el.classList.toggle('agregada', diff != null && r.f.antes == null && nuevo);
+        r.num.textContent = r.el.classList.contains('quitada') ? '−' : String((nuevo ? r.f.despues : r.f.antes) ?? '');
+      });
+      if (diff) pestana.textContent = t >= tCambio ? diff._archivo : C.archivo;
+      // el cursor: donde se está tipeando, y titila medio segundo cuando termina
+      if (T && !T.porRenglon && t >= tipeo.t0 && t < T.fin + 0.6) {
+        const pos = actual || { i: R.indexOf(T.parte[T.parte.length - 1]), n: T.parte[T.parte.length - 1].texto.length };
+        const titila = t >= T.fin && Math.floor((t - T.fin) * 4) % 2 === 1;
+        Object.assign(cursor.style, { opacity: titila ? 0 : 1, left: (PAD_H + gutter + pos.n * cw + 1) + 'px',
+                                      top: (top.antes[pos.i] + (lh - px * 1.2) / 2) + 'px' });
+      } else cursor.style.opacity = 0;
+      if (Tm) {
+        const c = clamp((t - Tm.t0 - 0.15) / (0.45 * Tm.k));
+        Tm.cmdTxt.textContent = Tm.orden.slice(0, Math.round(c * Tm.orden.length));
+        for (const l of Tm.lineas) {
+          l.el.style.opacity = clamp((t - l.entra) / 0.12);
+          if (l.m) {
+            const p = ease3(clamp((t - l.entra) / (Tm.CUENTA * Tm.k)));
+            // BigInt: una salida real puede pasar 2^53 (fib(100) = 354224848179261915075)
+            l.cuenta.textContent = p < 1 ? String(BigInt(l.m[0]) * BigInt(Math.round(p * 1e6)) / 1000000n) : l.m[0];
+          }
+        }
+      }
+    }
+    pintar(0);
+    tl.eventCallback('onUpdate', () => pintar(tl.time()));
+    return tl;
+  });
+</script>

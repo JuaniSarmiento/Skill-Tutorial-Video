@@ -21,7 +21,7 @@ barra, un dibujo) se mide contra el fondo de la página.
 
 uso:
   verificar.py <spec.json>... [--brand brand.json] [--palabras p.json] [-n 12]
-Corre con: uv run --with playwright python verificar.py ...
+Corre con: uv run --with playwright --with pygments python verificar.py ...
 """
 import json
 import re
@@ -231,8 +231,10 @@ def _cli(argv) -> int:
         spec = json.loads(Path(s).read_text())
         if not spec.get("tipo"):
             ap.error(f"{s} no dice su 'tipo' (diagrama, presentacion, datos, imagen)")
-        spec = escena.resolver_dibujos(escena.resolver_spec(spec, voz), Path(s).resolve().parent)
-        hallazgos = verificar_escena(escena.ruta_plantilla(spec["tipo"]), spec, brand, Path(s).name, a.n)
+        base = Path(s).resolve().parent
+        plantilla = escena.ruta_plantilla(spec["tipo"])
+        spec = escena.resolver_codigo(escena.resolver_dibujos(escena.resolver_spec(spec, voz), base), plantilla, base)
+        hallazgos = verificar_escena(plantilla, spec, brand, Path(s).name, a.n)
         print(f"{s}: " + ("sin hallazgos" if not hallazgos else f"{len(hallazgos)} hallazgo(s)\n" + informe(hallazgos)))
         hay = hay or bool(hallazgos)
     return 1 if hay else 0
