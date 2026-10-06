@@ -79,8 +79,9 @@ pantalla). Un rótulo va debajo del dibujo que nombra ("de").
   for (const r of rotulos) {
     if (r.de && !porId[r.de]) throw new Error(`rótulo ${JSON.stringify(r.texto)}: dibujo ${r.de} inexistente`);
   }
-  const AREA = { x0: 140, x1: 1780, y0: 340, y1: 960 };
+  const AREA = { x0: 140, x1: 1780, y0: 340, y1: E.BANDA };
   const GAP = 48, ROTULO_ALTO = 56, LADO_MAX = 420, LADO_MIN = 160;
+  const ROTULO_MAX = 16 + 2 * ROTULO_PX * 1.15;   // un rótulo de dos renglones, con su aire
   let dibujarCab;
 
   // layout: una fila, cuadrados; "x"/"y" por dibujo pisa la posición automática
@@ -100,7 +101,7 @@ pantalla). Un rótulo va debajo del dibujo que nombra ("de").
       dibujos.forEach(d => {
         d.lado = lado;
         d.cx = Math.min(1920 - lado / 2 - 40, Math.max(lado / 2 + 40, d.x * 1920));
-        d.cy = Math.min(1080 - lado / 2 - ROTULO_ALTO - 40, Math.max(AREA.y0 + lado / 2, d.y * 1080));
+        d.cy = Math.min(AREA.y1 - lado / 2 - ROTULO_MAX, Math.max(AREA.y0 + lado / 2, d.y * 1080));
       });
       for (let i = 0; i < dibujos.length; i++) {
         for (let j = i + 1; j < dibujos.length; j++) {

@@ -10,15 +10,25 @@ spec:
    "puntos": [{"texto": "Ganás intereses", "cue": "intereses"}, ...]}
 
 Sin puntos es una portada: el título grande, centrado en vertical.
-Con muchos puntos la letra se achica hasta que entran (piso: 24 px); si ni así
-entran, la escena falla en vez de dejar puntos fuera de pantalla.
+Con muchos puntos la letra se achica hasta que entran (cuerpo de 42 a 28 px, y con
+el piso se juntan los renglones); si ni así entran, la escena falla en vez de dejar
+puntos fuera de pantalla. Nada baja de la banda de subtítulos (E.BANDA, 83 % del alto).
+
+Número protagonista (H2, el dato clave de la escena, como el gancho de la prueba con
+HyperFrames): en vez de puntos,
+   "numero": {"texto": "10", "unidad": "años", "cue": "diez años"},
+   "contra": {"texto": "30", "unidad": "años", "cue": "treinta"},   (opcional)
+   "subtitulo": {"texto": "Si arrancás antes", "cue": "..."}        (opcional, abajo)
+El número va gigante (de 360 a 300 px) en acento; el de contraste, igual de grande en
+tenue. Si no entran a 300 px la escena falla nombrando el número: acortalo ("1,2 M").
+"numero" y "puntos" no van juntos.
 -->
 <meta charset="utf-8">
 <link rel="stylesheet" href="base.css">
 <style>
   .portada { position: absolute; left: 140px; right: 240px; top: 50%; transform: translateY(-50%); }
-  .portada .titulo { font-size: 124px; letter-spacing: -.035em; line-height: 1.02; }
-  .portada .kicker { margin-bottom: 34px; font-size: 30px; }
+  .portada .titulo { font-size: 120px; letter-spacing: -.035em; line-height: 1.02; }
+  .portada .kicker { margin-bottom: 34px; font-size: 24px; }
   .barra { width: 96px; height: 8px; border-radius: 4px; background: var(--acento); margin: 44px 0 34px; }
   /* position: absolute para que NO cuente en el alto de .portada: si contara, el
      centrado vertical reservaría su lugar desde el arranque (aunque todavía no
@@ -26,25 +36,82 @@ entran, la escena falla en vez de dejar puntos fuera de pantalla.
      con la mitad de abajo vacía mientras el subtítulo espera su turno. */
   .sub { position: absolute; left: 0; top: 100%; display: table; font-size: 48px;
          font-weight: 500; color: var(--tenue); letter-spacing: -.01em; }
-  .puntos { position: absolute; left: 140px; right: 140px; top: 340px; bottom: 80px;
-            display: flex; flex-direction: column; justify-content: center; gap: 48px; }
-  .punto { display: flex; align-items: baseline; gap: 36px; }
-  .num { width: 72px; flex: none; font-family: var(--fuente-mono); font-size: 38px; font-weight: 700; color: var(--tenue); }
-  .txt { display: table; font-size: 62px; font-weight: 500; letter-spacing: -.015em; line-height: 1.18; }
+  .puntos { position: absolute; left: 140px; right: 140px; top: 300px; bottom: 184px;
+            display: flex; flex-direction: column; justify-content: center; gap: 32px; }
+  .punto { display: flex; align-items: baseline; gap: 32px; }
+  .num { width: 56px; flex: none; font-family: var(--fuente-mono); font-size: 24px; font-weight: 600; color: var(--tenue); }
+  .txt { display: table; font-size: 42px; font-weight: 500; letter-spacing: -.01em; line-height: 1.18; }
+  .numeros { position: absolute; left: 140px; width: max-content; display: flex; align-items: baseline; gap: 120px; }
+  .bloque { display: flex; align-items: baseline; gap: 28px; transform-origin: 0 100%; }
+  .cifra { font-family: var(--fuente-titulos); font-weight: 900; line-height: .85; letter-spacing: -.045em; white-space: nowrap; }
+  .unidad { font-family: var(--fuente-titulos); font-size: 72px; font-weight: 700; color: var(--tenue); white-space: nowrap; }
+  .lema { position: absolute; left: 140px; display: table; font-family: var(--fuente-titulos);
+          font-size: 64px; font-weight: 800; letter-spacing: -.02em; }
 </style>
 <script src="base.js"></script>
 <script>
-  const { S, crear, tiempo, resorte, aparecer, contrato, cabecera, M } = E;
-  const PISO = 24;   // px: menos que esto no se lee a 1080p
+  const { S, crear, tiempo, resorte, aparecer, contrato, cabecera, M, BANDA } = E;
+  const CUERPO = 42, PISO = 28;   // px del cuerpo: de 42 se achica hasta 28, menos no se lee en un celular
+  const CIFRA = 360, CIFRA_MIN = 300;   // px del número protagonista
   const puntos = (S.puntos || []).map((p, i) => ({ ...p, t0: tiempo(p, 0.8 + i * 0.9) }));
-  const portada = !puntos.length;
+  if (S.numero && puntos.length)
+    throw new Error('"numero" y "puntos" no van juntos: el número protagonista va solo en su escena');
+  const numeros = S.numero ? [S.numero, S.contra].filter(Boolean).map((n, i) => ({ ...n, t0: tiempo(n, 0.4 + i * 0.8) })) : [];
+  const portada = !puntos.length && !numeros.length;
   const tTitulo = tiempo(S.titulo, 0);
   const tSub = S.subtitulo ? tiempo(S.subtitulo, tTitulo + 0.6) : null;
   let dibujarCab, barra, sub, filas = [];
 
-  contrato([tTitulo, tSub ?? 0, ...puntos.map(p => p.t0)], () => {
+  // Número protagonista: cabecera arriba (o sólo el kicker), la fila de números centrada
+  // en lo que queda hasta la banda, y el subtítulo debajo.
+  function montarNumeros(cab) {
+    let techo;
+    if (S.titulo) techo = cab.techo(300, CIFRA_MIN, BANDA);
+    else {
+      techo = 200;
+      if (S.kicker) {
+        const k = crear('div', 'kicker', crear('header', 'cabecera'), S.kicker.texto || S.kicker);
+        k.dataset.caja = 'kicker';
+        const tk = tiempo(S.kicker, 0);
+        dibujarCab = t => { k.style.opacity = aparecer(t, tk); };
+        techo = k.getBoundingClientRect().bottom + 60;
+      }
+    }
+    const fila = crear('div', 'numeros');
+    numeros.forEach((n, i) => {
+      n.el = crear('div', 'bloque', fila);
+      n.el.dataset.caja = i ? 'contra' : 'numero';
+      n.cifra = crear('span', 'cifra', n.el, n.texto);
+      n.cifra.style.color = i ? 'var(--tenue)' : 'var(--acento)';
+      if (n.unidad) crear('span', 'unidad', n.el, n.unidad);
+    });
+    let px = CIFRA;
+    const cabe = () => fila.getBoundingClientRect().width <= 1920 - 2 * 140;
+    for (; px >= CIFRA_MIN; px -= 4) {
+      numeros.forEach(n => { n.cifra.style.fontSize = px + 'px'; });
+      if (cabe()) break;
+    }
+    if (!cabe())
+      throw new Error(`el número ${JSON.stringify(numeros.map(n => n.texto).join(' / '))} no entra ni a ` +
+                      `${CIFRA_MIN} px: acortalo ("1,2 M" en vez de "1.200.000") o sacá la unidad`);
+    let altoSub = 0;
+    if (S.subtitulo) {
+      sub = crear('div', 'lema', document.body, S.subtitulo.texto || S.subtitulo);
+      sub.dataset.caja = 'subtitulo';
+      altoSub = sub.getBoundingClientRect().height + 48;
+    }
+    const alto = fila.getBoundingClientRect().height;
+    const y = techo + Math.max(0, (BANDA - techo - alto - altoSub) / 2);
+    if (y + alto + altoSub > BANDA)
+      throw new Error('el número protagonista no entra entre el título y la banda de subtítulos: acortá el título');
+    fila.style.top = y + 'px';
+    if (sub) sub.style.top = (y + alto + 48) + 'px';
+  }
+
+  contrato([tTitulo, tSub ?? 0, ...puntos.map(p => p.t0), ...numeros.map(n => n.t0)], () => {
     const cab = cabecera(S.titulo, S.kicker);
     dibujarCab = cab.dibujar;
+    if (numeros.length) return montarNumeros(cab);
     const header = document.querySelector('.cabecera');
     if (portada && header) {
       header.className = 'portada';
@@ -53,9 +120,9 @@ entran, la escena falla en vez de dejar puntos fuera de pantalla.
     }
     const lista = crear('section', 'puntos');
     // la lista arranca debajo de la cabecera medida (al menos un renglón al piso)
-    const top = portada ? 340 : cab.techo(340, PISO * 1.18, 1080 - 80);
+    const top = portada ? 300 : cab.techo(300, PISO * 1.18, BANDA);
     lista.style.top = top + 'px';
-    const culpa = top > 340 ? ` (o acortá el título, que baja la lista hasta y=${Math.round(top)})` : '';
+    const culpa = top > 300 ? ` (o acortá el título, que baja la lista hasta y=${Math.round(top)})` : '';
     filas = puntos.map((p, i) => {
       const fila = crear('div', 'punto', lista);
       const num = crear('div', 'num', fila, String(i + 1).padStart(2, '0'));
@@ -63,18 +130,31 @@ entran, la escena falla en vez de dejar puntos fuera de pantalla.
       txt.dataset.caja = 'punto ' + (i + 1);
       return { fila, num, txt, t0: p.t0 };
     });
-    // achicar hasta que la lista entre en su caja, sin bajar del piso legible
+    // achicar hasta que la lista entre en su caja, sin bajar del piso legible; al piso,
+    // se juntan los renglones antes de rendirse
     const alto = () => filas.length ? filas.at(-1).fila.getBoundingClientRect().bottom - filas[0].fila.getBoundingClientRect().top : 0;
-    for (let px = 62; alto() > lista.clientHeight; px -= 2) {
-      if (px < PISO) throw new Error(`los ${filas.length} puntos no entran en pantalla ni a ${PISO} px: partilos en dos escenas${culpa}`);
-      lista.style.gap = (px * 0.77).toFixed(1) + 'px';
-      filas.forEach(x => {
-        x.txt.style.fontSize = px + 'px';
-        x.num.style.fontSize = Math.max(PISO, px * 0.61).toFixed(1) + 'px';
-      });
+    const intentos = [];
+    for (let px = CUERPO; px >= PISO; px -= 2) intentos.push([px, 0.77]);
+    intentos.push([PISO, 0.6]);   // 0.6 x 28 = 17 px: el aire mínimo entre dos renglones
+    for (const [px, aire] of intentos) {
+      if (alto() <= lista.clientHeight) break;
+      lista.style.gap = (px * aire).toFixed(1) + 'px';
+      filas.forEach(x => { x.txt.style.fontSize = px + 'px'; });
     }
+    if (alto() > lista.clientHeight)
+      throw new Error(`los ${filas.length} puntos no entran en pantalla ni a ${PISO} px: partilos en dos escenas${culpa}`);
   }, t => {
     dibujarCab(t);
+    for (const n of numeros) {
+      const v = resorte(t - n.t0);
+      n.el.style.opacity = aparecer(t, n.t0);
+      n.el.style.transform = `translateY(${((1 - v) * (M.subida ?? 28)).toFixed(2)}px) scale(${(0.9 + 0.1 * v).toFixed(4)})`;
+    }
+    if (sub && numeros.length) {
+      sub.style.opacity = aparecer(t, tSub);
+      sub.style.transform = `translateY(${((1 - resorte(t - tSub)) * (M.subida ?? 28)).toFixed(2)}px)`;
+      return;
+    }
     if (barra) {
       const tb = tTitulo + 0.35;
       barra.style.width = (96 * resorte(t - tb)).toFixed(2) + 'px';
@@ -89,6 +169,8 @@ entran, la escena falla en vez de dejar puntos fuera de pantalla.
       x.fila.style.opacity = aparecer(t, x.t0);
       x.fila.style.transform = `translateY(${((1 - resorte(t - x.t0)) * (M.subida ?? 28)).toFixed(2)}px)`;
       x.num.style.color = i === foco ? 'var(--acento)' : 'var(--tenue)';
+      // el punto en foco en texto; los que ya pasaron, en tenue (se lee dónde va la voz)
+      x.txt.style.color = i === foco ? 'var(--texto)' : 'var(--tenue)';
     });
   });
 </script>

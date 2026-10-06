@@ -31,7 +31,7 @@ Si los números no entran ni a 24 px, la escena falla en vez de pisarlos.
            font-size: 54px; font-weight: 700; letter-spacing: -.02em; }
   .cat { position: absolute; text-align: center; line-height: 1.2;
          font-size: 36px; font-weight: 500; color: var(--tenue); }
-  .nota { position: absolute; right: 140px; bottom: 44px; font-size: 22px; color: var(--tenue); }
+  .nota { position: absolute; right: 140px; font-size: 20px; color: var(--tenue); }
 </style>
 <script src="base.js"></script>
 <script>
@@ -58,8 +58,9 @@ Si los números no entran ni a 24 px, la escena falla en vez de pisarlos.
     const n = Math.abs(v).toLocaleString('es-AR', { minimumFractionDigits: dec, maximumFractionDigits: dec });
     return (v < 0 && /[1-9]/.test(n) ? '-' : '') + (S.prefijo || '') + n + (S.sufijo || '');
   }
-  const G = { x0: 220, x1: 1700, arriba: 410, abajo: 890 };
-  const ALTO_MIN = 240;   // px de gráfico: la mitad del alto normal; con menos, las barras no se comparan
+  // abajo: deja lugar a dos renglones de rótulo y la nota antes de la banda de subtítulos
+  const G = { x0: 220, x1: 1700, arriba: 410, abajo: 740 };
+  const ALTO_MIN = 200;   // px de gráfico: ~60 % del alto normal (330, H2); con menos, las barras no se comparan
   const positivo = Math.max(0, ...barras.map(b => b.valor));
   const negativo = Math.min(0, ...barras.map(b => b.valor));
   let dibujarCab, pxVal, escala, cero;
@@ -99,7 +100,14 @@ Si los números no entran ni a 24 px, la escena falla en vez de pisarlos.
       if (b.cat.scrollWidth > b.cat.clientWidth + 1 || b.cat.getBoundingClientRect().height > pxCat * 1.25 * 2 + 1)
         throw new Error(`el rótulo ${JSON.stringify(b.etiqueta)} no entra en dos renglones de ${pxCat} px: acortalo`);
     });
-    if (S.nota) crear('div', 'nota', document.body, S.nota).dataset.caja = 'nota';
+    if (S.nota) {
+      const nota = crear('div', 'nota mono', document.body, S.nota);
+      nota.dataset.caja = 'nota';
+      const debajo = Math.max(...barras.map(b => b.cat.getBoundingClientRect().bottom), G.abajo);
+      nota.style.top = (debajo + 16) + 'px';
+      if (nota.getBoundingClientRect().bottom > E.BANDA)
+        throw new Error(`la nota ${JSON.stringify(S.nota)} no entra antes de la banda de subtítulos: acortala`);
+    }
   }, t => {
     dibujarCab(t);
     for (const b of barras) {

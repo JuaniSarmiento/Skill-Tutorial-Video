@@ -12,18 +12,19 @@ html, body { width: 1920px; height: 1080px; overflow: hidden; }
 body {
   font-family: var(--fuente);
   color: var(--texto);
-  background:
-    radial-gradient(1500px 900px at 12% -10%, color-mix(in srgb, var(--superficie) 85%, transparent), transparent 72%),
-    var(--fondo);
+  /* Fondo plano: un degradé grande sobre fondo oscuro hace bandas en H.264 (H2). */
+  background: var(--fondo);
   -webkit-font-smoothing: antialiased;
   font-feature-settings: "tnum" 1, "ss01" 1;
   position: relative;
 }
+.mono { font-family: var(--fuente-mono); font-weight: 500; letter-spacing: .06em; }
 .cabecera { position: absolute; left: 140px; top: 112px; right: 140px; }
 .kicker {
   display: inline-block; margin-bottom: 20px; font-family: var(--fuente-mono);
-  font-size: 24px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; color: var(--acento);
+  font-size: 22px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; color: var(--acento);
 }
-.titulo { display: table; font-family: var(--fuente-titulos); font-size: 76px; font-weight: 700; letter-spacing: -.025em; line-height: 1.1; }
+/* Jerarquía para video (H2): títulos 64–120 px, cuerpo 28–42, etiquetas 18–24 en mono. */
+.titulo { display: table; font-family: var(--fuente-titulos); font-size: 76px; font-weight: 800; letter-spacing: -.03em; line-height: 1.1; }
 .titulo .palabra { display: inline-block; margin-right: .26em; }
 .titulo .palabra:last-child { margin-right: 0; }

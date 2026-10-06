@@ -20,6 +20,8 @@
   raiz.setProperty('--fuente-mono', `"${B.fuente_mono || 'IBM Plex Mono'}", ui-monospace, monospace`);
 
   const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+  // Banda de subtítulos (H2): el contenido vive en el 83 % superior del cuadro.
+  const BANDA = Math.floor(1080 * 0.83);
 
   // Respuesta al escalón de un resorte amortiguado. Con amortiguamiento 0.72 pasa
   // ~4 % y vuelve: overshoot contenido, sin rebote. Cuando el resto ya no se ve
@@ -41,8 +43,9 @@
 
   const medir = (() => {
     const ctx = document.createElement('canvas').getContext('2d');
-    return (texto, px, peso = 600) => {
-      ctx.font = `${peso} ${px}px ${getComputedStyle(document.documentElement).getPropertyValue('--fuente')}`;
+    // fuente: la variable CSS de la familia ('--fuente', '--fuente-titulos' o '--fuente-mono')
+    return (texto, px, peso = 600, fuente = '--fuente') => {
+      ctx.font = `${peso} ${px}px ${getComputedStyle(document.documentElement).getPropertyValue(fuente)}`;
       return ctx.measureText(texto).width;
     };
   })();
@@ -124,5 +127,5 @@
     window.seek = async t => { await lista; tl.totalTime(t, false); };
   }
 
-  window.E = { S, B, C, M, clamp, resorte, salida, aparecer, tiempo, medir, crear, cabecera, contrato, lineaDeTiempo };
+  window.E = { S, B, C, M, BANDA, clamp, resorte, salida, aparecer, tiempo, medir, crear, cabecera, contrato, lineaDeTiempo };
 })();

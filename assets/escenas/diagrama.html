@@ -33,7 +33,7 @@ El último elemento que entró es el foco y lleva el color de acento; el resto, 
   .nodo .det { margin-top: 10px; font-size: 32px; font-weight: 500; color: var(--tenue); white-space: nowrap; }
   .etq {
     position: absolute; transform: translate(-50%, -50%); padding: 4px 14px; white-space: nowrap;
-    font-size: 36px; font-weight: 600; color: var(--tenue); background: var(--fondo); border-radius: 8px;
+    font-size: 24px; color: var(--tenue); background: var(--fondo); border-radius: 8px;
   }
 </style>
 <script src="base.js"></script>
@@ -45,7 +45,7 @@ El último elemento que entró es el foco y lleva el color de acento; el resto, 
   for (const f of flechas) {
     if (!porId[f.de] || !porId[f.a]) throw new Error(`flecha ${f.de} -> ${f.a}: nodo inexistente`);
   }
-  const AREA = { x0: 140, x1: 1780, y0: 340, y1: 1000 };
+  const AREA = { x0: 140, x1: 1780, y0: 340, y1: E.BANDA };
   const PISO = 24, UNA_FILA = 36;   // px: piso legible, y el mínimo antes de pasar a dos filas
   const TOPE = 54, TOPE_POCOS = 92, POCOS = 3;   // con 2-3 nodos el tope crece para usar el área
   const MAX_TXT = 560, ENTRE_FILAS = 150;
@@ -70,7 +70,7 @@ El último elemento que entró es el foco y lleva el color de acento; el resto, 
   };
   const flechaEntre = (a, b) => flechas.find(f => [f.de, f.a].sort().join() === [a.id, b.id].sort().join());
   // el hueco entre dos nodos vecinos tiene que alojar la etiqueta de su flecha
-  const hueco = (a, b) => { const f = flechaEntre(a, b); return Math.max(170, f && f.texto ? medir(f.texto, 36, 600) + 28 + 80 : 0); };
+  const hueco = (a, b) => { const f = flechaEntre(a, b); return Math.max(170, f && f.texto ? medir(f.texto, 24, 500, '--fuente-mono') + 28 + 80 : 0); };
   const anchoFila = R => R.reduce((s, n) => s + n.w, 0) + R.slice(1).reduce((s, n, i) => s + hueco(R[i], n), 0);
   const altoFila = R => Math.max(...R.map(n => n.h));
 
@@ -95,7 +95,7 @@ El último elemento que entró es el foco y lleva el color de acento; el resto, 
       nodos.forEach(n => {
         Object.assign(n, medida(n, px));
         n.cx = Math.min(1920 - n.w / 2 - 40, Math.max(n.w / 2 + 40, n.x * 1920));
-        n.cy = Math.min(1080 - n.h / 2 - 40, Math.max(AREA.y0 + n.h / 2, n.y * 1080));
+        n.cy = Math.min(AREA.y1 - n.h / 2, Math.max(AREA.y0 + n.h / 2, n.y * 1080));
       });
       return px;
     }
@@ -166,7 +166,7 @@ El último elemento que entró es el foco y lleva el color de acento; el resto, 
       f.punta.setAttribute('transform', `translate(${x2} ${y2}) rotate(${Math.atan2(dy, dx) * 180 / Math.PI})`);
       svg.append(f.linea, f.punta);
       if (f.texto) {
-        f.etq = crear('div', 'etq', document.body, f.texto);
+        f.etq = crear('div', 'etq mono', document.body, f.texto);
         f.etq.dataset.caja = 'flecha ' + f.texto;
         const nx = -dy / d, ny = dx / d, lado = ny > 0 ? -1 : 1;   // la etiqueta va del lado de arriba
         // a un costado de la línea: media etiqueta en la dirección de la normal, y aire

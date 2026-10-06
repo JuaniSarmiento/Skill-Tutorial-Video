@@ -126,7 +126,8 @@ def test_los_puntos_quedan_centrados_bajo_el_titulo_y_no_amontonados_arriba(chro
             const r = [...document.querySelectorAll('.punto')].map(e => e.getBoundingClientRect());
             return [Math.min(...r.map(x => x.top)), Math.max(...r.map(x => x.bottom))];
         }""")
-    assert abs((arriba + abajo) / 2 - 670) <= 40, (arriba, abajo)
+    # H2: la lista va de y=300 a la banda de subtítulos (896): su centro es 598
+    assert abs((arriba + abajo) / 2 - 598) <= 40, (arriba, abajo)
 
 
 # Mejora de diseño (visto en el video real, final-argentina.mp4): una portada con
@@ -258,7 +259,8 @@ def test_datos_valores_menores_que_uno_usan_toda_la_altura(chrome):
     spec = _datos([{"etiqueta": "A", "valor": 0.4, "cue": 0.1},
                    {"etiqueta": "B", "valor": 0.2, "cue": 0.2}])
     a, b = _al_final(chrome, "datos", spec, BARRAS)
-    assert a["h"] > 400, "la barra más alta no puede quedar aplastada por un piso de 1"
+    # H2: el gráfico termina en y=740 para dejar rótulos y nota antes de la banda de subtítulos
+    assert a["h"] > 300, "la barra más alta no puede quedar aplastada por un piso de 1"
     assert b["h"] == pytest.approx(a["h"] / 2, rel=0.02)
 
 
@@ -407,6 +409,8 @@ def test_diagrama_con_coordenadas_arriba_no_tapa_el_titulo(chrome, x, y, titulo)
 # arrancaba en una altura fija que la cabecera ya había pasado.
 TITULO_4 = ("Cómo circula la plata cuando la dejás quieta en un plazo fijo durante treinta años "
             "seguidos y sin tocar nada de nada para ver cuánto crece de verdad el capital")
+TITULO_3 = ("Cómo circula la plata cuando la dejás quieta en un plazo fijo durante treinta años "
+            "seguidos y sin tocar nada")
 
 
 @pytest.mark.parametrize("tipo, spec", [
@@ -419,10 +423,15 @@ TITULO_4 = ("Cómo circula la plata cuando la dejás quieta en un plazo fijo dur
                       {"etiqueta": "Año 30", "valor": 17449, "cue": 0.2, "destacar": True}])),
 ], ids=["diagrama-una-fila", "diagrama-en-s", "presentacion", "datos"])
 def test_un_titulo_de_cuatro_renglones_no_queda_tapado_por_el_contenido(chrome, tipo, spec):
-    spec = {**spec, "kicker": "Interés compuesto", "titulo": {"texto": TITULO_4}}
+    # H2: con la banda de subtítulos (el contenido termina en y=896) un diagrama o un
+    # gráfico ya no entran debajo de 4 renglones de título; el caso se mide con 3 (que
+    # siguen pasando la altura fija de antes). La lista de presentacion sí entra con 4.
+    renglones = 4 if tipo == "presentacion" else 3
+    texto = TITULO_4 if renglones == 4 else TITULO_3
+    spec = {**spec, "kicker": "Interés compuesto", "titulo": {"texto": texto}}
     cajas = _al_final(chrome, tipo, spec, CAJAS)
     titulo = next(c for c in cajas if c["n"] == "titulo")
-    assert titulo["h"] > 3 * 76, "el título no salió en 4 renglones: el caso no se armó"
+    assert titulo["h"] > (renglones - 1) * 76, f"el título no salió en {renglones} renglones: el caso no se armó"
     assert [c for c in _choques(cajas) if "titulo" in c or "kicker" in c] == []
 
 
