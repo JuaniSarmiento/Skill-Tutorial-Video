@@ -108,6 +108,68 @@ def test_con_factorial_de_2_hay_tres_marcos_y_otros_valores(carpeta, chrome):
     assert {m["txt"] for m in visibles} == {"n = 2", "n = 1", "n = 0"}
 
 
+# --- llena el área y queda el resultado al terminar (H5 ronda 2, HITO3.md) ----------
+
+def _resultado(page, t):
+    escena._cuadro(page, t)
+    return page.evaluate("""() => {
+        const e = document.querySelector('[data-caja=resultado]');
+        if (!e) return null;
+        let o = 1; for (let x = e; x && x.nodeType === 1; x = x.parentElement) o *= +getComputedStyle(x).opacity;
+        return {texto: e.textContent, op: o, px: parseFloat(getComputedStyle(e).fontSize)};
+    }""")
+
+
+def test_el_marco_usa_casi_todo_el_ancho_disponible(carpeta, chrome):
+    spec = _spec(carpeta)
+    t_fondo = max(m["tPush"] for m in spec["marcos"]) + 0.1
+    with _abrir(chrome, spec) as (page, _):
+        escena._cuadro(page, t_fondo)
+        ancho = page.evaluate("() => document.querySelector('.marco').getBoundingClientRect().width")
+    # antes era un ancho fijo de 560px, muy por debajo del área disponible (~1920 - márgenes)
+    assert ancho > 900, ancho
+
+
+def test_el_texto_principal_del_marco_mide_al_menos_36px(carpeta, chrome):
+    spec = _spec(carpeta)
+    t_fondo = max(m["tPush"] for m in spec["marcos"]) + 0.1
+    with _abrir(chrome, spec) as (page, _):
+        escena._cuadro(page, t_fondo)
+        px = page.evaluate("() => parseFloat(getComputedStyle(document.querySelector('.marco .txt')).fontSize)")
+    assert px >= 36, px
+
+
+def test_el_valor_de_retorno_mide_al_menos_24px(carpeta, chrome):
+    spec = _spec(carpeta)
+    raiz = next(m for m in spec["marcos"] if m["profundidad"] == 0)
+    with _abrir(chrome, spec) as (page, _):
+        escena._cuadro(page, raiz["tPop"] + 0.1)
+        px = page.evaluate("() => parseFloat(getComputedStyle(document.querySelector('.marco .val')).fontSize)")
+    assert px >= 24, px
+
+
+def test_al_terminar_la_pila_queda_el_resultado_grande(carpeta, chrome):
+    spec = _spec(carpeta)
+    raiz = next(m for m in spec["marcos"] if m["profundidad"] == 0)
+    with _abrir(chrome, spec) as (page, d):
+        antes = _resultado(page, raiz["tPop"] + 0.1)
+        despues = _resultado(page, d - 0.05)
+    assert antes is None or antes["op"] < 0.5
+    assert despues is not None and despues["op"] > 0.9
+    assert "factorial(4)" in despues["texto"] and "24" in despues["texto"]
+    assert despues["px"] >= 64, despues
+
+
+def test_con_otra_llamada_el_resultado_final_cambia(carpeta, chrome):
+    spec_f = {"tipo": "pila", "archivo": "factorial.py", "llamada": "factorial(2)",
+              "titulo": {"texto": "factorial(2)"}, "pasos": _pasos(6), "duracion": 6.0}
+    spec = recursion.resolver(spec_f, carpeta)
+    with _abrir(chrome, spec) as (page, d):
+        despues = _resultado(page, d - 0.05)
+    assert "factorial(2)" in despues["texto"] and "2" in despues["texto"]
+    assert "factorial(4)" not in despues["texto"]
+
+
 # --- determinismo, igual que el resto de las plantillas -----------------------------
 
 def _hash(page, t):

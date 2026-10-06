@@ -22,7 +22,7 @@ más profundo siempre sale primero (LIFO): es la traza real, no algo que haya qu
 <style>
   .columna { position: absolute; left: 50%; transform: translateX(-50%); }
   .marco {
-    position: absolute; left: 50%; transform: translateX(-50%); width: 560px;
+    position: absolute; left: 50%; transform: translateX(-50%);
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     border-radius: 18px; background: var(--superficie); border: 3px solid var(--borde);
     box-shadow: 0 20px 48px -26px rgba(0, 0, 0, .7);
@@ -31,18 +31,32 @@ más profundo siempre sale primero (LIFO): es la traza real, no algo que haya qu
     font-family: var(--fuente-mono); font-weight: 500; letter-spacing: -.01em; white-space: pre;
   }
   .marco .val { margin-top: 8px; font-family: var(--fuente-mono); font-weight: 600; color: var(--acento); white-space: pre; }
+  .resultado {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    font-family: var(--fuente-titulos); font-weight: 800; letter-spacing: -.02em;
+    color: var(--acento); white-space: nowrap;
+  }
 </style>
 <script src="vendor/gsap/gsap.min.js"></script>
 <script src="base.js"></script>
 <script>
   const { S, crear, cabecera, medir, aparecer, clamp, BANDA } = E;
   const SHOW = 0.7;   // s: cuánto queda mostrando "vuelve con X" antes de desapilar
-  const GAP = 16, FILA_MAX = 140, FILA_MIN = 64;
+  // FILA_MAX subido (H5 ronda 2): "llenar el área", el marco crece tanto como el alto disponible
+  // lo permita. MARGEN dejado a los costados; ANCHO es casi todo el ancho del cuadro.
+  const GAP = 16, FILA_MAX = 260, FILA_MIN = 64, MARGEN = 300;
+  const ANCHO = 1920 - 2 * MARGEN;
+  const RESULTADO_PX = 140;   // tope del texto final; medir() lo achica si no entra
 
   const marcos = S.marcos || [];
   if (!marcos.length) throw new Error('la escena "pila" necesita "marcos" (los arma recursion.resolver)');
   marcos.forEach(m => { m.tFin = m.tPop + SHOW; });
   const profundidadMax = Math.max(...marcos.map(m => m.profundidad));
+  // al desapilar todo no puede quedar en blanco (H5 ronda 2): el resultado de la raíz,
+  // grande, apenas se desapila el último marco.
+  const raiz = marcos.find(m => m.profundidad === 0);
+  const tResultado = Math.max(...marcos.map(m => m.tFin));
+  const textoResultado = `${S.llamada ?? raiz.texto} = ${raiz.valor}`;
 
   function layout(cab) {
     const minimo = (profundidadMax + 1) * FILA_MIN + profundidadMax * GAP;
@@ -56,7 +70,7 @@ más profundo siempre sale primero (LIFO): es la traza real, no algo que haya qu
                     `y hay ${Math.round(disponible)}px disponibles): usá una llamada más chica`);
   }
 
-  let dibujarCab;
+  let dibujarCab, resultado;
   E.contrato([...marcos.map(m => m.tPush), ...marcos.map(m => m.tFin)], () => {
     const cab = cabecera(S.titulo, S.kicker);
     dibujarCab = cab.dibujar;
@@ -66,14 +80,21 @@ más profundo siempre sale primero (LIFO): es la traza real, no algo que haya qu
       m.el = crear('div', 'marco');
       m.el.dataset.caja = `marco ${m.profundidad}`;
       m.el.dataset.t = m.tPush;
+      m.el.style.width = ANCHO + 'px';
       m.el.style.height = fila + 'px';
       m.el.style.top = (base - (m.profundidad + 1) * fila - m.profundidad * GAP) + 'px';
-      crear('div', 'txt', m.el, m.texto).style.fontSize = Math.min(34, fila * 0.3) + 'px';
+      crear('div', 'txt', m.el, m.texto).style.fontSize = Math.min(72, fila * 0.42) + 'px';
       const val = crear('div', 'val', m.el, `vuelve con ${m.valor}`);
-      val.style.fontSize = Math.min(26, fila * 0.22) + 'px';
+      val.style.fontSize = Math.min(44, fila * 0.26) + 'px';
       m.valEl = val;
     }
     void techo;   // sólo se usa para el layout; el techo real ya quedó fijado por cab.techo
+    // el resultado final, tan grande como entre en el ancho disponible (tope RESULTADO_PX)
+    let px = RESULTADO_PX;
+    while (px > 36 && medir(textoResultado, px, 800, '--fuente-titulos') > ANCHO - 80) px -= 2;
+    resultado = crear('div', 'resultado', document.body, textoResultado);
+    resultado.dataset.caja = 'resultado';
+    resultado.style.fontSize = px + 'px';
   }, t => {
     dibujarCab(t);
     for (const m of marcos) {
@@ -83,5 +104,6 @@ más profundo siempre sale primero (LIFO): es la traza real, no algo que haya qu
       m.el.style.borderColor = retornando ? 'var(--tenue)' : 'var(--acento)';
       m.valEl.style.opacity = retornando ? clamp((t - m.tPop) / 0.12) : 0;
     }
+    resultado.style.opacity = t >= tResultado ? aparecer(t, tResultado, 0.4) : 0;
   });
 </script>
