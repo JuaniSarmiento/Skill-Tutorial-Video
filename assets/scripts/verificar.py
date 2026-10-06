@@ -21,7 +21,7 @@ barra, un dibujo) se mide contra el fondo de la página.
 
 uso:
   verificar.py <spec.json>... [--brand brand.json] [--palabras p.json] [-n 12]
-Corre con: uv run --with playwright python verificar.py ...
+Corre con: uv run --with playwright --with pygments python verificar.py ...
 """
 import json
 import re

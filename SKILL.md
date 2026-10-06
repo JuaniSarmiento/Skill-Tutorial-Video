@@ -157,6 +157,8 @@ pueden mezclar con segmentos de pantalla en el mismo guion. Ejemplo completo, si
 | `diagrama` | nodos en fila y flechas que se dibujan | `nodos[]` (`id`, `texto`, `detalle`), `flechas[]` (`de`, `a`, `texto`) |
 | `datos` | barras que crecen hasta su valor, con el número contando | `barras[]` (`etiqueta`, `valor`, `destacar`), `prefijo`, `nota` |
 | `imagen` | metáforas dibujadas (SVG local), una fila, cada una con su rótulo | `dibujos[]` (`id`, `svg`, posición `x`/`y`? opcional), `rotulos[]` (`texto`, `de`) |
+| `codigo` | editor con el código real de un archivo: tipeo, resaltado, diff y la salida real | `pasos[]` (`modo`: `tipeo`, `resaltar`, `diff`, `salida`) |
+| `contador` | número protagonista gigante que cuenta hasta su valor | la escena entera (`cue` arriba, junto a `valor`) |
 
 - **`cue` es la frase que nombra al elemento**, tal cual la dice el `texto` del segmento
   (`"cue": "tres décadas"`), o un número de segundos. El elemento entra en esa palabra.
@@ -218,6 +220,35 @@ pueden mezclar con segmentos de pantalla en el mismo guion. Ejemplo completo, si
   - Sin posición (`x`/`y`) van en una sola fila, cuadrados, espaciados (como máximo 8 a 160 px de
     lado); con muchos dibujos, textos de rótulo largos, `x`/`y` puesto en sólo algunos dibujos, o
     dos posiciones que se pisan, igual que las otras plantillas, falla claro en vez de pisar.
+- **Escena `codigo`** (H4: tutoriales de código sin grabar VS Code). El código sale de un
+  **archivo real**, nunca tipeado en el spec; rutas relativas a `TUT_ROOT` (en `escena.py render`,
+  al directorio del spec). Ejemplo: `assets/guion-ejemplo/tutorial-memoizacion.json`.
+  ```json
+  {"tipo": "codigo", "archivo": "codigo/fibonacci_memo.py", "desde": 4, "hasta": 11,
+   "pasos": [{"modo": "tipeo", "cue": "guardamos cada resultado"},
+             {"modo": "resaltar", "lineas": "5-6", "cue": "si n ya está en memo"},
+             {"modo": "diff", "archivo": "codigo/otra.py", "cue": "cambiamos"},
+             {"modo": "salida", "ejecutar": "codigo/fibonacci_llamadas.py", "contar": true, "cue": "lo corremos"}]}
+  ```
+  `"lineas": "4-11"` equivale a `desde`/`hasta`; sin rango, el archivo entero. `"pseudocodigo": "..."`
+  en vez de `archivo` sólo para pseudocódigo explícito (va sin resaltar). Los pasos van en el orden
+  en que suenan, con un solo `tipeo` (antes del `diff`), un `diff` y una `salida`.
+  - `tipeo` (`"por": "renglon"` opcional): carácter a carácter desde su cue, y **termina antes
+    de la cue siguiente** (el ritmo se apura si hace falta). `resaltar`: recuadro en acento sobre
+    las líneas (los números que se ven en ese momento), el resto en tenue. `diff`: lo que se va
+    se pone rojo y se cierra, lo nuevo entra en verde (LCS por líneas). `salida`: terminal debajo
+    con la salida **real** (se ejecuta con `python3` al armar el spec, desde una carpeta neutra,
+    sin rutas del home); con `contar`, el último número de cada renglón cuenta hasta su valor.
+  - Se resuelve en Python antes de abrir Chrome (`codigo.py`: Pygments, diff, ejecución): los
+    comandos de escenas llevan `--with pygments`. La paleta de tokens sale del acento del brand.
+  - Letra tan grande como entre (46 a 28 px, IBM Plex Mono sin ligaduras). Si la línea más larga
+    o el total de líneas (código + terminal) no entra a 28 px, falla nombrándola: mostrá menos
+    líneas. Con título, código de 8 líneas + 5 de terminal no entra: sacá el título.
+- **Escena `contador`**: `{"tipo": "contador", "valor": 2692537, "unidad": "llamadas",
+  "cue": "dos millones"}` (+ `prefijo`/`sufijo` pegados al número, `desde`, `conteo` en s,
+  `kicker`/`titulo`). Cuenta en formato argentino (2.692.537) y frena exacto en el valor; de 360 a
+  300 px o falla. Ideas de `count-up`/`number-pop-in`/`code-diff` de HyperFrames (Apache 2.0);
+  el código es propio, no se copió nada.
 - **Cero WebGL**: el motor bloquea `getContext('webgl'|'webgl2'|'experimental-webgl')` en
   cualquier plantilla (la GPU integrada de Juani la arrastra, PLAN.md); si una lo llama, sale
   como `ContratoError`, igual que cualquier otro error de JavaScript de la página.
@@ -716,12 +747,12 @@ uv run --with faster-whisper --with "av<19" python $S/verificar_voz.py argentina
 ffmpeg -i videos/v01/final-argentina.mp4 -af silencedetect=noise=-40dB:d=0.9 -f null - 2>&1 | grep -c silence_end
 
 # escenas (Chrome instalado, no baja navegadores)
-E="uv run --with playwright --with faster-whisper --with av<19 python"
+E="uv run --with playwright --with pygments --with faster-whisper --with av<19 python"
 $E $S/editar.py escenas v01 argentina          # voces + specs resueltos, sin renderizar
-uv run --with playwright python $S/escena.py contacto videos/v01/escenas/*.json -o videos/v01/contacto.png
+uv run --with playwright --with pygments python $S/escena.py contacto videos/v01/escenas/*.json -o videos/v01/contacto.png
 $E $S/editar.py imagen v01 argentina && $S/editar.py voz v01 argentina
-uv run --with playwright python $S/escena.py render datos spec.json -o prueba.mp4 --ancho 960 --fps 12   # prueba suelta
-uv run --with playwright python $S/verificar.py videos/v01/escenas/*.json   # la puerta sola, sin renderizar
+uv run --with playwright --with pygments python $S/escena.py render datos spec.json -o prueba.mp4 --ancho 960 --fps 12   # prueba suelta
+uv run --with playwright --with pygments python $S/verificar.py videos/v01/escenas/*.json   # la puerta sola, sin renderizar
 
 # comprimir para subir
 ffmpeg -y -i videos/v01/final-argentina.mp4 -c:v libx264 -preset slow -crf 30 -tune stillimage -c:a aac -b:a 128k "drive/1 - Titulo.mp4"

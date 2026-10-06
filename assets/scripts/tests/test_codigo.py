@@ -214,3 +214,19 @@ def test_resolver_no_toca_el_spec_original(carpeta):
     spec = {"tipo": "codigo", "archivo": "fib.py", "pasos": [{"modo": "resaltar", "lineas": "1", "cue": 1}]}
     codigo.resolver(spec, carpeta)
     assert spec == {"tipo": "codigo", "archivo": "fib.py", "pasos": [{"modo": "resaltar", "lineas": "1", "cue": 1}]}
+
+
+# --- el ejemplo documentado ------------------------------------------------------------
+
+def test_el_guion_de_ejemplo_trae_codigo_y_contador_y_sus_cues_se_dicen():
+    import json
+    from pathlib import Path
+    ejemplo = Path(__file__).resolve().parents[2] / "guion-ejemplo"
+    g = json.loads((ejemplo / "tutorial-memoizacion.json").read_text())
+    escenas = [(s["escena"], s["texto"].lower()) for s in g["segmentos"] if "escena" in s]
+    assert {"codigo", "contador"} <= {e["tipo"] for e, _ in escenas}
+    for e, texto in escenas:
+        cues = [p["cue"] for p in e.get("pasos", [])] + ([e["cue"]] if "cue" in e else [])
+        assert all(c.lower() in texto for c in cues if isinstance(c, str)), (cues, texto)
+        if e["tipo"] == "codigo":   # las rutas del guion son relativas a la raíz del tutorial
+            assert codigo.resolver(e, ejemplo)["_codigo"]["filas"]

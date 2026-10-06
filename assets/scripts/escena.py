@@ -26,7 +26,7 @@ uso:
 
 `tipo` es el nombre de una plantilla de assets/escenas/ (diagrama, presentacion, datos, imagen,
 codigo, contador).
-Corre con: uv run --with playwright python escena.py ...   (usa el Chrome instalado)
+Corre con: uv run --with playwright --with pygments python escena.py ...   (usa el Chrome instalado)
 """
 import copy
 import html

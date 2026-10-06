@@ -1,0 +1,41 @@
+{
+ "transicion": "corte",
+ "segmentos": [
+  {
+   "escena": {
+    "tipo": "codigo",
+    "archivo": "codigo/fibonacci_memo.py",
+    "desde": 4,
+    "hasta": 11,
+    "pasos": [
+     {"modo": "tipeo", "cue": "guardamos cada resultado"},
+     {"modo": "resaltar", "lineas": "5-6", "cue": "si n ya está en memo"}
+    ]
+   },
+   "texto": "Para no repetir cuentas, guardamos cada resultado en un diccionario. Antes de calcular, preguntamos si n ya está en memo: si está, lo devolvemos sin volver a llamar."
+  },
+  {
+   "escena": {
+    "tipo": "codigo",
+    "archivo": "codigo/fibonacci_llamadas.py",
+    "desde": 4,
+    "hasta": 9,
+    "pasos": [
+     {"modo": "salida", "ejecutar": "codigo/fibonacci_llamadas.py", "contar": true, "cue": "contamos las llamadas"}
+    ]
+   },
+   "texto": "Ahora contamos las llamadas de la versión sin memoria, para cinco, diez, veinte, veinticinco y treinta."
+  },
+  {
+   "escena": {
+    "tipo": "contador",
+    "kicker": "Sin memoria",
+    "titulo": {"texto": "Fibonacci de 30"},
+    "valor": 2692537,
+    "unidad": "llamadas",
+    "cue": "dos millones"
+   },
+   "texto": "Para fibonacci de treinta son más de dos millones seiscientas mil llamadas. Con memoria, treinta y una."
+  }
+ ]
+}

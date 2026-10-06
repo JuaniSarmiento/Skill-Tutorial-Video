@@ -22,7 +22,7 @@ uso:
 
 Un segmento con "escena": {"tipo": "diagrama|presentacion|datos", ...} no se corta del crudo:
 se renderiza con el motor de escenas (escena.py) y dura su slot, igual que los demás. Con
-escenas, editar.py corre con: uv run --with playwright --with faster-whisper --with "av<19" python editar.py ...
+escenas, editar.py corre con: uv run --with playwright --with pygments --with faster-whisper --with "av<19" python editar.py ...
 voces: argentina (PRINCIPAL: Fish, femenina argentina, speed 0.80, la mas expresiva medida) | joven (Fish, "Narrador Joven argentino") | profe (Fish, Profesora Argentina, la mas plana) | daniela (Piper local) | juani (wavs importados en videos/<vNN>/juani/NN.wav) | elevenlabs (API, key en ~/.config/elevenlabs/api_key) | fish (Fish Audio, Profesora Argentina, key en ~/.config/fish/api_key)
 """
 import hashlib
@@ -1237,7 +1237,7 @@ if __name__ == "__main__":
         if not rutas:
             print(f"{vid}: el guion no tiene escenas: no hay nada que revisar antes del render")
         else:   # ruta absoluta: el comando se copia y se corre desde la raíz del tutorial
-            print(f"hoja de contacto: uv run --with playwright python {Path(__file__).resolve().parent / 'escena.py'} contacto "
+            print(f"hoja de contacto: uv run --with playwright --with pygments python {Path(__file__).resolve().parent / 'escena.py'} contacto "
                   + " ".join(str(r) for r in rutas) + f" -o {ROOT / 'videos' / vid / 'contacto.png'}")
     elif accion == "zonas":
         rutas = zonas(vid)
