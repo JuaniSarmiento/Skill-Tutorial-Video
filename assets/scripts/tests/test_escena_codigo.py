@@ -21,6 +21,7 @@ MEMO = ("memo = {}\n\n\ndef fibonacci_memo(n):\n    if n in memo:\n        retur
 SIMPLE = "def fib(n):\n    if n <= 1:\n        return n\n    return fib(n - 1) + fib(n - 2)\n"
 CON_MEMO = "def fib(n):\n    if n in memo:\n        return memo[n]\n    if n <= 1:\n        return n\n    memo[n] = fib(n - 1) + fib(n - 2)\n    return memo[n]\n"
 LLAMADAS = "for n in [5, 10, 30]:\n    print(f'fibonacci({n}) -> {n * 89753} llamadas')\n"
+SEIS = "for n in range(6):\n    print(f'linea {n}')\n"
 
 
 @pytest.fixture(scope="module")
@@ -31,6 +32,7 @@ def carpeta(tmp_path_factory):
     (d / "con_memo.py").write_text(CON_MEMO)
     (d / "llamadas.py").write_text(LLAMADAS)
     (d / "larga.py").write_text("x = " + " + ".join(["valor_muy_largo"] * 12) + "\n")
+    (d / "seis.py").write_text(SEIS)
     return d
 
 
@@ -81,6 +83,30 @@ def test_sin_pasos_el_codigo_que_se_ve_es_identico_al_archivo(chrome, carpeta):
 def test_el_codigo_es_grande_28_px_o_mas(chrome, carpeta):
     with _abrir(chrome, _spec(carpeta)) as (page, d):
         assert min(x["px"] for x in _leer(page, d - 0.05)) >= 28
+
+
+def test_sin_terminal_el_codigo_llena_el_alto_y_queda_bien_grande(chrome, carpeta):
+    # 8 líneas (fibonacci_memo.py 4-11) sin terminal: antes de este cambio salía a 38.5 px
+    # porque la línea más larga ("memo[n] = fibonacci_memo(n - 1) + ...", 63 caracteres) es
+    # la que ata el ancho. Con el margen de 140 px (igual en todo el deck: contador, diagrama,
+    # imagen, presentacion) y la tipografía real, el techo físico para esa línea es ~40.5 px
+    # aun con el padding del panel en cero: no llega a 48. 39 px separa el antes (38.5) del
+    # después y documenta el techo real en vez de una cifra inalcanzable.
+    with _abrir(chrome, _spec(carpeta)) as (page, d):
+        assert min(x["px"] for x in _leer(page, d - 0.05)) >= 39
+
+
+def test_con_terminal_de_seis_renglones_el_codigo_sigue_grande(chrome, carpeta):
+    spec = _spec(carpeta, pasos=[{"modo": "salida", "ejecutar": "seis.py", "cue": 2.0, "t": 2.0}])
+    with _abrir(chrome, spec) as (page, d):
+        assert min(x["px"] for x in _leer(page, d - 0.05)) >= 32
+
+
+def test_el_panel_ocupa_la_mayor_parte_del_ancho_util(chrome, carpeta):
+    ANCHO_UTIL = 1920 - 2 * 140
+    with _abrir(chrome, _spec(carpeta)) as (page, _):
+        ancho = _caja(page, 0.5, ".panel")["width"]
+    assert ancho >= 0.70 * ANCHO_UTIL
 
 
 def test_un_renglon_que_no_entra_ni_a_28_px_falla_nombrando_la_linea(chrome, carpeta):
