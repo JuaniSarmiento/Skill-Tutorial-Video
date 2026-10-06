@@ -37,6 +37,26 @@ no en tiempo real); el formato no.
 | H8 | **Director 2.0**: brief (dicho vs inferido), estructura narrativa nombrada, catálogo de ganchos, cada frase con su revelado | Guiones de explicador, no de resumen | — |
 | H9 | **Video real de control**: rehacer interés compuesto y el tramo de memoización de la U10 con todo; comparativa lado a lado con la versión del Hito 2 | La prueba de que el salto existe | H1–H7 |
 
+### Referencias de estilo que Juani quiere alcanzar (06/10)
+Dos videos del canal Torti Code:
+- **Short "El problema N+1 explicado con ocho viajes al súper"** (vertical, 75 s): fondo papel,
+  dibujos de línea que se trazan (súper, Ana caminando, olla que se llena, receta con tildes),
+  subtítulos grandes con la palabra clave en rojo, panel de código con la línea culpable
+  resaltada, números gigantes ("101", "N+1", "2").
+- **"Cómo escribir documentación útil"** (19 min, horizontal): fondo violeta oscuro, tarjetas de
+  interfaz (README, editor, PR, árbol de archivos, línea de tiempo) unidas por conectores con
+  brillo, e ilustraciones pintadas generadas con IA (personajes en paisajes), sin texto adentro.
+
+| # | Rebanada | Qué gana el video | Depende de |
+|---|---|---|---|
+| H10 | **Formato vertical 9:16** (shorts) en todo el pipeline: escenas, transiciones, subtítulos, encoder | Shorts / reels | H0 |
+| H11 | **Subtítulos cinéticos** palabra por palabra con la palabra clave resaltada (usa los tiempos por palabra de `palabras.py`) | El look del short N+1 | H0, H10 |
+| H12 | **Utilería de dibujos**: personas, objetos y lugares en SVG de línea, que se trazan y **se mueven por una trayectoria**; tema "papel" además del oscuro | Analogías dibujadas como el súper de Ana | H0, H2 |
+| H13 | **Componentes de interfaz**: tarjeta de archivo, editor, PR, árbol de archivos, línea de tiempo, conectores con brillo (sin degradés que hacen bandas) | El look del video de documentación | H0, H4, H6 |
+| H14 | **Ilustraciones generadas sin texto** por API (Flux / GPT Image vía fal), con brand y caché. **Cambia la regla**: de "sin imágenes generadas" a "sin imágenes generadas con texto adentro" | Escenas pintadas tipo paisaje | H2 |
+
+H9 suma **un short estilo N+1** como control, comparado lado a lado con el original.
+
 Exploración aparte (sin compromiso): captura con CDP `beginFrame` en vez de screenshot, por si
 elimina el relayout forzado que hoy hace determinista el render.
 
