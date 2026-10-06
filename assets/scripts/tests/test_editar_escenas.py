@@ -192,7 +192,10 @@ def test_escenas_deja_cada_spec_resuelto_para_la_hoja_de_contacto(raiz, monkeypa
     subprocess.run(["ffmpeg", "-loglevel", "error", "-f", "lavfi", "-i", "sine=d=2", str(wav)], check=True)
     monkeypatch.setattr(editar, "voice_wav", lambda vid, voz, i, texto: wav)
     monkeypatch.setattr(palabras, "transcribir", lambda a, modelo=None: VOZ)
-    _guion(raiz, "v09", {"segmentos": [{"escena": ESCENA, "texto": "Mirá el sol."},
+    # velocidad_voz 1.0: este test no prueba aceleración, y "argentina" (TTS) la trae
+    # a 1.25 por default (ver test_editar_velocidad_voz.py), que movería la duración de abajo.
+    _guion(raiz, "v09", {"velocidad_voz": 1.0,
+                         "segmentos": [{"escena": ESCENA, "texto": "Mirá el sol."},
                                        {"escena": {**ESCENA, "tipo": "datos", "barras": []}, "texto": "x"}]})
 
     rutas = editar.escenas("v09", "argentina")

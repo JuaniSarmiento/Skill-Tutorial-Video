@@ -470,16 +470,84 @@ def _cola(voz_name: str) -> float:
     return TAIL
 
 
-def preparar(vid: str, voz_name: str) -> list[tuple[dict, float, list | None]]:
-    """Genera (o reusa) la voz de cada segmento y mide su slot: [(seg, slot, palabras)].
+# Velocidad de reproducción de la voz (no el `speed` de Fish: ver FISH_SPEED y
+# references/voces.md, cambiarlo ahí cambia la entonación). Juani la escucha mejor a 1.25x
+# (la probó en el reproductor: aceleración sin cambio de tono). La voz grabada "juani" queda
+# a 1.0 por default: es una toma propia, no un TTS pensado para sonar "de dictado".
+VELOCIDAD_VOZ_DEFAULT = 1.25
 
-    Las palabras se transcriben para los segmentos de escena (que las necesitan para
-    resolver sus cues) y también para cualquier segmento con "sfx" (R-3.2: un efecto
-    sobre una cue de texto en un tramo de pantalla se resuelve igual que en una escena).
+
+def velocidad_default(voz: str) -> float:
+    return 1.0 if voz == "juani" else VELOCIDAD_VOZ_DEFAULT
+
+
+def validar_velocidad_voz(v) -> float:
+    try:
+        v = float(v)
+    except (TypeError, ValueError):
+        raise ValueError(f"velocidad_voz tiene que ser un número mayor que 0 (vino {v!r})")
+    if v <= 0:
+        raise ValueError(f"velocidad_voz tiene que ser mayor que 0 (vino {v!r})")
+    return v
+
+
+def velocidad_de(g: dict, voz: str) -> float:
+    """Resuelve `velocidad_voz` del guion (arriba de todo) para `voz`, validando si está."""
+    if "velocidad_voz" in g:
+        return validar_velocidad_voz(g["velocidad_voz"])
+    return velocidad_default(voz)
+
+
+def acelerar_voz(wav_in: Path, wav_out: Path, velocidad: float) -> None:
+    """Acelera `wav_in` por `velocidad` con `atempo` (no cambia el tono) y lo deja en `wav_out`.
+
+    atempo estira el tiempo sin tocar el pitch; un resample simple (cambiar el sample rate
+    y listo) sube el tono junto con la velocidad. Con |velocidad - 1| < 0.001 se copia tal
+    cual: mismo criterio que `_factor_de_aceleracion` (ffmpeg 6.1.1 se cuelga con
+    `atempo=1.0000` exacto, y a esa distancia la aceleración es inaudible de cualquier forma).
     """
+    if abs(velocidad - 1.0) < 0.001:
+        wav_out.write_bytes(wav_in.read_bytes())
+        return
+    run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(wav_in),
+         "-af", f"atempo={velocidad:.4f}", "-ar", str(RATE), str(wav_out)])
+
+
+def acelerar_voz_cacheada(wav: Path, velocidad: float) -> Path:
+    """La voz de `wav` a `velocidad`, cacheada junto a ella.
+
+    El nombre lleva la velocidad (`NN-x1.25.wav`): cambiar `velocidad_voz` no reusa la
+    voz vieja porque apunta a OTRO archivo. Si la voz de origen cambió (mismo nombre,
+    texto nuevo: `voice_wav` la regenera) el sha256 en el sello lo nota y se re-acelera.
+    """
+    if abs(velocidad - 1.0) < 0.001:
+        return wav
+    out = wav.with_name(f"{wav.stem}-x{velocidad:g}{wav.suffix}")
+    firma = out.with_suffix(out.suffix + ".sha256")
+    actual = hashlib.sha256(wav.read_bytes()).hexdigest()
+    if out.exists() and firma.exists() and firma.read_text() == actual:
+        return out
+    acelerar_voz(wav, out, velocidad)
+    firma.write_text(actual)
+    return out
+
+
+def preparar(vid: str, voz_name: str) -> list[tuple[dict, float, list | None]]:
+    """Genera (o reusa) la voz de cada segmento, la acelera según `velocidad_voz` y mide
+    su slot sobre la voz YA acelerada: [(seg, slot, palabras)].
+
+    Las palabras se transcriben sobre la voz acelerada (no hay que escalar tiempos: la
+    transcripción ya sale en la línea de tiempo que el video va a usar) para los segmentos
+    de escena (que las necesitan para resolver sus cues) y para cualquier segmento con
+    "sfx" (R-3.2: un efecto sobre una cue de texto en un tramo de pantalla se resuelve
+    igual que en una escena).
+    """
+    g = load(vid)
+    velocidad = velocidad_de(g, voz_name)
     tramos = []
-    for i, seg in enumerate(load(vid)["segmentos"]):
+    for i, seg in enumerate(g["segmentos"]):
         wav = voice_wav(vid, voz_name, i, seg["texto"])
+        wav = acelerar_voz_cacheada(wav, velocidad)
         voice = duration(wav)
         slot = round(max(seg.get("min", 0), voice + LEAD + _cola(voz_name)), 2)
         necesita_palabras = es_escena(seg) or bool(seg.get("sfx"))

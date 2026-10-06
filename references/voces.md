@@ -3,6 +3,29 @@
 Las voces se definen en `assets/scripts/editar.py`. Cada voz tiene su carpeta de audios cacheados
 (`videos/vNN/<voz>/NN.wav` + `.txt`): solo se regenera un tramo si cambia su texto.
 
+## Velocidad de reproducción (`velocidad_voz`): atempo, no `speed`
+
+Juani escucha mejor la narración a **1,25x** (la midió en el reproductor: aceleración sin
+cambio de tono). Eso se resuelve con `"velocidad_voz"` arriba del guion — default **1.25** para
+toda voz TTS, **1.0** para `juani` — y **nunca** tocando `FISH_SPEED`: `speed` en Fish cambia la
+**entonación** de la voz (es un parámetro del modelo, no un time-stretch; ver la nota debajo de
+`FISH_SPEED` en `editar.py` y "`argentina` mide 116 Hz de expresividad a 0.80 y sólo 100 Hz a
+0.84" más abajo en este archivo), mientras que `editar.acelerar_voz` usa el filtro `atempo` de
+ffmpeg, que estira el tiempo de la onda sin mover su pitch. Dos parámetros, dos efectos
+distintos: `FISH_SPEED` decide CÓMO habla la voz (su ritmo natural, antes de grabar nada);
+`velocidad_voz` decide cuánto se acelera la grabación YA HECHA, después.
+
+La voz se genera como siempre (sin tocar `voice_wav`) y se acelera DESPUÉS, antes de medir el
+slot: así el video se ajusta a la voz acelerada, y `palabras.py` transcribe esa misma voz (los
+tiempos por palabra salen directo en la línea de tiempo acelerada, no hace falta escalar nada).
+Caché (`editar.acelerar_voz_cacheada`): la voz acelerada queda en `NN-x<velocidad>.wav`, junto a
+la cruda, con un sello (sha256 de la voz de origen). El nombre lleva la velocidad, así que
+cambiarla no reusa el archivo viejo; si la voz de origen cambió (texto nuevo con el mismo
+nombre) el sello lo nota y se re-acelera, en vez de servir una voz vieja acelerada.
+
+`velocidad_voz` inválida (≤ 0, o algo que no es un número) aborta nombrando `velocidad_voz` en
+el mensaje, antes de generar o acelerar nada.
+
 ## Proveedores probados (2026-09)
 
 | Voz (`editar.py`) | Proveedor | Costo | Calidad / notas |

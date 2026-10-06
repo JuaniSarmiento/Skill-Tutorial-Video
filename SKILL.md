@@ -93,6 +93,20 @@ metadata:
   de sfx (G1-G4 no se mueven).
   - **Guía del Director**: un sfx marca el dato clave o el remate de una idea, no cada frase.
     Dos o tres por video alcanzan; uno en cada oración cansa y deja de significar nada.
+- **Velocidad de la voz** (`editar.py imagen`/`voz`, `preparar()`): `"velocidad_voz"` arriba del
+  guion (número > 0) pisa el default; sin la clave, **1.25** para las voces TTS (`argentina`,
+  `joven`, `profe`, `fish`, `daniela`, `elevenlabs` — Juani la escucha mejor así: la probó en el
+  reproductor a 1.25x, aceleración sin cambio de tono) y **1.0** para la voz grabada `juani` (no
+  se mueve del default, así que G3 no cambia con el default solo). La voz se genera como
+  siempre y se acelera DESPUÉS, con `atempo` (`editar.acelerar_voz`), nunca con el `speed` de
+  Fish (`FISH_SPEED`): `speed` cambia la entonación, `atempo` sólo estira el tiempo (ver
+  `references/voces.md`). El slot se mide sobre la voz YA acelerada y `palabras.py` transcribe
+  esa misma voz, así los tiempos por palabra salen ya en la línea de tiempo acelerada sin
+  escalar nada. Caché: `editar.acelerar_voz_cacheada` guarda la voz acelerada junto a la cruda
+  como `NN-x<velocidad>.wav` con un sello (sha256 de la voz de origen) — cambiar la velocidad no
+  reusa el archivo viejo (el nombre cambia) y si la voz de origen cambió (texto nuevo) el sello
+  lo nota y se re-acelera. `velocidad_voz` inválida (≤ 0, algo que no es un número) aborta con
+  "velocidad_voz" en el mensaje, antes de generar nada.
 - **Fuente de datos del zoom** (`editar.py zonas`, `zonas.py`): `rec.py` no guarda dónde tipea
   ni dónde clickea (grabó con `-draw_mouse 0`), así que los momentos clave para el zoom
   automático (S7b) salen de **detectar cambios entre los cuadros del CRUDO** (decisión Q5 de
