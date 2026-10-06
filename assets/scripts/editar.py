@@ -67,15 +67,16 @@ FONT = _ruta_fuente("C:/Windows/Fonts/arial.ttf" if _ES_WINDOWS
 RATE = 22050
 LEAD = 0.3  # silencio antes de que arranque la voz en cada slot
 TAIL = 0.5  # margen después de la voz
-# N2 (QA 03/10/2026): el target de TP que se le pide a loudnorm en el camino CON música
-# (-c:a aac le agrega TP de más después, hasta ~0.7dB medido con música picuda): más
-# abajo que el -1.5 de R-2.3 para que el final MEDIDO (post-encode) siga cumpliéndolo.
-TP_OBJETIVO_CON_MUSICA = -2.0
 # QA 04/10/2026 (BLOCKING ronda 3): el TP que se le pide a loudnorm en SUS DOS pasadas (no
 # el objetivo final): deliberadamente laxo, así no es loudnorm el que frena la ganancia
 # antes de llegar al integrado (ver musica.normalizar_dos_pasadas). El TP real queda
-# garantizado por el limitador de TRUE PEAK aparte, apuntando a TP_OBJETIVO_CON_MUSICA.
+# garantizado por el limitador de TRUE PEAK aparte, apuntando a musica.tp_interno(destino).
 MARGEN_TP_LOUDNORM = -0.5
+# H1 (Hito 3, docs/explicador/HITO3.md): perfiles de loudness por destino, elegibles con
+# "destino" arriba del guion (ver README → El guion). Antes era TP_OBJETIVO_CON_MUSICA fijo
+# en -2.0 (= -1.5 - 0.5, el perfil "youtube", el default): ese cálculo ahora vive en
+# musica.tp_interno() y depende del perfil elegido (musica.PERFILES_LOUDNESS).
+DESTINOS_VALIDOS = tuple(musica.PERFILES_LOUDNESS)
 # -ar explícito en la salida con música: sin esto, el sample rate que loudnorm usa
 # internamente para sobremuestrear (al medir TP) se cuela a la salida (medido: 96000Hz).
 SR_SALIDA_CON_MUSICA = 48000
@@ -589,6 +590,17 @@ def _normalizar_musica(musica_g):
     return musica_g
 
 
+def _resolver_destino(g: dict) -> str:
+    """"destino" arriba del guion (H1, HITO3.md): "youtube" (default, el de antes de este
+    cambio) o "redes". Cualquier otro valor aborta ANTES de generar nada, nombrando los
+    destinos válidos (mismo estilo que _normalizar_musica: un valor inválido se detecta al
+    arrancar, no a mitad de render)."""
+    destino = g.get("destino", "youtube")
+    if destino not in DESTINOS_VALIDOS:
+        sys.exit(f"ABORTADO: 'destino' tiene que ser uno de {DESTINOS_VALIDOS}, no {destino!r}")
+    return destino
+
+
 def _resolver_sfx(vid: str, g: dict, slots: list[float], name: str,
                    work: Path) -> list[tuple[float, Path, float]]:
     """[(t_absoluto, archivo, ganancia_db)] de todos los "sfx" del guion (S3,
@@ -653,6 +665,10 @@ def voz(vid: str, name: str) -> None:
     work = ROOT / "videos" / vid
     slots = json.loads((work / f"slots-{name}.json").read_text())
     musica_g = _normalizar_musica(g.get("musica"))
+    # H1: "destino" inválido también aborta acá, antes de generar nada.
+    destino = _resolver_destino(g)
+    perfil = musica.PERFILES_LOUDNESS[destino]
+    tp_interno = musica.tp_interno(destino)
     # R-2.6: archivo de música faltante o ilegible aborta ACÁ, antes de generar nada
     # (ni la voz): "al arrancar", no a mitad de render.
     m_archivo = musica.resolver_archivo(ROOT, musica_g["archivo"]) if musica_g else None
@@ -698,9 +714,9 @@ def voz(vid: str, name: str) -> None:
              "-t", f"{duration(video):.6f}", str(acotada)])
         fuente = _mezclar_sfx(efectos_sfx, acotada, duration(video), work, name)
         normalizada = work / f"normalizada-{name}.wav"
-        musica.normalizar_dos_pasadas(fuente, normalizada, objetivo_i=-16.0,
+        musica.normalizar_dos_pasadas(fuente, normalizada, objetivo_i=perfil["i"],
                                        margen_tp=MARGEN_TP_LOUDNORM,
-                                       limite_tp_final=TP_OBJETIVO_CON_MUSICA,
+                                       limite_tp_final=tp_interno,
                                        sr=SR_SALIDA_CON_MUSICA)
         run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(video), "-i", str(normalizada),
              "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "aac", "-b:a", "160k",
@@ -710,14 +726,22 @@ def voz(vid: str, name: str) -> None:
         cruda = work / f"musica-cruda-{name}.wav"
         musica.preparar_pista(m_archivo, total, musica_g.get("fundido", 2.0), cruda)
         vts = musica.ventanas(slots, voces)
+        # H1 (HITO3.md): "voiceover carve" -baja la música SÓLO en las bandas de la voz
+        # mientras hay voz (musica.BANDAS_VOZ_HZ), antes del ducking de banda ancha. Con el
+        # carve haciendo buena parte del trabajo de "sacarse del medio", el ducking de
+        # banda ancha baja menos que antes (10 LU en vez de 18, Q3 original): antes el
+        # ducking solo tenía que abrirle lugar a la voz EN TODAS las frecuencias; ahora las
+        # bandas donde la voz realmente compite ya bajaron aparte.
+        carveada = work / f"musica-carve-{name}.wav"
+        musica.aplicar_carve_voz(cruda, vts, carveada)
         musica_out = work / f"musica-{name}.wav"
-        musica.construir_pista(wav_out, cruda, vts, musica_g.get("debajo_de_la_voz_lu", 18), musica_out)
+        musica.construir_pista(wav_out, carveada, vts, musica_g.get("debajo_de_la_voz_lu", 10), musica_out)
         # QA 04/10/2026 (BLOCKING ronda 3, R-2.3): loudnorm de UNA pasada no llega al
         # integrado cuando el TP restringe la ganancia (medido: I entre -17.1 y -20.2
         # según la música). Se mezcla primero sin loudnorm, y se normaliza con
         # musica.normalizar_dos_pasadas (dos pasadas + limitador de TRUE PEAK aparte),
-        # apuntando bien abajo del -1.5 de R-2.3 para que el final MEDIDO (post-encode
-        # AAC, que agrega TP de más) lo siga cumpliendo.
+        # apuntando bien abajo del TP real exigido para que el final MEDIDO (post-encode
+        # AAC, que agrega TP de más) lo siga cumpliendo (musica.tp_interno).
         mezcla = work / f"mezcla-{name}.wav"
         # "apad" sin límite genera silencio INDEFINIDAMENTE (QA 04/10/2026: sin el "-t" de
         # abajo, este wav intermedio crece sin fin hasta llenar el disco): acá se trunca
@@ -727,9 +751,9 @@ def voz(vid: str, name: str) -> None:
              "-map", "[aout]", "-t", f"{duration(video):.6f}", str(mezcla)])
         fuente = _mezclar_sfx(efectos_sfx, mezcla, duration(video), work, name)
         normalizada = work / f"normalizada-{name}.wav"
-        musica.normalizar_dos_pasadas(fuente, normalizada, objetivo_i=-16.0,
+        musica.normalizar_dos_pasadas(fuente, normalizada, objetivo_i=perfil["i"],
                                        margen_tp=MARGEN_TP_LOUDNORM,
-                                       limite_tp_final=TP_OBJETIVO_CON_MUSICA,
+                                       limite_tp_final=tp_interno,
                                        sr=SR_SALIDA_CON_MUSICA)
         run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(video), "-i", str(normalizada),
              "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "aac", "-b:a", "160k",

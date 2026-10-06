@@ -412,6 +412,70 @@ def test_voz_con_musica_el_wav_intermedio_de_mezcla_no_dura_mas_que_el_video(tut
     assert _duracion(mezcla, "a") <= _duracion(video, "v") + 0.5, _duracion(mezcla, "a")
 
 
+# --- H1 (HITO3.md): perfiles de loudness por destino ("youtube" default, "redes") -----
+
+def test_voz_con_destino_redes_el_final_da_14_lufs_y_tp_1_dbtp(tmp_path, monkeypatch):
+    monkeypatch.setattr(editar, "ROOT", tmp_path)
+    (tmp_path / "guion").mkdir()
+    work = tmp_path / "videos" / "v09"
+    (work / "juani").mkdir(parents=True)
+    slot = 8.0
+    _voz_habla(work / "juani" / "00.wav", 0.5)
+    _video(work / "video-juani.mp4", round(slot * 30))
+    (work / "slots-juani.json").write_text(json.dumps([slot]))
+    (tmp_path / "musica").mkdir()
+    archivo = tmp_path / "musica" / "fondo.wav"
+    _musica_normal(archivo, slot + 5, semilla=1)
+    (tmp_path / "guion" / "v09.json").write_text(json.dumps(
+        {"segmentos": [{"texto": "Tramo 0."}], "musica": {"archivo": "musica/fondo.wav"},
+         "destino": "redes"}, ensure_ascii=False))
+
+    editar.voz("v09", "juani")
+
+    i, tp = _i_tp_del_final(work)
+    assert -15.0 <= i <= -13.0, i
+    assert tp <= -1.0, tp
+
+
+def test_voz_con_destino_invalido_aborta_nombrando_los_destinos_validos(tutorial):
+    tmp_path, work = tutorial
+    (tmp_path / "guion" / "v09.json").write_text(json.dumps(
+        {"segmentos": [{"texto": f"Tramo {i}."} for i in range(len(SLOTS))], "destino": "tiktok"},
+        ensure_ascii=False))
+
+    with pytest.raises(SystemExit) as e:
+        editar.voz("v09", "juani")
+
+    assert "youtube" in str(e.value) and "redes" in str(e.value)
+    assert not (work / "final-juani.mp4").exists()
+
+
+def test_voz_sin_destino_sigue_dando_16_lufs_el_default_no_cambio(tmp_path, monkeypatch):
+    # G3-adyacente: sin "destino" en el guion, el perfil sigue siendo "youtube" (el de
+    # antes de H1). No usa tutorial/SLOTS porque _i_tp_del_final espera el escenario de
+    # _escenario_10_slots_de_6s (10 slots reales); acá alcanza con un escenario chico.
+    monkeypatch.setattr(editar, "ROOT", tmp_path)
+    (tmp_path / "guion").mkdir()
+    work = tmp_path / "videos" / "v09"
+    (work / "juani").mkdir(parents=True)
+    slot = 8.0
+    _voz_habla(work / "juani" / "00.wav", 0.5)
+    _video(work / "video-juani.mp4", round(slot * 30))
+    (work / "slots-juani.json").write_text(json.dumps([slot]))
+    (tmp_path / "musica").mkdir()
+    archivo = tmp_path / "musica" / "fondo.wav"
+    _musica_normal(archivo, slot + 5, semilla=1)
+    (tmp_path / "guion" / "v09.json").write_text(json.dumps(
+        {"segmentos": [{"texto": "Tramo 0."}], "musica": {"archivo": "musica/fondo.wav"}},
+        ensure_ascii=False))  # sin "destino"
+
+    editar.voz("v09", "juani")
+
+    i, tp = _i_tp_del_final(work)
+    assert -17.0 <= i <= -15.0, i
+    assert tp <= -1.5, tp
+
+
 def test_voz_con_musica_el_final_sale_a_48000hz(tmp_path, monkeypatch):
     # el bug observado: loudnorm sube la tasa internamente y, sin "-ar" explícito, el AAC
     # hereda esa tasa (medido: 96000 Hz) en vez de una tasa estándar de entrega.
