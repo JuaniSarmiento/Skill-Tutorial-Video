@@ -1,6 +1,9 @@
-"""R-5.8: cada regla numerada de la sección Director (SKILL.md) tiene su chequeo
-en `editar.py revisar` — se referencian con el mismo ID (D1, D2, ...) como
-comentario, igual que test_docs_comandos.py compara documentación con código.
+"""R-5.8: cada regla numerada de la sección Director (references/director.md) tiene
+su chequeo en `editar.py revisar` — se referencian con el mismo ID (D1, D2, ...)
+como comentario, igual que test_docs_comandos.py compara documentación con código.
+
+Desde H3 del Hito 3, SKILL.md es un router corto y la sección Director completa
+vive en `references/director.md` (ver la tabla de ruteo en SKILL.md).
 
 R-5.8 más fuerte: no alcanza con que el ID aparezca en un docstring o comentario
 (eso lo cumple cualquier mención de paso). Cada Dn tiene que estar en
@@ -17,7 +20,7 @@ import pytest
 import editar
 
 RAIZ = Path(__file__).resolve().parents[3]
-SKILL = RAIZ / "SKILL.md"
+SKILL = RAIZ / "references" / "director.md"
 EDITAR = RAIZ / "assets" / "scripts" / "editar.py"
 
 _RE_REGLA = re.compile(r"^- \*\*(D\d+)\*\*", re.MULTILINE)
@@ -29,7 +32,7 @@ def _seccion_director(texto: str) -> str:
 
 
 def test_la_seccion_director_existe_en_skill_md():
-    assert "## Director" in SKILL.read_text(), "SKILL.md no tiene una sección '## Director'"
+    assert "## Director" in SKILL.read_text(), "references/director.md no tiene una sección '## Director'"
 
 
 def test_la_seccion_director_declara_reglas_numeradas():
