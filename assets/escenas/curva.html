@@ -1,0 +1,98 @@
+<!doctype html>
+<!--
+Escena "curva": una curva que se dibuja (DrawSVG) con un contador que la acompaña
+(contador.js, H4) y puntos marcados con su valor (H5, HITO3.md).
+
+spec:
+  {"tipo": "curva",
+   "kicker": "...", "titulo": {"texto": "..."},                         (opcionales)
+   "puntos": [{"x": 0, "y": 1000, "etiqueta": "Año 0", "cue": "arranca"},
+              {"x": 30, "y": 17449, "etiqueta": "Año 30", "cue": "treinta años"}],
+   "prefijo": "US$ ", "sufijo": " %"}                                   (opcionales)
+
+El trazo avanza (DrawSVG, ease-out) desde la cue del primer punto hasta la del último; el
+número grande cuenta del valor del primer punto al del último en la misma ventana, igual
+que la escena `contador`. Cada punto entra (con su etiqueta y su valor) en SU propia cue:
+no espera a que el trazo lo alcance exactamente, así que una cue que no es proporcional a
+su posición en x hace que la etiqueta aparezca un poco antes o después del trazo real.
+-->
+<meta charset="utf-8">
+<link rel="stylesheet" href="base.css">
+<style>
+  svg { position: absolute; inset: 0; width: 1920px; height: 1080px; overflow: visible; }
+  .punto { position: absolute; width: 22px; height: 22px; margin: -11px; border-radius: 50%;
+           background: var(--acento); box-shadow: 0 0 0 5px var(--fondo); }
+  .etiqueta { position: absolute; transform: translate(-50%, 0); text-align: center; white-space: pre;
+              font-family: var(--fuente-mono); font-weight: 500; font-size: 26px; color: var(--tenue); line-height: 1.4; }
+  .cifra { position: absolute; right: 140px; text-align: right; white-space: nowrap; color: var(--acento);
+           font-family: var(--fuente-titulos); font-weight: 900; line-height: .85; letter-spacing: -.04em; }
+</style>
+<script src="vendor/gsap/gsap.min.js"></script>
+<script src="vendor/gsap/DrawSVGPlugin.min.js"></script>
+<script src="contador.js"></script>
+<script src="base.js"></script>
+<script>
+  gsap.registerPlugin(DrawSVGPlugin);
+  const { S, crear, cabecera, tiempo, BANDA } = E;
+  const NS = 'http://www.w3.org/2000/svg';
+  const CIFRA = 150;
+  const puntos = (S.puntos || []).map(p => ({ ...p, t0: tiempo(p, 0) }));
+  if (puntos.length < 2) throw new Error('la escena "curva" necesita al menos dos "puntos"');
+  const xs = puntos.map(p => p.x), ys = puntos.map(p => p.y);
+  const [xMin, xMax] = [Math.min(...xs), Math.max(...xs)];
+  const [yMin, yMax] = [Math.min(0, ...ys), Math.max(...ys)];
+  const AREA = { x0: 160, x1: 1460, y0: 320, y1: BANDA - 80 };
+  const sx = x => AREA.x0 + (x - xMin) / (xMax - xMin || 1) * (AREA.x1 - AREA.x0);
+  const sy = y => AREA.y1 - (y - yMin) / (yMax - yMin || 1) * (AREA.y1 - AREA.y0);
+
+  let dec = 0;
+  const hasta = puntos.at(-1).y;
+  while (dec < 6 && Math.abs(Number(hasta.toFixed(dec)) - hasta) > Math.abs(hasta) * 1e-12) dec++;
+  const escribir = v => Contador.formato(v, { dec, prefijo: S.prefijo, sufijo: S.sufijo });
+
+  E.lineaDeTiempo(() => {
+    const cab = cabecera(S.titulo, S.kicker);
+    AREA.y0 = cab.techo(AREA.y0, 240, BANDA);
+    const svg = document.createElementNS(NS, 'svg');
+    document.body.appendChild(svg);
+    const d = 'M ' + puntos.map(p => `${sx(p.x).toFixed(1)},${sy(p.y).toFixed(1)}`).join(' L ');
+    const trazo = document.createElementNS(NS, 'path');
+    trazo.setAttribute('d', d);
+    Object.entries({ fill: 'none', stroke: 'var(--acento)', 'stroke-width': 7, 'stroke-linecap': 'round' })
+      .forEach(([k, v]) => trazo.setAttribute(k, v));
+    svg.appendChild(trazo);
+    gsap.set(trazo, { drawSVG: '0%' });
+
+    const t0 = puntos[0].t0, tN = puntos.at(-1).t0, dur = Math.max(0.6, tN - t0);
+    const tl = gsap.timeline();
+    tl.fromTo(trazo, { drawSVG: '0%' }, { drawSVG: '100%', duration: dur, ease: 'power2.out' }, t0);
+
+    const cifra = crear('div', 'cifra', document.body, escribir(puntos[0].y));
+    cifra.style.fontSize = CIFRA + 'px';
+    cifra.style.top = (AREA.y0 - CIFRA * 0.95) + 'px';
+    cifra.dataset.caja = 'cifra';
+    cifra.dataset.t = t0;
+    tl.fromTo(cifra, { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.5, ease: 'power3.out' }, t0);
+    Contador.contar(tl, cifra, { desde: puntos[0].y, hasta, t0, dur, escribir });
+
+    for (const p of puntos) {
+      p.el = crear('div', 'punto');
+      p.el.style.left = sx(p.x) + 'px';
+      p.el.style.top = sy(p.y) + 'px';
+      p.el.dataset.caja = 'punto ' + (p.etiqueta || `${p.x},${p.y}`);
+      p.el.dataset.t = p.t0;
+      tl.fromTo(p.el, { opacity: 0 }, { opacity: 1, duration: 0.3, ease: 'power2.out' }, p.t0);
+      if (p.etiqueta) {
+        p.lbl = crear('div', 'etiqueta', document.body, `${p.etiqueta}\n${escribir(p.y)}`);
+        p.lbl.style.left = sx(p.x) + 'px';
+        p.lbl.style.top = (sy(p.y) + 22) + 'px';
+        p.lbl.dataset.caja = 'etiqueta ' + p.etiqueta;
+        p.lbl.dataset.t = p.t0;
+        tl.fromTo(p.lbl, { opacity: 0 }, { opacity: 1, duration: 0.3, ease: 'power2.out' }, p.t0);
+      }
+    }
+    cab.dibujar(0);
+    tl.eventCallback('onUpdate', () => cab.dibujar(tl.time()));
+    return tl;
+  });
+</script>
