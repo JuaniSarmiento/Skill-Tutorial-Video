@@ -24,7 +24,8 @@ uso:
                      [--sin-verificar]   (por defecto corre antes la puerta de verificar.py)
   escena.py contacto <spec.json>... -o hoja.png [--brand brand.json] [--palabras p.json]
 
-`tipo` es el nombre de una plantilla de assets/escenas/ (diagrama, presentacion, datos, imagen).
+`tipo` es el nombre de una plantilla de assets/escenas/ (diagrama, presentacion, datos, imagen,
+codigo, contador).
 Corre con: uv run --with playwright python escena.py ...   (usa el Chrome instalado)
 """
 import copy
@@ -250,6 +251,17 @@ def resolver_dibujos(spec: dict, base_dir=None) -> dict:
     return out
 
 
+def resolver_codigo(spec: dict, plantilla, base_dir=None) -> dict:
+    """H4: la escena codigo lee su archivo, lo tokeniza, arma el diff y ejecuta el programa
+    en Python (codigo.resolver), antes de abrir Chrome. Las rutas relativas, contra base_dir
+    (el directorio del spec.json) o, sin él, el cwd. Otra plantilla: el spec tal cual.
+    """
+    if Path(plantilla).stem != "codigo":
+        return spec
+    import codigo
+    return codigo.resolver(spec, Path(base_dir) if base_dir is not None else Path.cwd())
+
+
 def cargar_brand(ruta) -> dict:
     """Brand de la skill, con lo que declare el de la serie encima (un nivel de profundidad)."""
     brand = json.loads((ESCENAS / "brand.json").read_text())
@@ -445,7 +457,7 @@ def render(plantilla, spec: dict, salida, brand: dict | None = None, palabras=No
     página (textos que se pisan o se salen, contraste, elementos antes de su cue) y, si
     encuentra algo, levanta VerificacionError sin renderizar. False la saltea.
     """
-    spec = resolver_dibujos(resolver_spec(spec, palabras), base_dir)
+    spec = resolver_codigo(resolver_dibujos(resolver_spec(spec, palabras), base_dir), plantilla, base_dir)
     brand = brand or cargar_brand(None)
     salida = Path(salida)
     salida.parent.mkdir(parents=True, exist_ok=True)
@@ -544,8 +556,10 @@ def _cli(argv) -> None:
             spec = json.loads(Path(s).read_text())
             if not spec.get("tipo"):
                 ap.error(f"{s} no dice su 'tipo' (diagrama, presentacion, datos, imagen)")
+            base = Path(s).resolve().parent
             escenas.append((Path(s).stem + " " + spec["tipo"], ruta_plantilla(spec["tipo"]),
-                            resolver_dibujos(resolver_spec(spec, voz), Path(s).resolve().parent)))
+                            resolver_codigo(resolver_dibujos(resolver_spec(spec, voz), base),
+                                            ruta_plantilla(spec["tipo"]), base)))
         print(hoja_contacto(escenas, a.salida, brand, a.columnas))
 
 

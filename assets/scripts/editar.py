@@ -450,6 +450,12 @@ def spec_de_escena(seg: dict, slot: float, voz_palabras: list[dict]) -> dict:
         ruta = d.get("svg")
         if ruta and not Path(ruta).is_absolute():
             d["svg"] = str((ROOT / ruta).resolve())
+    # H4: los archivos de una escena codigo (el código, el del diff, el programa a ejecutar),
+    # igual que los svg: relativos a ROOT, absolutos desde acá
+    for d, clave in [(spec, "archivo"), *((p, k) for p in spec.get("pasos", []) for k in ("archivo", "ejecutar"))]:
+        ruta = d.get(clave)
+        if spec.get("tipo") == "codigo" and ruta and not Path(ruta).is_absolute():
+            d[clave] = str((ROOT / ruta).resolve())
     return spec
 
 
@@ -1050,8 +1056,10 @@ def _verificacion_de_escena(ruta: Path) -> list:
         spec = escena.resolver_dibujos(json.loads(ruta.read_text()), ROOT)
         if not spec.get("tipo"):
             raise ValueError("el spec no dice su 'tipo'")
+        plantilla = escena.ruta_plantilla(spec["tipo"])
+        spec = escena.resolver_codigo(spec, plantilla, ROOT)
         brand = escena.cargar_brand(brand_ruta if brand_ruta.exists() else None)
-        _VERIFICADAS[clave] = verificar.verificar_escena(escena.ruta_plantilla(spec["tipo"]), spec, brand, ruta.name)
+        _VERIFICADAS[clave] = verificar.verificar_escena(plantilla, spec, brand, ruta.name)
     return _VERIFICADAS[clave]
 
 

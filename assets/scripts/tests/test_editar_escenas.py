@@ -234,3 +234,23 @@ def test_escenas_sin_escenas_en_el_guion_no_imprime_un_comando_sin_specs(raiz, m
     out = _correr_cli(raiz, monkeypatch, capsys, [{"tipo": "titulo", "titulo": "Hola", "texto": "Hola."}])
     assert " contacto " not in out
     assert "no tiene escenas" in out
+
+
+# --- H4: la escena codigo nombra archivos reales, relativos a ROOT como los svg ---------
+
+def test_los_archivos_de_una_escena_codigo_se_resuelven_contra_root(raiz):
+    seg = {"escena": {"tipo": "codigo", "archivo": "codigo/a.py",
+                      "pasos": [{"modo": "diff", "archivo": "codigo/b.py", "cue": 0.5},
+                                {"modo": "salida", "ejecutar": "codigo/c.py", "cue": 1.0}]}, "texto": "x"}
+
+    spec = editar.spec_de_escena(seg, 3.0, VOZ)
+
+    d = (raiz / "codigo").resolve()
+    assert spec["archivo"] == str(d / "a.py")
+    assert [spec["pasos"][0]["archivo"], spec["pasos"][1]["ejecutar"]] == [str(d / "b.py"), str(d / "c.py")]
+    assert seg["escena"]["archivo"] == "codigo/a.py" and seg["escena"]["pasos"][0]["archivo"] == "codigo/b.py"
+
+
+def test_un_archivo_absoluto_de_una_escena_codigo_no_se_toca(raiz):
+    seg = {"escena": {"tipo": "codigo", "archivo": "/otra/a.py"}, "texto": "x"}
+    assert editar.spec_de_escena(seg, 3.0, VOZ)["archivo"] == "/otra/a.py"
