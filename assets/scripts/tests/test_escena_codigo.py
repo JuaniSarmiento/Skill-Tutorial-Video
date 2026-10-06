@@ -219,3 +219,30 @@ def test_el_mismo_t_da_el_mismo_cuadro_en_cualquier_orden(chrome, carpeta):
     assert en_orden == otra_vez == al_reves
     assert len(set(en_orden.values())) == len(ts)
 
+
+
+# --- composición: sin media pantalla vacía esperando a la terminal ----------------------
+
+def _caja(page, t, sel):
+    escena._cuadro(page, t)
+    return page.evaluate(f"() => document.querySelector('{sel}').getBoundingClientRect().toJSON()")
+
+
+def test_antes_de_la_salida_el_editor_va_centrado_y_cuando_entra_sube(chrome, carpeta):
+    # visto en el render de la U10: el editor quedaba arriba con media pantalla vacía 14 s
+    with _abrir(chrome, _salida(carpeta)) as (page, d):
+        solo = _caja(page, 1.9, ".panel")
+        con = _caja(page, d - 0.05, ".panel")
+        term = _caja(page, d - 0.05, ".term")
+    util = (72 + escena.ALTO_BASE * 0.83) / 2
+    assert abs((solo["top"] + solo["bottom"]) / 2 - util) <= 30, solo
+    assert con["top"] < solo["top"] and term["bottom"] <= escena.ALTO_BASE * 0.83
+
+
+def test_el_numero_que_cuenta_va_en_acento(chrome, carpeta):
+    with _abrir(chrome, _salida(carpeta, contar=True)) as (page, d):
+        escena._cuadro(page, d - 0.05)
+        colores = page.evaluate("""() => [...document.querySelectorAll('[data-caja^=salida] .cuenta')]
+            .map(e => [e.textContent, getComputedStyle(e).color])""")
+    assert [c[0] for c in colores] == ["448765", "897530", "2692590"]
+    assert {c[1] for c in colores} == {"rgb(242, 181, 68)"}

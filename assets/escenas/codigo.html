@@ -69,6 +69,7 @@ no entra a 28 px la escena falla nombrando la línea: mostrá menos (desde/hasta
   .term .cuerpo { padding: 14px 40px; }
   .linea { white-space: pre; overflow: hidden; color: var(--texto); }
   .prompt { color: var(--acento); }
+  .cuenta { color: var(--acento); font-weight: 600; }
 </style>
 <body>
 <script src="vendor/gsap/gsap.min.js"></script>
@@ -203,8 +204,10 @@ no entra a 28 px la escena falla nombrando la línea: mostrá menos (desde/hasta
     const tops = lado => { let y = PAD_V; return R.map(r => { const y0 = y; if (r.f[lado] != null) y += lh; return y0; }); };
     const top = { antes: tops('antes'), despues: tops('despues') };
 
+    // sin terminal todavía, el editor va centrado solo; cuando entra la terminal, sube
+    const solo = S_ ? techo + Math.max(0, (alto - altoEditor) / 2) - arriba : 0;
     const tEntrada = 0.15;
-    tl.fromTo(editor, { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.6, ease: 'power3.out' }, tEntrada);
+    tl.fromTo(editor, { opacity: 0, y: solo + 30 }, { opacity: 1, y: solo, duration: 0.6, ease: 'power3.out' }, tEntrada);
 
     // --- tipeo -----------------------------------------------------------------------------
     let T = null;
@@ -295,9 +298,16 @@ no entra a 28 px la escena falla nombrando la línea: mostrá menos (desde/hasta
         el.dataset.t = entra;
         // con "contar", el último número entero del renglón cuenta hasta su valor
         const m = salida.contar ? [...texto.matchAll(/\d+/g)].pop() : null;
-        return { el, texto, entra, m };
+        let cuenta = null;
+        if (m) {   // el número que cuenta, en su propio span (en acento); el resto del renglón, tal cual
+          el.append(texto.slice(0, m.index));
+          cuenta = crear('span', 'cuenta', el, m[0]);
+          el.append(texto.slice(m.index + m[0].length));
+        } else el.textContent = texto;
+        return { el, texto, entra, m, cuenta };
       });
-      tl.fromTo(term, { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.45, ease: 'power3.out' }, salida.t0);
+      tl.to(editor, { y: 0, duration: 0.5, ease: 'power3.inOut' }, salida.t0)
+        .fromTo(term, { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.45, ease: 'power3.out' }, salida.t0 + 0.2);
       Tm = { cmdTxt, orden, lineas, t0: salida.t0, k, CUENTA };
     }
 
@@ -342,16 +352,11 @@ no entra a 28 px la escena falla nombrando la línea: mostrá menos (desde/hasta
         Tm.cmdTxt.textContent = Tm.orden.slice(0, Math.round(c * Tm.orden.length));
         for (const l of Tm.lineas) {
           l.el.style.opacity = clamp((t - l.entra) / 0.12);
-          let texto = l.texto;
           if (l.m) {
             const p = ease3(clamp((t - l.entra) / (Tm.CUENTA * Tm.k)));
-            if (p < 1) {
-              // BigInt: una salida real puede pasar 2^53 (fib(100) = 354224848179261915075)
-              const v = BigInt(l.m[0]) * BigInt(Math.round(p * 1e6)) / 1000000n;
-              texto = l.texto.slice(0, l.m.index) + v + l.texto.slice(l.m.index + l.m[0].length);
-            }
+            // BigInt: una salida real puede pasar 2^53 (fib(100) = 354224848179261915075)
+            l.cuenta.textContent = p < 1 ? String(BigInt(l.m[0]) * BigInt(Math.round(p * 1e6)) / 1000000n) : l.m[0];
           }
-          l.el.textContent = texto;
         }
       }
     }
