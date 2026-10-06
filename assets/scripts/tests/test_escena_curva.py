@@ -79,6 +79,40 @@ def test_con_otros_puntos_el_contador_y_las_etiquetas_cambian(chrome):
     assert m["cifra"] == "55 %"
 
 
+# --- curva suave con "crecimiento" (H5 ronda 2, HITO3.md) ----------------------------
+
+CRECIMIENTO = {
+    "tipo": "curva", "titulo": {"texto": "US$ 1.000 a 30 años"},
+    "crecimiento": {"inicial": 1000, "tasa": 0.10, "periodos": 30},
+    "puntos": [{"x": 0, "y": 1000, "etiqueta": "Año 0", "cue": 0.4},
+               {"x": 10, "y": 2594, "etiqueta": "Año 10", "cue": 2.2},
+               {"x": 30, "y": 17449, "etiqueta": "Año 30", "cue": 4.2}],
+    "prefijo": "US$ ", "duracion": 6.0,
+}
+
+
+def _segmentos_trazo(page, t):
+    escena._cuadro(page, t)
+    d = page.evaluate("() => document.querySelector('svg path').getAttribute('d')")
+    return d.count(" L ")
+
+
+def test_con_crecimiento_el_trazo_tiene_muchos_segmentos_entre_puntos(chrome):
+    with _abrir(chrome, CRECIMIENTO) as (page, _):
+        segmentos_suaves = _segmentos_trazo(page, 0.1)
+    with _abrir(chrome, INTERES) as (page, _):   # sin "crecimiento": 3 puntos, 2 segmentos (dos rectas)
+        segmentos_rectos = _segmentos_trazo(page, 0.1)
+    assert segmentos_rectos == 2, segmentos_rectos
+    assert segmentos_suaves > 20, segmentos_suaves
+
+
+def test_con_crecimiento_se_siguen_marcando_solo_los_puntos_nombrados(chrome):
+    with _abrir(chrome, CRECIMIENTO) as (page, d):
+        m = _medir(page, d - 0.05)
+    assert len(m["puntos"]) == 3   # los 3 puntos de "puntos", no uno por segmento de la curva
+    assert m["cifra"] == "US$ 17.449"
+
+
 # --- determinismo, igual que el resto de las plantillas ------------------------------
 
 def _hash(page, t):
