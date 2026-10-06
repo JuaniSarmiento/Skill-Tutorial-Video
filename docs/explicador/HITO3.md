@@ -81,6 +81,12 @@ Se suman al plan:
 Exploración aparte (sin compromiso): captura con CDP `beginFrame` en vez de screenshot, por si
 elimina el relayout forzado que hoy hace determinista el render.
 
+## Alcance decidido por Juani (06/10)
+En este hito: H0–H4 (ya en curso), **H3, H5, H6, H7, H8** y el video de control H9. Quedan para
+más adelante: H10–H14 (vertical, subtítulos cinéticos, utilería con trayectorias, componentes de
+interfaz, ilustraciones generadas). Proceso desde el 06/10: Sonnet por defecto y **un agente a la
+vez** (se llegó al límite de uso con dos agentes Opus en paralelo).
+
 ## Orden
 1. H0 + H1 (en paralelo: no se tocan).
 2. H2 + H3.
