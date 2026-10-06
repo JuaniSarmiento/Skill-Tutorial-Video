@@ -1,9 +1,20 @@
-"""Música de fondo con ducking bajo la voz (S2 del Hito 2).
+"""Música de fondo con ducking bajo la voz (S2 del Hito 2) + "voiceover carve" y perfiles
+de loudness por destino (H1, Hito 3, docs/explicador/HITO3.md).
 
 La música la pone Juani en TUT_ROOT/musica/ (la skill no la incluye, ver
-docs/explicador/HITO2.md, Q1). Se atenúa para quedar por debajo de la voz:
-el default es 18 LU en los tramos con voz y 10 LU en los silencios (Q3). La
-transición entre niveles es una rampa, no un escalón, para no "bombear".
+docs/explicador/HITO2.md, Q1). Se atenúa para quedar por debajo de la voz: el default
+(elegido por editar.py) es 10 LU en los tramos con voz y 10 LU en los silencios (Q3; antes
+del carve era 18 LU en voz -ver H1 más abajo-). La transición entre niveles es una rampa,
+no un escalón, para no "bombear".
+
+H1: ANTES de ese ducking de banda ancha, `aplicar_carve_voz` baja la música SÓLO en las
+bandas de la voz (`BANDAS_VOZ_HZ`, EQ peaking fijo -idea robada de HyperFrames,
+heygen-com/hyperframes, Apache 2.0, packages/core/src/audioCarve.ts, bandas fijas en vez de
+su análisis FFT por voz) mientras hay voz, y vuelve a sonar entera en los silencios, sin
+tocar los graves. Con ese carve haciendo buena parte del trabajo de "sacarse del medio", el
+ducking de banda ancha puede bajar menos (10 LU en vez de los 18 originales) y la mezcla
+sigue separando la voz de la música. `PERFILES_LOUDNESS` (youtube/redes) elige a qué
+integrado y TP normaliza el final, por `"destino"` arriba del guion.
 """
 import array
 import json
@@ -25,6 +36,42 @@ SR_ENVOLVENTE = 1000  # Hz de la envolvente de ganancia (B1, QA): de sobra para 
 ATTACK_S = 0.15
 RELEASE_S = 0.6
 UMBRAL_HUECO_S = 0.8
+
+# H1 (Hito 3, docs/explicador/HITO3.md): "voiceover carve" -idea y bloque robados de
+# HyperFrames (heygen-com/hyperframes, Apache 2.0, commit b9e511a,
+# packages/core/src/audioCarve.ts; NO se usa como dependencia, se reimplementa en Python +
+# ffmpeg, aviso y atribución acá). Ahí el carve mide el espectro de CADA voz con una FFT
+# propia y elige qué bandas dipear; acá se usa el conjunto FIJO que su propio SKILL.md
+# documenta como salida a fuerza 0.8 (6 bandas, 250-2500 Hz, -7dB salvo 1.6kHz en -15dB): la
+# voz humana ocupa casi siempre esas bandas, y medir el espectro de cada voz agrega una FFT
+# por render para casi nunca cambiar qué banda gana. Simplificación deliberada del time-box
+# de esta rebanada (~2h); si una voz atípica necesitara otro perfil, queda para abrir boca.
+BANDAS_VOZ_HZ: list[tuple[float, float]] = [
+    (250, -7.0), (400, -7.0), (630, -7.0), (1000, -7.0), (1600, -15.0), (2500, -7.0),
+]
+Q_CARVE = 2.06  # HyperFrames: q = 1.1 + strength*1.2; a fuerza 0.8 (su default alto) da 2.06
+
+# H1: perfiles de loudness por destino, elegibles desde "destino" arriba del guion (ver
+# editar.py). "youtube" es el default y es EL MISMO comportamiento de antes de este cambio
+# (-16 LUFS / TP <= -1.5 dBTP, R-2.3): no regresa nada ya cumplido (G3).
+PERFILES_LOUDNESS = {
+    "youtube": {"i": -16.0, "tp": -1.5},
+    "redes": {"i": -14.0, "tp": -1.0},
+}
+# N2 (QA 03/10/2026): el AAC del final le agrega TP de más (hasta ~0.7dB medido con música
+# picuda): el limitador interno apunta más abajo que el TP real exigido por el perfil, para
+# que el final MEDIDO (post-encode) siga cumpliéndolo. Antes era TP_OBJETIVO_CON_MUSICA fijo
+# en -2.0 (= -1.5 - 0.5, el perfil "youtube"); ahora es el mismo margen aplicado al perfil
+# elegido.
+MARGEN_AAC_DB = 0.5
+
+
+def tp_interno(destino: str) -> float:
+    """El TP que se le pide al LIMITADOR final (no a loudnorm) para el perfil `destino`:
+    `MARGEN_AAC_DB` más estricto que el TP real exigido, con margen para lo que agrega el
+    AAC del mux final."""
+    return PERFILES_LOUDNESS[destino]["tp"] - MARGEN_AAC_DB
+
 
 def _run(cmd: list[str]) -> subprocess.CompletedProcess:
     """`subprocess.run(cmd, capture_output=True, text=True)`, pero pasando por el vigía
@@ -350,6 +397,82 @@ def aplicar_ducking(pista: Path, vts: list[tuple[float, float, str]],
         # p.ej. "Missing ')' or too many args"), no los últimos 1000 caracteres: con un
         # filtergraph grande, la causa queda lejos del final.
         raise RuntimeError(f"falló aplicando el ducking: {res.stderr[:2000]}")
+
+
+def _puntos_presencia(vts: list[tuple[float, float, str]], ramp_in: float,
+                       ramp_out: float) -> list[tuple[float, float]]:
+    """[(t, nivel_db)] de cuánto EQ "húmedo" corresponde en cada instante: 0dB (a fondo) en
+    las ventanas "voz", MUTE_DB (~0 tras 10**(db/20)) en "silencio"/"mute". Reusa
+    `_puntos_envolvente` (la misma máquina de rampas que el ducking de banda ancha).
+
+    `ramp_in`/`ramp_out` entran INVERTIDOS respecto de `ramp`/`ramp_release` de
+    `_puntos_envolvente`: ahí "bajando" (atenuar la música) usa `ramp` y "subiendo"
+    (liberar) usa `ramp_release`. Acá "entrar a la voz" ES una SUBIDA del valor de
+    presencia (MUTE_DB -> 0dB), así que para que entre en `ramp_in` y salga en `ramp_out`
+    hay que pasarle a `_puntos_envolvente` `ramp=ramp_out, ramp_release=ramp_in` (swap).
+    """
+    ganancias = [0.0 if nivel == "voz" else float(MUTE_DB) for _, _, nivel in vts]
+    return _puntos_envolvente(vts, ganancias, ramp=ramp_out, ramp_release=ramp_in)
+
+
+def _muestras_presencia(vts: list[tuple[float, float, str]], ramp_in: float, ramp_out: float,
+                         sr: int) -> "array.array[int]":
+    """Muestras s16 (0..32767) de la curva de presencia de `_puntos_presencia`, a `sr` Hz."""
+    puntos = _puntos_presencia(vts, ramp_in, ramp_out)
+    muestras, _escala = _muestras_envolvente(puntos, sr)
+    return muestras
+
+
+def aplicar_carve_voz(pista: Path, vts: list[tuple[float, float, str]], out: Path,
+                       ramp: float = ATTACK_S, ramp_release: float = RELEASE_S,
+                       bandas: list[tuple[float, float]] = BANDAS_VOZ_HZ,
+                       q: float = Q_CARVE) -> None:
+    """"Voiceover carve" (H1, HITO3.md): baja `pista` SÓLO en las bandas de la voz
+    (`bandas`, EQ peaking) mientras hay voz, con la misma máquina de ataque/liberación que
+    `aplicar_ducking` (entra en `ramp` segundos, sale en `ramp_release`); en los silencios
+    vuelve a sonar entera, sin tocar nada fuera de esas bandas (los graves quedan intactos).
+
+    Crossfade LINEAL (no en dB) entre `pista` tal cual y la misma `pista` con el EQ fijo de
+    `bandas` aplicado: interpolar las dos ramas en dB por separado (como hace
+    `aplicar_ducking` con UNA sola señal) deja un pozo de volumen a mitad de camino -ahí las
+    dos ramas caen cerca de su propio piso en dB A LA VEZ (ej. -45dB cada una en el punto
+    medio de una rampa 0dB<->-90dB), un hueco que no existe en la señal real-. Por eso la
+    rama "seca" es el COMPLEMENTO LINEAL (32767 - húmeda) de la curva de presencia, nunca
+    su propia pasada por dB.
+
+    B1 (QA 03/10/2026, aplicar_ducking): misma técnica -la envolvente es una SEÑAL (un wav
+    de muestras), no una expresión de ffmpeg-, así la profundidad del filtergraph no crece
+    con la cantidad de segmentos.
+    """
+    humeda = _muestras_presencia(vts, ramp, ramp_release, SR_ENVOLVENTE)
+    seca = array.array("h", (32767 - max(min(v, 32767), 0) for v in humeda))
+    env_humeda = out.with_name(f"{out.stem}.carve-humeda.wav")
+    env_seca = out.with_name(f"{out.stem}.carve-seca.wav")
+    for envelope, muestras in ((env_humeda, humeda), (env_seca, seca)):
+        with wave.open(str(envelope), "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(SR_ENVOLVENTE)
+            w.writeframes(muestras.tobytes())
+    try:
+        sr, canales = _formato(pista)
+        pan = f",pan={canales}c" + "".join(f"|c{c}=c0" for c in range(canales)) if canales != 1 else ""
+        eq = ",".join(f"equalizer=f={f}:t=q:w={q}:g={g}" for f, g in bandas)
+        filtro = (
+            f"[0:a]{eq}[eqd];"
+            f"[1:a]aresample={sr},asetnsamples=n=64{pan}[hum];"
+            f"[2:a]aresample={sr},asetnsamples=n=64{pan}[sec];"
+            f"[0:a][sec]amultiply[seco];"
+            f"[eqd][hum]amultiply[humedo];"
+            f"[seco][humedo]amix=inputs=2:duration=first:normalize=0[out]"
+        )
+        res = _run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(pista), "-i", str(env_humeda),
+                   "-i", str(env_seca), "-filter_complex", filtro, "-map", "[out]", str(out)])
+    finally:
+        env_humeda.unlink(missing_ok=True)
+        env_seca.unlink(missing_ok=True)
+    if res.returncode != 0:
+        raise RuntimeError(f"falló aplicando el carve de voz: {res.stderr[:2000]}")
 
 
 CROSSFADE_BUCLE = 0.1  # segundos de crossfade en cada costura del bucle (N6, QA 03/10/2026)

@@ -737,6 +737,8 @@ def test_musica_no_llama_subprocess_run_directo_todo_pasa_por_el_vigia_de_editar
 
     musica.construir_pista(voz, cruda, vts, debajo_de_la_voz_lu=18, out=out)
     musica.preparar_pista(voz, total=1.5, fundido=0.5, out=tmp_path / "pista.wav")
+    # H1 (HITO3.md): aplicar_carve_voz también tiene que pasar todo su ffmpeg por el vigía.
+    musica.aplicar_carve_voz(cruda, vts, tmp_path / "carve.wav")
 
 
 def test_normalizar_dos_pasadas_deja_la_salida_a_la_tasa_pedida(tmp_path):
