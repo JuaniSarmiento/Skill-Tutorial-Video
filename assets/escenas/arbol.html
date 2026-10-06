@@ -1,0 +1,97 @@
+<!doctype html>
+<!--
+Escena "arbol": el árbol de llamadas de una función recursiva que CRECE llamada por
+llamada, con el trabajo repetido resaltado en el acento (H5, HITO3.md).
+
+Los nodos salen de una traza REAL (recursion.py ejecuta la función con
+presentaciones/scripts/diagramas.trazar): el árbol entero (posiciones, profundidad,
+quién repite) se conoce de antemano, pero cada nodo sólo se ve a partir de SU cue.
+
+spec (lo que arma recursion.resolver; ver references/escenas.md):
+  {"tipo": "arbol", "archivo": "codigo/fibonacci.py", "llamada": "fibonacci(5)",
+   "formato": "fib({n})",                                        (opcional)
+   "kicker": "...", "titulo": {"texto": "..."},                  (opcionales)
+   "pasos": [{"cue": "primera llamada"}, ...]}                   (uno por LLAMADA; el
+   árbol nunca se achica, así que no hay paso por retorno)
+
+El árbol no se achica: un nodo que entró se queda. "repetido" (mismos argumentos que
+una llamada anterior) entra directo en el acento, sin paso extra: es el trabajo que se
+recalcula, visible apenas aparece.
+-->
+<meta charset="utf-8">
+<link rel="stylesheet" href="base.css">
+<style>
+  svg { position: absolute; inset: 0; width: 1920px; height: 1080px; overflow: visible; }
+  .nodo {
+    position: absolute; display: flex; align-items: center; justify-content: center;
+    border-radius: 14px; background: var(--superficie); border: 3px solid var(--borde);
+    box-shadow: 0 16px 36px -20px rgba(0, 0, 0, .7);
+  }
+  .nodo .txt { font-family: var(--fuente-mono); font-weight: 600; white-space: pre; }
+</style>
+<script src="vendor/gsap/gsap.min.js"></script>
+<script src="base.js"></script>
+<script>
+  const { S, crear, cabecera, medir, tiempo, resorte, aparecer, BANDA } = E;
+  const NS = 'http://www.w3.org/2000/svg';
+  const nodos = (S.nodos || []).map(n => ({ ...n, t0: tiempo(n, 0) }));
+  if (!nodos.length) throw new Error('la escena "arbol" necesita "nodos" (los arma recursion.resolver)');
+  const porId = Object.fromEntries(nodos.map(n => [n.id, n]));
+  const hojas = nodos[0].hojas, filas = nodos[0].profundidad_total;
+  const AREA = { x0: 160, x1: 1760, y0: 300, y1: BANDA };
+  const TOPE = 30, PISO = 14;
+  let dibujarCab;
+
+  function layout(cab) {
+    AREA.y0 = cab.techo(AREA.y0, (AREA.y1 - AREA.y0) / filas, AREA.y1);
+    const colW = (AREA.x1 - AREA.x0) / hojas, rowH = (AREA.y1 - AREA.y0) / filas;
+    const w = Math.min(190, colW * 0.84), h = Math.min(96, rowH * 0.62);
+    for (const n of nodos) {
+      n.cx = AREA.x0 + (n.x + 0.5) * colW;
+      n.cy = AREA.y0 + n.profundidad * rowH + rowH / 2;
+      n.w = w;
+      n.h = h;
+    }
+    for (let px = TOPE; px >= PISO; px -= 2) {
+      if (nodos.every(n => medir(n.texto, px, 600, '--fuente-mono') <= w - 28)) return px;
+    }
+    const largo = nodos.reduce((a, n) => medir(n.texto, PISO, 600, '--fuente-mono') > medir(a.texto, PISO, 600, '--fuente-mono') ? n : a);
+    throw new Error(`el árbol no entra legible: "${largo.texto}" no cabe en un nodo de ${Math.round(w)}px ` +
+                    `ni a ${PISO}px (${nodos.length} llamadas, ${hojas} hojas): usá una llamada más chica`);
+  }
+
+  E.contrato(nodos.map(n => n.t0), () => {
+    const cab = cabecera(S.titulo, S.kicker);
+    dibujarCab = cab.dibujar;
+    const px = layout(cab);
+    const svg = document.createElementNS(NS, 'svg');
+    document.body.appendChild(svg);
+    for (const n of nodos) {
+      if (n.padre != null) {
+        n.linea = document.createElementNS(NS, 'line');
+        const p = porId[n.padre];
+        Object.entries({ x1: p.cx, y1: p.cy + p.h / 2, x2: n.cx, y2: n.cy - n.h / 2,
+                        stroke: 'var(--borde)', 'stroke-width': 3 })
+          .forEach(([k, v]) => n.linea.setAttribute(k, v));
+        svg.appendChild(n.linea);
+      }
+      n.el = crear('div', 'nodo');
+      n.el.dataset.caja = `nodo ${n.id}`;
+      n.el.dataset.t = n.t0;
+      Object.assign(n.el.style, { width: n.w + 'px', height: n.h + 'px',
+                                 left: (n.cx - n.w / 2) + 'px', top: (n.cy - n.h / 2) + 'px' });
+      crear('div', 'txt', n.el, n.texto).style.fontSize = px + 'px';
+    }
+  }, t => {
+    dibujarCab(t);
+    for (const n of nodos) {
+      const v = resorte(t - n.t0);
+      const op = aparecer(t, n.t0);
+      n.el.style.opacity = op;
+      n.el.style.top = (n.cy - n.h / 2 + (1 - v) * (E.M.subida ?? 28)).toFixed(2) + 'px';
+      n.el.style.borderColor = n.repetido ? 'var(--acento)' : 'var(--borde)';
+      n.el.querySelector('.txt').style.color = n.repetido ? 'var(--acento)' : 'var(--texto)';
+      if (n.linea) n.linea.style.opacity = op;
+    }
+  });
+</script>
