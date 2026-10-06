@@ -86,3 +86,49 @@ def test_los_renglones_vacios_del_final_se_conservan():
     renglones = ["x = 1", "", ""]
     filas = codigo.tokenizar(renglones, "a.py")
     assert [_texto(f) for f in filas] == renglones
+
+
+# --- diff por líneas -------------------------------------------------------------------
+
+def test_el_diff_marca_las_que_se_van_las_que_entran_y_las_que_quedan():
+    antes = ["def f(n):", "    return g(n)", "fin"]
+    despues = ["def f(n):", "    if n in memo:", "        return memo[n]", "    return g(n)"]
+    assert codigo.diff_lineas(antes, despues) == [
+        ("=", 0, 0), ("+", None, 1), ("+", None, 2), ("=", 1, 3), ("-", 2, None)]
+
+
+def test_el_diff_de_dos_iguales_no_cambia_nada():
+    assert codigo.diff_lineas(["a", "b"], ["a", "b"]) == [("=", 0, 0), ("=", 1, 1)]
+
+
+def test_el_diff_contra_vacio_saca_todo_y_desde_vacio_agrega_todo():
+    assert codigo.diff_lineas(["a", "b"], []) == [("-", 0, None), ("-", 1, None)]
+    assert codigo.diff_lineas([], ["a"]) == [("+", None, 0)]
+
+
+def test_un_renglon_cambiado_se_va_antes_de_que_entre_su_reemplazo():
+    assert codigo.diff_lineas(["x = 1", "y"], ["x = 2", "y"]) == [("-", 0, None), ("+", None, 0), ("=", 1, 1)]
+
+
+# --- la salida real --------------------------------------------------------------------
+
+def test_la_salida_es_la_de_ejecutar_el_programa_de_verdad(tmp_path):
+    p = tmp_path / "p.py"
+    p.write_text("for n in [5, 10]:\n    print(f'{n} -> {n * n}')\n")
+    assert codigo.ejecutar(p) == {"comando": "$ python3 p.py", "lineas": ["5 -> 25", "10 -> 100"]}
+
+
+def test_corre_desde_una_carpeta_neutra_con_sus_vecinos_y_sin_rutas_personales(tmp_path):
+    (tmp_path / "vecino.py").write_text("VALOR = 7\n")
+    p = tmp_path / "p.py"
+    p.write_text("import os, vecino\nprint(vecino.VALOR)\nprint(os.getcwd())\nprint(__file__)\n")
+    lineas = codigo.ejecutar(p)["lineas"]
+    assert lineas[0] == "7"
+    assert str(tmp_path) not in "\n".join(lineas) and "/tmp" not in "\n".join(lineas)
+
+
+def test_un_programa_que_no_termina_falla_en_vez_de_colgar(tmp_path):
+    p = tmp_path / "p.py"
+    p.write_text("while True:\n    pass\n")
+    with pytest.raises(ValueError, match="p.py"):
+        codigo.ejecutar(p, timeout=1)

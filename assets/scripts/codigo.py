@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
 """Escena `codigo` (H4, HITO3.md): lo que se prepara en Python antes de abrir Chrome."""
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
 from pathlib import Path
 
 
@@ -69,3 +74,63 @@ def tokenizar(renglones: list[str], nombre: str | None) -> list[list[list[str]]]
                 fila.append([clase, pedazo])
     filas.append(fila)
     return filas[:len(renglones)]
+
+
+def diff_lineas(antes: list[str], despues: list[str]) -> list[tuple]:
+    """Diff por líneas con la subsecuencia común más larga (LCS).
+
+    [("=", i, j) | ("-", i, None) | ("+", None, j)] en orden de lectura; en un renglón
+    cambiado, el viejo se va antes de que entre el nuevo. Idea del bloque `code-diff` de
+    HyperFrames (Apache 2.0); el código es propio.
+    """
+    n, m = len(antes), len(despues)
+    # largo[i][j] = LCS de antes[i:] y despues[j:]
+    largo = [[0] * (m + 1) for _ in range(n + 1)]
+    for i in range(n - 1, -1, -1):
+        for j in range(m - 1, -1, -1):
+            largo[i][j] = (largo[i + 1][j + 1] + 1 if antes[i] == despues[j]
+                           else max(largo[i + 1][j], largo[i][j + 1]))
+    out, i, j = [], 0, 0
+    while i < n or j < m:
+        if i < n and j < m and antes[i] == despues[j]:
+            out.append(("=", i, j))
+            i, j = i + 1, j + 1
+        elif i < n and (j == m or largo[i + 1][j] >= largo[i][j + 1]):
+            out.append(("-", i, None))
+            i += 1
+        else:
+            out.append(("+", None, j))
+            j += 1
+    return out
+
+
+NEUTRA = "codigo"   # la carpeta que se ve si el programa imprime su ruta
+
+
+def ejecutar(ruta, timeout: int = 60) -> dict:
+    """{"comando": "$ python3 x.py", "lineas": [...]}: la salida REAL del programa.
+
+    Como presentaciones/scripts/ejecutar_codigo.py: copia la carpeta del archivo a una
+    carpeta temporal neutra (los import y archivos vecinos siguen andando), corre python3
+    desde ahí, junta stdout y stderr (un traceback también es salida real) y saca las
+    rutas de la carpeta temporal y del home. Un programa que no termina falla.
+    """
+    ruta = Path(ruta).resolve()
+    if not ruta.is_file():
+        raise ValueError(f"no existe el programa a ejecutar {str(ruta)!r}")
+    python = shutil.which("python3") or sys.executable
+    with tempfile.TemporaryDirectory(prefix="tut-codigo-") as tmp:
+        dest = Path(tmp) / NEUTRA
+        shutil.copytree(ruta.parent, dest, ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".venv", "venv"))
+        env = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONDONTWRITEBYTECODE="1")
+        try:
+            p = subprocess.run([python, ruta.name], cwd=dest, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                               stderr=subprocess.STDOUT, text=True, timeout=timeout, env=env)
+        except subprocess.TimeoutExpired as e:
+            raise ValueError(f"{ruta.name} no terminó en {timeout} s: la salida de la escena tiene que ser "
+                             "la de un programa que termina") from e
+        texto = p.stdout
+        for base in sorted({str(dest), str(dest.resolve()), tmp, str(Path(tmp).resolve())}, key=len, reverse=True):
+            texto = texto.replace(base + os.sep, "").replace(base, NEUTRA)
+        texto = texto.replace(str(Path.home()), "~")
+    return {"comando": f"$ python3 {ruta.name}", "lineas": texto.rstrip("\n").splitlines()}
