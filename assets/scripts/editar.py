@@ -1011,6 +1011,37 @@ def _hallazgos_roles(segmentos: list[dict]) -> list[str]:
     return hallazgos
 
 
+# D5/D6 (H2, HITO3.md): la puerta de verificar.py sobre el spec resuelto de cada escena.
+# Una sola pasada de Chrome por spec (y por brand): D5 y D6 leen la misma verificación.
+_VERIFICADAS: dict[tuple, list] = {}
+
+
+def _verificacion_de_escena(ruta: Path) -> list:
+    import escena
+    import verificar
+    brand_ruta = ROOT / "brand.json"
+    clave = (str(ruta), ruta.stat().st_mtime_ns,
+             brand_ruta.stat().st_mtime_ns if brand_ruta.exists() else None, id(verificar.verificar_escena))
+    if clave not in _VERIFICADAS:
+        spec = escena.resolver_dibujos(json.loads(ruta.read_text()), ROOT)
+        if not spec.get("tipo"):
+            raise ValueError("el spec no dice su 'tipo'")
+        brand = escena.cargar_brand(brand_ruta if brand_ruta.exists() else None)
+        _VERIFICADAS[clave] = verificar.verificar_escena(escena.ruta_plantilla(spec["tipo"]), spec, brand, ruta.name)
+    return _VERIFICADAS[clave]
+
+
+def _contraste_escena(ruta: Path) -> list[str]:
+    """D5: textos con contraste menor a 4,5:1 (3:1 si son grandes) contra su fondo."""
+    return [f"contraste: {h.texto}" for h in _verificacion_de_escena(ruta) if h.tipo == "contraste"]
+
+
+def _desborde_escena(ruta: Path) -> list[str]:
+    """D6: textos visibles que se pisan, o que se salen del cuadro útil (invaden la banda
+    de subtítulos) o de su caja."""
+    return [f"desborde: {h.texto}" for h in _verificacion_de_escena(ruta) if h.tipo in ("solape", "desborde")]
+
+
 # R-5.8: cada regla Dn de la sección "Director" (SKILL.md) tiene acá su chequeo de
 # verdad. `revisar()` llama a cada uno A TRAVÉS de este registro (no por su nombre
 # de función directamente): test_docs_director.py lo comprueba reemplazando cada
@@ -1020,6 +1051,8 @@ CHEQUEOS = {
     "D2": _huecos_escena,
     "D3": _silencios,
     "D4": _hallazgos_roles,
+    "D5": _contraste_escena,
+    "D6": _desborde_escena,
 }
 
 
@@ -1081,6 +1114,13 @@ def revisar(vid: str, voz_name: str = "argentina", n: float = N_CAMBIO_VISUAL) -
                     continue
                 for desde, hasta in huecos:
                     hallazgos.append(f"{ruta.name}: {desde:.1f}s–{hasta:.1f}s sin elemento nuevo (> {n:.0f}s)")
+                # D5/D6: legibilidad, con la misma puerta que corre antes del render. Si no
+                # puede correr (Chrome, un spec roto), es "no corrió" con la causa.
+                try:
+                    for clave in ("D5", "D6"):
+                        hallazgos.extend(CHEQUEOS[clave](ruta))
+                except Exception as e:  # noqa: BLE001 — cualquier causa se informa, no se traga
+                    no_corrio.append(f"legibilidad en escenas: no corrió para {ruta.name} ({e})")
             # B5-bis: cada problema (spec faltante, JSON inválido, de otra voz,
             # desactualizado) se informa, no se saltea en silencio.
             for problema in problemas:

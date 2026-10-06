@@ -142,7 +142,7 @@ pueden mezclar con segmentos de pantalla en el mismo guion. Ejemplo completo, si
 
 | `tipo` | Qué muestra | Elementos con `cue` |
 |---|---|---|
-| `presentacion` | título cinético + puntos (sin puntos: portada con `subtitulo`) | `puntos[]`, `subtitulo` |
+| `presentacion` | título cinético + puntos (sin puntos: portada con `subtitulo`; con `numero`: el dato gigante) | `puntos[]`, `subtitulo`, `numero`, `contra` |
 | `diagrama` | nodos en fila y flechas que se dibujan | `nodos[]` (`id`, `texto`, `detalle`), `flechas[]` (`de`, `a`, `texto`) |
 | `datos` | barras que crecen hasta su valor, con el número contando | `barras[]` (`etiqueta`, `valor`, `destacar`), `prefijo`, `nota` |
 | `imagen` | metáforas dibujadas (SVG local), una fila, cada una con su rótulo | `dibujos[]` (`id`, `svg`, posición `x`/`y`? opcional), `rotulos[]` (`texto`, `de`) |
@@ -172,10 +172,14 @@ pueden mezclar con segmentos de pantalla en el mismo guion. Ejemplo completo, si
 - **Título largo**: el contenido de las tres plantillas arranca debajo de la cabecera
   medida (kicker + título, con 40 px de aire), así que un título de 4 renglones baja
   los nodos, los puntos o las barras en vez de quedar tapado. Si desde ahí no queda
-  lugar (un nodo o un renglón al piso de 24 px, o 240 px de gráfico), la escena falla
+  lugar (un nodo al piso de 24 px, un renglón de 28, o 200 px de gráfico), la escena falla
   nombrando el título.
 - **Estilo**: `brand.json` en `TUT_ROOT` pisa lo que declare de `assets/escenas/brand.json`
-  (colores, `fuente`, movimiento). Un solo color de acento, una sans-serif.
+  (colores, `fuente`, `fuente_titulos`, `fuente_mono`, movimiento). Un solo color de acento.
+  Tipografía propia embebida (`assets/escenas/fuentes/`, OFL, origen y sha256 en su
+  `LEEME.md`): Barlow para títulos, números y cuerpo, IBM Plex Mono (sin ligaduras) para
+  etiquetas. Otra familia se suma con su `@font-face` local en `base.css`: el motor bloquea
+  la red, y una fuente que no está avisa con `AVISO` en vez de cambiarse en silencio.
 - **Escena `imagen`**: metáforas dibujadas, no fotos (decidido por Juani, Q8). El `svg` de cada
   dibujo es una ruta a un archivo en `assets/escenas/dibujos/` (o al de la serie): SVG local
   escrito a mano para esta skill, o de un set de licencia MIT/ISC recoloreado, nunca una foto
@@ -209,6 +213,14 @@ pueden mezclar con segmentos de pantalla en el mismo guion. Ejemplo completo, si
 - **Plantilla propia**: un HTML con `window.DURATION` y `async window.seek(t)` donde todo es
   función pura de `t` (sin `Date.now`, timers, `requestAnimationFrame` ni transiciones CSS).
   `escena.py render` falla claro si falta el contrato o si el JS tira un error.
+- **Puerta antes del render** (`verificar.py`, H2): `escena.py render` lleva la escena a 12
+  tiempos parejos más justo antes y después de cada cue y NO renderiza si dos textos
+  visibles se pisan, si un texto se sale del cuadro útil (invade la banda de subtítulos) o
+  de su caja, si el contraste es menor a 4,5:1 (3:1 en texto de 32 px, o de 24 en negrita), o
+  si un elemento se ve antes de su cue (las plantillas marcan cada elemento con `data-t`).
+  Nombra escena, tiempo y elemento. `--sin-verificar` la saltea a propósito; suelta:
+  `verificar.py spec.json...` (sale con 1 si hay hallazgos). El fondo de un texto es el de
+  sus ancestros: un texto encima de una forma que no lo contiene se mide contra la página.
 - **Plantilla con GSAP** (3.15.0 vendorizado en `assets/escenas/vendor/gsap/`, licencia en su
   `LEEME.md`): cargá `vendor/gsap/gsap.min.js` y los plugins que uses (`DrawSVGPlugin`,
   `MorphSVGPlugin`, `SplitText`, `CustomEase`) ANTES de `base.js`, registralos con
@@ -347,6 +359,13 @@ necesita lo dice en vez de omitirlo en silencio.
   verdad"; `fundido` para un respiro más calmo, por ejemplo entre el cierre de una idea
   (`presentacion` con `rol: repaso`) y el inicio de la siguiente (`gancho`), donde un corte seco
   o un barrido se sentirían apurados.
+- **Dirección visual** (H2; la miden D5 y D6 y la puerta de `escena.py render`): títulos de 64
+  a 120 px, cuerpo de 28 a 42, etiquetas de 18 a 24 en mono (kicker, notas, rótulos de
+  flecha). El contenido vive en el 83 % de arriba: el 17 % de abajo es de los subtítulos.
+  Fondo plano: nada de degradés grandes sobre fondo oscuro (hacen bandas en H.264). El dato
+  clave de una escena va como **número protagonista** (`presentacion` con `numero` y, si hay
+  contra qué compararlo, `contra`: "10 años" en acento contra "30" en tenue), no en un punto
+  más de una lista.
 
 **Reglas que mide `revisar`** (cada una es una clave de `editar.CHEQUEOS`, que `revisar()`
 recorre de verdad — R-5.8; no alcanza con nombrarla en un comentario):
@@ -379,6 +398,13 @@ recorre de verdad — R-5.8; no alcanza con nombrarla en un comentario):
   se normaliza con un aviso aparte (ese aviso no cuenta como hallazgo para `--estricto`); uno
   que no es texto (p.ej. `1`, guion mal armado) se informa como "rol inválido", nunca un
   traceback.
+- **D5**: ningún texto de una escena tiene contraste menor a 4,5:1 contra su fondo (WCAG AA;
+  3:1 si mide 32 px, o 24 px en negrita), medido con la puerta de `verificar.py` sobre el spec
+  resuelto (`videos/<vNN>/escenas/*.json`) con el brand del tutorial, en 12 tiempos más los de
+  cada cue. Sólo cuenta un texto ya entrado (opacidad plena, no a mitad de fundido).
+- **D6**: ningún texto visible de una escena pisa a otro, se sale del cuadro útil (invade la
+  banda de subtítulos, el 17 % de abajo) ni de su caja; misma puerta y mismos tiempos que D5.
+  Si la puerta no puede correr (Chrome, un spec roto), D5 y D6 son "no corrió" con la causa.
 
 `revisar` informa los hallazgos pero sale con 0 igual; sólo con `--estricto` sale con 1 si
 encontró algún hallazgo real, O SI ALGÚN CHEQUEO NO CORRIÓ (decisión de Juani, 03/10/2026).
@@ -684,6 +710,7 @@ $E $S/editar.py escenas v01 argentina          # voces + specs resueltos, sin re
 uv run --with playwright python $S/escena.py contacto videos/v01/escenas/*.json -o videos/v01/contacto.png
 $E $S/editar.py imagen v01 argentina && $S/editar.py voz v01 argentina
 uv run --with playwright python $S/escena.py render datos spec.json -o prueba.mp4 --ancho 960 --fps 12   # prueba suelta
+uv run --with playwright python $S/verificar.py videos/v01/escenas/*.json   # la puerta sola, sin renderizar
 
 # comprimir para subir
 ffmpeg -y -i videos/v01/final-argentina.mp4 -c:v libx264 -preset slow -crf 30 -tune stillimage -c:a aac -b:a 128k "drive/1 - Titulo.mp4"
