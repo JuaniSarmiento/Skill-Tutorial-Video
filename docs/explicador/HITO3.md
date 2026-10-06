@@ -90,3 +90,36 @@ elimina el relayout forzado que hoy hace determinista el render.
 
 ## Pendientes
 _Se completa al cerrar cada rebanada._
+
+### H1 cerrada (06/10/2026, worktree `feat/hito3-h1`)
+- "Voiceover carve" (`musica.aplicar_carve_voz`, `musica.BANDAS_VOZ_HZ`): bandas FIJAS
+  (250/400/630/1000/2500 Hz -7dB, 1600 Hz -15dB, robadas de HyperFrames
+  `packages/core/src/audioCarve.ts`, redondeadas desde su salida a fuerza 0.8 documentada
+  en `skills/hyperframes-audio/SKILL.md`), no su análisis FFT por voz: simplificación
+  deliberada del time-box (~2h). Si una voz atípica necesitara otro perfil de bandas, queda
+  para abrir boca más adelante.
+- Con el carve activo, el ducking de banda ancha default bajó de 18 a 10 LU
+  (`editar.py`, `musica_g.get("debajo_de_la_voz_lu", 10)`): el carve ya hace buena parte
+  del trabajo de "sacarse del medio" en las bandas donde la voz compite, así que no hace
+  falta que el ducking de TODA la frecuencia sea tan profundo.
+- Perfiles de loudness por destino (`musica.PERFILES_LOUDNESS`, `"destino"` arriba del
+  guion): `"youtube"` (default, -16 LUFS / TP ≤ -1.5 dBTP, sin cambios) y `"redes"` (-14
+  LUFS / TP ≤ -1.0 dBTP). `"destino"` inválido aborta antes de generar nada.
+- G3 intacto: los guiones sin `"musica"` nunca llaman a `aplicar_carve_voz` ni cambian su
+  perfil default, así que `tests/test_s0_red_de_seguridad.py` sigue dando los mismos hashes
+  sin regenerar la base.
+- Pendiente para quien siga: `README.md` (línea ~166, sección "El guion") sigue
+  documentando "18 LU" y no menciona `"destino"` -quedó fuera del alcance de esta rebanada
+  (sólo tocaba `musica.py`, la parte de audio de `editar.py`, sus tests y la sección de
+  música de `SKILL.md`); hay que actualizarlo aparte.
+- Hallazgo (render real, explicador de interés compuesto + música sintética de prueba,
+  voz "argentina"): la separación medida en la banda de 1000Hz entre voz y música con
+  carve+ducking(10 LU) dio ~14.1 LU (antes del carve: ~12.5 LU); en 1600Hz (la banda del
+  corte más profundo, -15dB) dio ~7.6 LU (antes: ~3.9 LU). Mejora clara sobre el ducking
+  solo, pero el criterio "≥ 15 LU en las bandas de la voz" de HITO3.md **no se cumplió** en
+  ninguna de las dos bandas con esta voz y esta música reales (sí se cumple con un tono puro
+  sintético exacto a una banda, ver `tests/test_musica_carve.py`). Causa probable: las
+  bandas y profundidades son FIJAS (no el análisis FFT por voz de HyperFrames, decisión
+  deliberada de esta rebanada), así que no se adaptan a dónde esta voz en particular
+  concentra su energía. Queda para Juani decidir si vale la pena bajar `debajo_de_la_voz_lu`
+  más, profundizar las bandas fijas, o retomar el análisis por voz.
