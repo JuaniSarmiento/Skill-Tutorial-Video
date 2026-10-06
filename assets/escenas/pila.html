@@ -1,0 +1,87 @@
+<!doctype html>
+<!--
+Escena "pila": la pila de llamadas de una función recursiva, que se apila cuando la voz
+la nombra y se desapila al volver, mostrando su valor de retorno (H5, HITO3.md).
+
+Los marcos salen de una traza REAL (recursion.py ejecuta la función con
+presentaciones/scripts/diagramas.trazar): no se inventa qué pasos tiene la recursión.
+
+spec (lo que arma recursion.resolver; ver references/escenas.md):
+  {"tipo": "pila", "archivo": "codigo/factorial.py", "llamada": "factorial(4)",
+   "formato": "factorial({n})",                                 (opcional)
+   "kicker": "...", "titulo": {"texto": "..."},                  (opcionales)
+   "pasos": [{"cue": "arranca"}, {"cue": "baja a tres"}, ...]}   (uno por evento de la
+   traza: llamada Y retorno, en el orden en que ocurren)
+
+Cada marco entra (apila) en la cue de su llamada y, SHOW segundos después de la cue de
+su retorno, desaparece (desapila); mientras tanto muestra "vuelve con <valor>". El marco
+más profundo siempre sale primero (LIFO): es la traza real, no algo que haya que forzar.
+-->
+<meta charset="utf-8">
+<link rel="stylesheet" href="base.css">
+<style>
+  .columna { position: absolute; left: 50%; transform: translateX(-50%); }
+  .marco {
+    position: absolute; left: 50%; transform: translateX(-50%); width: 560px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    border-radius: 18px; background: var(--superficie); border: 3px solid var(--borde);
+    box-shadow: 0 20px 48px -26px rgba(0, 0, 0, .7);
+  }
+  .marco .txt {
+    font-family: var(--fuente-mono); font-weight: 500; letter-spacing: -.01em; white-space: pre;
+  }
+  .marco .val { margin-top: 8px; font-family: var(--fuente-mono); font-weight: 600; color: var(--acento); white-space: pre; }
+</style>
+<script src="vendor/gsap/gsap.min.js"></script>
+<script src="base.js"></script>
+<script>
+  const { S, crear, cabecera, medir, aparecer, clamp, BANDA } = E;
+  const SHOW = 0.7;   // s: cuánto queda mostrando "vuelve con X" antes de desapilar
+  const GAP = 16, FILA_MAX = 140, FILA_MIN = 64;
+
+  const marcos = S.marcos || [];
+  if (!marcos.length) throw new Error('la escena "pila" necesita "marcos" (los arma recursion.resolver)');
+  marcos.forEach(m => { m.tFin = m.tPop + SHOW; });
+  const profundidadMax = Math.max(...marcos.map(m => m.profundidad));
+
+  function layout(cab) {
+    const minimo = (profundidadMax + 1) * FILA_MIN + profundidadMax * GAP;
+    const techo = cab.techo(220, minimo, BANDA);
+    const disponible = BANDA - techo - 20;
+    for (let fila = FILA_MAX; fila >= FILA_MIN; fila -= 2) {
+      const alto = (profundidadMax + 1) * fila + profundidadMax * GAP;
+      if (alto <= disponible) return { fila, techo };
+    }
+    throw new Error(`la pila de ${profundidadMax + 1} marcos no entra legible (mínimo ${FILA_MIN}px por marco ` +
+                    `y hay ${Math.round(disponible)}px disponibles): usá una llamada más chica`);
+  }
+
+  let dibujarCab;
+  E.contrato([...marcos.map(m => m.tPush), ...marcos.map(m => m.tFin)], () => {
+    const cab = cabecera(S.titulo, S.kicker);
+    dibujarCab = cab.dibujar;
+    const { fila, techo } = layout(cab);
+    const base = BANDA - 20;
+    for (const m of marcos) {
+      m.el = crear('div', 'marco');
+      m.el.dataset.caja = `marco ${m.profundidad}`;
+      m.el.dataset.t = m.tPush;
+      m.el.style.height = fila + 'px';
+      m.el.style.top = (base - (m.profundidad + 1) * fila - m.profundidad * GAP) + 'px';
+      crear('div', 'txt', m.el, m.texto).style.fontSize = Math.min(34, fila * 0.3) + 'px';
+      const val = crear('div', 'val', m.el, `vuelve con ${m.valor}`);
+      val.style.fontSize = Math.min(26, fila * 0.22) + 'px';
+      m.valEl = val;
+    }
+    void techo;   // sólo se usa para el layout; el techo real ya quedó fijado por cab.techo
+  }, t => {
+    dibujarCab(t);
+    for (const m of marcos) {
+      const retornando = t >= m.tPop;
+      const visible = t >= m.tPush && t < m.tFin;
+      m.el.style.opacity = visible ? aparecer(t, m.tPush) : 0;
+      m.el.style.borderColor = retornando ? 'var(--tenue)' : 'var(--acento)';
+      m.valEl.style.opacity = retornando ? clamp((t - m.tPop) / 0.12) : 0;
+    }
+  });
+</script>
