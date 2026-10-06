@@ -13,6 +13,10 @@ pueden mezclar con segmentos de pantalla en el mismo guion. Ejemplo completo, si
 | `imagen` | metáforas dibujadas (SVG local), una fila, cada una con su rótulo | `dibujos[]` (`id`, `svg`, posición `x`/`y`? opcional), `rotulos[]` (`texto`, `de`) |
 | `codigo` | editor con el código real de un archivo: tipeo, resaltado, diff y la salida real | `pasos[]` (`modo`: `tipeo`, `resaltar`, `diff`, `salida`) |
 | `contador` | número protagonista gigante que cuenta hasta su valor | la escena entera (`cue` arriba, junto a `valor`) |
+| `pila` | la pila de llamadas de una recursión LINEAL (una sola rama, como `factorial`): un marco se apila en su llamada y se desapila mostrando su valor de retorno | `pasos[]`, uno por cada llamada Y retorno de la traza real (H5) |
+| `arbol` | el árbol de llamadas de una recursión que SE RAMIFICA (como `fibonacci`): crece de a un nodo, y una llamada que repite argumentos entra resaltada en el acento | `pasos[]`, uno por cada LLAMADA de la traza real (el árbol no se achica) |
+| `curva` | una curva que se dibuja (DrawSVG) con un contador que la acompaña y puntos marcados con su valor | `puntos[]` (`x`, `y`, `etiqueta`) |
+| `linea-de-vida` | un eje de años/edades con tramos que se dibujan (DrawSVG), uno por fila | `tramos[]` (`nombre`, `desde`, `hasta`) |
 
 - **`cue` es la frase que nombra al elemento**, tal cual la dice el `texto` del segmento
   (`"cue": "tres décadas"`), o un número de segundos. El elemento entra en esa palabra.
@@ -103,6 +107,63 @@ pueden mezclar con segmentos de pantalla en el mismo guion. Ejemplo completo, si
   `kicker`/`titulo`). Cuenta en formato argentino (2.692.537) y frena exacto en el valor; de 360 a
   300 px o falla. Ideas de `count-up`/`number-pop-in`/`code-diff` de HyperFrames (Apache 2.0);
   el código es propio, no se copió nada.
+- **Escenas `pila` y `arbol`** (H4: recursión que se ve). No se inventa qué pasos tiene la
+  recursión: se EJECUTA la función de verdad con `presentaciones/scripts/diagramas.trazar`
+  (reusado, `recursion.py` arma el spec final en Python antes de abrir Chrome) y el dibujo sale
+  de ese registro. Los comandos de escenas que los usan llevan `--with matplotlib` (lo pide
+  `diagramas.py`, aunque la escena nunca abre una figura).
+  ```json
+  {"tipo": "pila", "archivo": "codigo/factorial.py", "llamada": "factorial(4)",
+   "titulo": {"texto": "Cómo se desarma factorial(4)"},
+   "pasos": [{"cue": "factorial de cuatro"}, {"cue": "factorial de tres"}, {"cue": "factorial de dos"},
+             {"cue": "factorial de uno"}, {"cue": "y de cero"}, {"cue": "que es uno"},
+             {"cue": "listo, vuelve"}, {"cue": "y vuelve"}, {"cue": "y vuelve"}, {"cue": "y llega a veinticuatro"}]}
+  ```
+  ```json
+  {"tipo": "arbol", "archivo": "codigo/fibonacci.py", "llamada": "fibonacci(5)", "formato": "fib({n})",
+   "titulo": {"texto": "Cuánto se repite fibonacci(5)"},
+   "pasos": [{"cue": "fibonacci de cinco"}, {"cue": "necesita fibonacci de cuatro"}, {"cue": "y de tres"}]}
+  ```
+  (`fibonacci(5)` llama 15 veces: `pasos` necesita 15 elementos, uno por llamada; el ejemplo
+  recorta las últimas 12 por espacio)
+  - `pila`: un `paso` por cada evento de la traza, EN EL ORDEN EN QUE OCURREN (llamada y
+    retorno intercalados: ver `diagramas.trazar`); pensada para recursión LINEAL, de una sola
+    rama (si dos llamadas conviven a la misma profundidad se pisan: no es su caso de uso). Cada
+    marco se apila en la cue de su llamada y, poco después de la cue de su retorno, se desapila
+    mostrando "vuelve con `<valor>`"; el más profundo siempre sale primero (LIFO real, no
+    forzado). Más de 16 llamadas falla nombrando la cantidad.
+  - `arbol`: un `paso` por cada LLAMADA (no por retorno: el árbol nunca se achica). Las
+    posiciones (profundidad, orden entre hermanos) salen del árbol completo, pero cada nodo sólo
+    se ve desde SU cue. Una llamada con los mismos argumentos que una anterior ("trabajo que se
+    recalcula") entra directo resaltada en el acento, sin paso extra. Más de 60 llamadas falla
+    nombrando la cantidad; un texto que no entra en los nodos, también.
+  - `formato` (ambas, opcional): mismo mini-lenguaje que `diagramas.py` (`"fib({n})"`); sin él,
+    `"n = 4"` (los argumentos tal cual, repr de Python).
+  - El `archivo` es relativo a `TUT_ROOT` desde un guion (`editar.py` lo resuelve igual que el de
+    `codigo`); desde una prueba suelta, relativo al directorio del spec.
+- **Escena `curva`**: una curva que SE DIBUJA (GSAP DrawSVG) con un contador que la acompaña
+  (`contador.js`, H4) y puntos marcados con su valor. El trazo avanza (ease-out) entre la cue del
+  primer punto y la del último; el número grande cuenta del valor del primero al del último en
+  esa misma ventana. Caso de referencia (la comparativa con HyperFrames, HITO3.md):
+  ```json
+  {"tipo": "curva", "titulo": {"texto": "US$ 1.000 a treinta años"}, "prefijo": "US$ ",
+   "puntos": [{"x": 0, "y": 1000, "etiqueta": "Año 0", "cue": "mil dólares"},
+              {"x": 10, "y": 2594, "etiqueta": "Año 10", "cue": "a los diez años"},
+              {"x": 30, "y": 17449, "etiqueta": "Año 30", "cue": "treinta años después"}]}
+  ```
+  Cada punto entra (con su etiqueta y su valor) en SU PROPIA cue, no cuando el trazo lo alcanza
+  píxel a píxel: una cue que no es proporcional a la posición en `x` hace que la etiqueta
+  aparezca un poco antes o después del trazo real. Menos de dos puntos falla claro.
+- **Escena `linea-de-vida`**: un eje de años/edades con un tramo por fila que SE DIBUJA (GSAP
+  DrawSVG) en su propia cue, con marcas en cada edad que aparece en algún tramo.
+  ```json
+  {"tipo": "linea-de-vida", "titulo": {"texto": "Diez años de diferencia"},
+   "tramos": [{"nombre": "Ana", "desde": 25, "hasta": 35, "cue": "ana ahorra diez años"},
+              {"nombre": "Sofía", "desde": 35, "hasta": 65, "cue": "sofía treinta años"}]}
+  ```
+  `eje` (opcional: `{"desde": ..., "hasta": ..., "unidad": "años"}`) fuerza el rango; sin él, sale
+  del mínimo/máximo de los tramos. `hasta <= desde` (en el eje o en un tramo) falla claro, igual
+  que más tramos de los que entran legibles en una columna.
 - **Cero WebGL**: el motor bloquea `getContext('webgl'|'webgl2'|'experimental-webgl')` en
   cualquier plantilla (la GPU integrada de Juani la arrastra, PLAN.md); si una lo llama, sale
   como `ContratoError`, igual que cualquier otro error de JavaScript de la página.
