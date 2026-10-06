@@ -57,6 +57,27 @@ Dos videos del canal Torti Code:
 
 H9 suma **un short estilo N+1** como control, comparado lado a lado con el original.
 
+### Prueba comparativa con HyperFrames (06/10)
+Mismo guion y misma voz del explicador de interés compuesto, hecho con HyperFrames
+(`~/Proyectos/Video-Tutoriales/hyperframes-prueba/interes-compuesto/`, video en
+`~/Descargas/interes-compuesto-hyperframes.mp4`). **Gana en 8 de 11 escenas por decisiones de
+diseño, no por el motor**: número protagonista gigante ("10 años" contra "30"), línea de vida
+25→65, curva exponencial que se dibuja con contador, ecuación gigante en la regla del 72, flechas
+que se dibujan con vuelta. Gana el nuestro: ritmo por cues de texto (HF pone segundos a mano),
+loudness (HF salió a -24,7 LUFS sin avisar), archivos 2,7× más livianos, grabación real.
+Se suman al plan:
+- **H2**: jerarquía tipográfica con número protagonista (≥ 300 px) y etiquetas en mono; y una
+  **puerta `check` antes del render** (textos que se pisan muestreando tiempos, contraste WCAG AA).
+- **H4/H5**: escenas `curva` (trazo + contador), `linea-de-vida`, `contador`, y flechas que se
+  dibujan en `diagrama`.
+- Bloques del catálogo de HyperFrames para copiar o adaptar (con aviso Apache 2.0; GSAP permitido):
+  `hw-arrow`, `hw-underline`, `hw-callout-circle`, `hw-write-title` (estilo dibujado, H12);
+  `offset-path-traveler`, `lottie-character-walk` (trayectorias, H12); `caption-pill-karaoke`,
+  `caption-highlight`, `per-word-rise` (H11); `code-typing`, `code-diff`, `code-highlight`,
+  `terminal-simulator`, `count-up`, `number-pop-in` (H4); `lt-kicker-name`, `mk-callout-highlight`
+  (H6); `whip-pan-cut` (H7); `flowchart`, `mk-line-graph` (H5). Proyecto con el catálogo en caché:
+  `~/.hyperframes/cache/`; repo clonado en `hyperframes-prueba/repo-hf/`.
+
 Exploración aparte (sin compromiso): captura con CDP `beginFrame` en vez de screenshot, por si
 elimina el relayout forzado que hoy hace determinista el render.
 
