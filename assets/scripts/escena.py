@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """Motor de escenas: un HTML + un spec JSON + un brand -> un .mp4 de duración exacta.
 
-Una escena es una página con un contrato de dos piezas (el mismo de HyperFrames,
-github.com/heygen-com/hyperframes, así migrar después es barato):
+Una escena es una página con un contrato de dos piezas. La idea es prima de la de
+HyperFrames (github.com/heygen-com/hyperframes: todo función de t, render no en tiempo
+real), pero el formato NO es el mismo: HyperFrames usa atributos data-* y una timeline
+GSAP en window.__timelines[id]. Una plantilla con GSAP entra a este contrato con
+E.lineaDeTiempo de base.js (vendor/gsap/, sin red).
 
   window.DURATION      segundos que dura la escena
   async window.seek(t) deja la página EXACTAMENTE como se ve en el segundo t

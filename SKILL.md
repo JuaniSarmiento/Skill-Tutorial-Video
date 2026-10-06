@@ -209,6 +209,16 @@ pueden mezclar con segmentos de pantalla en el mismo guion. Ejemplo completo, si
 - **Plantilla propia**: un HTML con `window.DURATION` y `async window.seek(t)` donde todo es
   función pura de `t` (sin `Date.now`, timers, `requestAnimationFrame` ni transiciones CSS).
   `escena.py render` falla claro si falta el contrato o si el JS tira un error.
+- **Plantilla con GSAP** (3.15.0 vendorizado en `assets/escenas/vendor/gsap/`, licencia en su
+  `LEEME.md`): cargá `vendor/gsap/gsap.min.js` y los plugins que uses (`DrawSVGPlugin`,
+  `MorphSVGPlugin`, `SplitText`, `CustomEase`) ANTES de `base.js`, registralos con
+  `gsap.registerPlugin(...)` y llamá `E.lineaDeTiempo(() => { ...; return tl; })`. El DOM y la
+  timeline se arman ADENTRO de esa función: corre una vez, con las fuentes ya cargadas (SplitText
+  y DrawSVG miden). `DURATION` es la de la timeline (o la del slot, si el motor la pisa) y
+  `seek(t)` es `tl.totalTime(t)`; el puente pausa la timeline global, así que el reloj real no
+  mueve nada. Ejemplo: `assets/scripts/tests/fixtures/gsap/prueba-gsap.html`. Prohibido:
+  `gsap.ticker`, `repeat: -1` (duración infinita), `onUpdate` con azar, tweens que no cuelgan de
+  la timeline devuelta (quedan congelados en su inicio).
 - **Forzar relayout del `body` después de cada `seek` hace determinista el render**
   (medido: sin él 14/27 y 11/27 cuadros dependen del orden; con él 0). La causa exacta
   en Chrome no está identificada: en la portada la diferencia cae en el borde de un

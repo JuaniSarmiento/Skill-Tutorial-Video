@@ -1,6 +1,7 @@
 // Base común de las plantillas de escena.
 //
-// Contrato (el de HyperFrames): window.DURATION + async window.seek(t). Todo lo que
+// Contrato: window.DURATION + async window.seek(t) (no es el formato de HyperFrames,
+// ver docs/explicador/HITO3.md). Todo lo que
 // se ve es función pura de t: nada de Date.now, requestAnimationFrame, timers,
 // transiciones CSS ni azar. seek(t) recalcula cada estilo desde cero, así que el
 // orden en que se piden los cuadros no importa.
