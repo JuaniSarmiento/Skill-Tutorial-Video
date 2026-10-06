@@ -98,5 +98,23 @@
     };
   }
 
-  window.E = { S, B, C, M, clamp, resorte, salida, aparecer, tiempo, medir, crear, cabecera, contrato };
+  // Puente GSAP -> contrato. construir() arma el DOM y devuelve una timeline de GSAP;
+  // corre una sola vez, con las fuentes ya cargadas (SplitText y los trazos miden).
+  // DURATION es la de la timeline (o la del spec, si el motor la pisa con el slot de
+  // la voz) y seek(t) la deja en t con totalTime(t, false), sincrónico.
+  // El reloj de GSAP no mueve nada: la timeline global queda en pausa, así que un
+  // tween suelto (fuera de la timeline) tampoco avanza solo.
+  function lineaDeTiempo(construir) {
+    const g = window.gsap;
+    if (!g) throw new Error('E.lineaDeTiempo necesita GSAP: cargá vendor/gsap/gsap.min.js antes que base.js');
+    g.globalTimeline.pause();
+    let tl;
+    const lista = document.fonts.ready.then(() => {
+      tl = construir().pause();
+      window.DURATION = S.duracion ?? tl.duration();
+    });
+    window.seek = async t => { await lista; tl.totalTime(t, false); };
+  }
+
+  window.E = { S, B, C, M, clamp, resorte, salida, aparecer, tiempo, medir, crear, cabecera, contrato, lineaDeTiempo };
 })();
