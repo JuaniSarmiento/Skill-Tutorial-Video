@@ -257,3 +257,61 @@ def test_los_archivos_de_una_escena_codigo_se_resuelven_contra_root(raiz):
 def test_un_archivo_absoluto_de_una_escena_codigo_no_se_toca(raiz):
     seg = {"escena": {"tipo": "codigo", "archivo": "/otra/a.py"}, "texto": "x"}
     assert editar.spec_de_escena(seg, 3.0, VOZ)["archivo"] == "/otra/a.py"
+
+
+# --- H5: pila/arbol resuelven "archivo" contra ROOT, igual que codigo ----------------
+
+def test_el_archivo_de_una_escena_pila_se_resuelve_contra_root(raiz):
+    seg = {"escena": {"tipo": "pila", "archivo": "codigo/factorial.py", "llamada": "factorial(4)",
+                      "pasos": [{"cue": 0.1 * i} for i in range(10)]}, "texto": "x"}
+    spec = editar.spec_de_escena(seg, 4.0, VOZ)
+    assert spec["archivo"] == str((raiz / "codigo" / "factorial.py").resolve())
+    assert seg["escena"]["archivo"] == "codigo/factorial.py"
+
+
+def test_el_archivo_de_una_escena_arbol_se_resuelve_contra_root(raiz):
+    seg = {"escena": {"tipo": "arbol", "archivo": "codigo/fibonacci.py", "llamada": "fibonacci(5)",
+                      "pasos": [{"cue": 0.1 * i} for i in range(15)]}, "texto": "x"}
+    spec = editar.spec_de_escena(seg, 4.0, VOZ)
+    assert spec["archivo"] == str((raiz / "codigo" / "fibonacci.py").resolve())
+
+
+def test_un_archivo_absoluto_de_una_escena_pila_no_se_toca(raiz):
+    seg = {"escena": {"tipo": "pila", "archivo": "/otra/f.py", "llamada": "f(1)",
+                      "pasos": [{"cue": 0.1}]}, "texto": "x"}
+    assert editar.spec_de_escena(seg, 3.0, VOZ)["archivo"] == "/otra/f.py"
+
+
+# --- H5: pila/curva también se renderizan con el motor desde un segmento ------------
+
+def test_un_segmento_de_escena_pila_se_renderiza_con_el_motor(raiz, monkeypatch):
+    (raiz / "codigo").mkdir()
+    (raiz / "codigo" / "factorial.py").write_text(
+        "def factorial(n):\n    if n == 0:\n        return 1\n    return n * factorial(n - 1)\n")
+    llamadas = []
+    monkeypatch.setattr(escena, "render", lambda plantilla, spec, salida, brand=None, **kw:
+                        llamadas.append((plantilla, spec, salida)) or spec["duracion"])
+    seg = {"escena": {"tipo": "pila", "archivo": "codigo/factorial.py", "llamada": "factorial(2)",
+                      "pasos": [{"cue": 0.2 * i} for i in range(6)]}, "texto": "x"}
+
+    editar.build_segment("v01", None, seg, 4.0, raiz / "o.mp4", VOZ)
+
+    (plantilla, spec, salida), = llamadas
+    assert plantilla.name == "pila.html"
+    assert spec["archivo"] == str((raiz / "codigo" / "factorial.py").resolve())
+    assert salida == raiz / "o.mp4"
+
+
+def test_un_segmento_de_escena_curva_se_renderiza_con_el_motor(raiz, monkeypatch):
+    llamadas = []
+    monkeypatch.setattr(escena, "render", lambda plantilla, spec, salida, brand=None, **kw:
+                        llamadas.append((plantilla, spec, salida)) or spec["duracion"])
+    seg = {"escena": {"tipo": "curva",
+                      "puntos": [{"x": 0, "y": 1000, "cue": "el sol"}, {"x": 30, "y": 17449, "cue": 1.0}]},
+          "texto": "Mirá el sol."}
+
+    editar.build_segment("v01", None, seg, 4.2, raiz / "o.mp4", VOZ)
+
+    (plantilla, spec, salida), = llamadas
+    assert plantilla.name == "curva.html"
+    assert spec["puntos"][0]["t"] == pytest.approx(0.3 + editar.LEAD)

@@ -450,11 +450,12 @@ def spec_de_escena(seg: dict, slot: float, voz_palabras: list[dict]) -> dict:
         ruta = d.get("svg")
         if ruta and not Path(ruta).is_absolute():
             d["svg"] = str((ROOT / ruta).resolve())
-    # H4: los archivos de una escena codigo (el código, el del diff, el programa a ejecutar),
-    # igual que los svg: relativos a ROOT, absolutos desde acá
+    # H4/H5: los archivos de una escena codigo (el código, el del diff, el programa a
+    # ejecutar) y de una escena pila/arbol (el archivo con la función a trazar), igual
+    # que los svg: relativos a ROOT, absolutos desde acá
     for d, clave in [(spec, "archivo"), *((p, k) for p in spec.get("pasos", []) for k in ("archivo", "ejecutar"))]:
         ruta = d.get(clave)
-        if spec.get("tipo") == "codigo" and ruta and not Path(ruta).is_absolute():
+        if spec.get("tipo") in ("codigo", "pila", "arbol") and ruta and not Path(ruta).is_absolute():
             d[clave] = str((ROOT / ruta).resolve())
     return spec
 

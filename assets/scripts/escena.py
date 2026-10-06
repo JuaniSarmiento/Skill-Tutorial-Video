@@ -252,14 +252,22 @@ def resolver_dibujos(spec: dict, base_dir=None) -> dict:
 
 
 def resolver_codigo(spec: dict, plantilla, base_dir=None) -> dict:
-    """H4: la escena codigo lee su archivo, lo tokeniza, arma el diff y ejecuta el programa
-    en Python (codigo.resolver), antes de abrir Chrome. Las rutas relativas, contra base_dir
-    (el directorio del spec.json) o, sin él, el cwd. Otra plantilla: el spec tal cual.
+    """H4/H5: antes de abrir Chrome, cada escena que necesita ejecutar algo de verdad
+    resuelve su propio spec en Python: `codigo` lee su archivo, lo tokeniza, arma el diff
+    y ejecuta el programa (codigo.resolver); `pila`/`arbol` ejecutan la función y arman la
+    pila o el árbol desde la traza real (recursion.resolver, H5). Las rutas relativas,
+    contra base_dir (el directorio del spec.json) o, sin él, el cwd. Otra plantilla: el
+    spec tal cual.
     """
-    if Path(plantilla).stem != "codigo":
-        return spec
-    import codigo
-    return codigo.resolver(spec, Path(base_dir) if base_dir is not None else Path.cwd())
+    base_dir = Path(base_dir) if base_dir is not None else Path.cwd()
+    stem = Path(plantilla).stem
+    if stem == "codigo":
+        import codigo
+        return codigo.resolver(spec, base_dir)
+    if stem in ("pila", "arbol"):
+        import recursion
+        return recursion.resolver(spec, base_dir)
+    return spec
 
 
 def cargar_brand(ruta) -> dict:

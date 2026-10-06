@@ -258,3 +258,21 @@ def test_la_ayuda_del_cli_render_menciona_imagen(capsys):
     with pytest.raises(SystemExit):
         escena._cli(["render", "--help"])
     assert "imagen" in capsys.readouterr().out
+
+
+# --- H5: resolver_codigo también resuelve pila/arbol (recursion.resolver) ------------
+
+def test_resolver_codigo_con_plantilla_pila_resuelve_los_marcos_desde_la_traza(tmp_path):
+    (tmp_path / "f.py").write_text("def f(n):\n    if n == 0:\n        return 1\n    return n * f(n - 1)\n")
+    spec = {"tipo": "pila", "archivo": "f.py", "llamada": "f(2)",
+            "pasos": [{"t": 0.1 * i} for i in range(6)]}
+    out = escena.resolver_codigo(spec, "x/pila.html", tmp_path)
+    assert [m["texto"] for m in out["marcos"]] == ["n = 2", "n = 1", "n = 0"]
+
+
+def test_resolver_codigo_con_plantilla_arbol_resuelve_los_nodos_desde_la_traza(tmp_path):
+    (tmp_path / "f.py").write_text("def f(n):\n    if n <= 1:\n        return n\n    return f(n - 1) + f(n - 2)\n")
+    spec = {"tipo": "arbol", "archivo": "f.py", "llamada": "f(3)",
+            "pasos": [{"t": 0.1 * i} for i in range(5)]}
+    out = escena.resolver_codigo(spec, "x/arbol.html", tmp_path)
+    assert len(out["nodos"]) == 5
