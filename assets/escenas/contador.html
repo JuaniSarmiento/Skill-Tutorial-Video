@@ -1,0 +1,79 @@
+<!doctype html>
+<!--
+Escena "contador": un número protagonista que CUENTA hasta su valor en su cue (H4).
+
+spec:
+  {"tipo": "contador",
+   "kicker": "...", "titulo": {"texto": "..."},       (opcionales)
+   "valor": 2692537, "cue": "dos millones",
+   "prefijo": "US$ ", "sufijo": " %",                  (opcionales, pegados al número)
+   "unidad": "llamadas",                               (opcional, debajo, en tenue)
+   "desde": 0, "conteo": 1.6}                          (opcionales: de dónde arranca y cuántos s cuenta)
+
+Formato argentino (2.692.537; 3,5), con los decimales que trae el valor. El número va
+gigante (de 360 a 300 px) en acento, alineado a la derecha de su ancho final para que no
+baile mientras crecen los dígitos; si no entra a 300 px la escena falla nombrándolo.
+-->
+<meta charset="utf-8">
+<link rel="stylesheet" href="base.css">
+<style>
+  .cifra { position: absolute; left: 140px; text-align: right; white-space: nowrap; color: var(--acento);
+           font-family: var(--fuente-titulos); font-weight: 900; line-height: .85; letter-spacing: -.045em;
+           transform-origin: 100% 100%; }
+  .unidad { position: absolute; left: 140px; white-space: nowrap; font-family: var(--fuente-titulos);
+            font-size: 72px; font-weight: 700; color: var(--tenue); }
+</style>
+<body>
+<script src="vendor/gsap/gsap.min.js"></script>
+<script src="contador.js"></script>
+<script src="base.js"></script>
+<script>
+  const { S, crear, tiempo, cabecera, BANDA } = E;
+  // la cifra va en 900, un peso que nada pidió todavía: se pide ya, así document.fonts.ready
+  // (que espera E.lineaDeTiempo) la espera también y el ancho se mide con la fuente real
+  document.fonts.load(`900 100px ${getComputedStyle(document.documentElement).getPropertyValue('--fuente-titulos')}`);
+  const CIFRA = 360, CIFRA_MIN = 300, ANCHO = 1920 - 2 * 140;
+  if (typeof S.valor !== 'number' || !Number.isFinite(S.valor))
+    throw new Error(`el contador no tiene un "valor" numérico (vino ${JSON.stringify(S.valor)})`);
+  let dec = 0;
+  while (dec < 6 && Math.abs(Number(S.valor.toFixed(dec)) - S.valor) > Math.abs(S.valor) * 1e-12) dec++;
+  const escribir = v => Contador.formato(v, { dec, prefijo: S.prefijo, sufijo: S.sufijo });
+
+  E.lineaDeTiempo(() => {
+    const t0 = tiempo(S, 0.4);
+    const final = escribir(S.valor);
+    // medido en el DOM, no con canvas: el letter-spacing negativo cambia el ancho real
+    const num = crear('div', 'cifra', document.body, final);
+    num.style.fontSize = CIFRA + 'px';
+    const px = Math.min(CIFRA, CIFRA * ANCHO / num.getBoundingClientRect().width);
+    if (px < CIFRA_MIN)
+      throw new Error(`el número ${JSON.stringify(final)} no entra a ${CIFRA_MIN} px: usá una unidad más grande ("2,7 M")`);
+    const cab = cabecera(S.titulo, S.kicker);
+    const altoUnidad = S.unidad ? 28 + 72 * 1.15 : 0;
+    const alto = px * 0.85 + altoUnidad;
+    const techo = S.titulo ? cab.techo(260, alto, BANDA) : 160;
+    const arriba = techo + Math.max(0, (BANDA - techo - alto) / 2);
+
+    num.dataset.caja = 'numero';
+    num.dataset.t = t0;
+    Object.assign(num.style, { top: arriba + 'px', fontSize: px + 'px' });
+    num.style.width = Math.ceil(num.getBoundingClientRect().width) + 'px';   // fijo: los dígitos crecen hacia la izquierda
+    const tl = gsap.timeline();
+    tl.fromTo(num, { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.6, ease: 'power3.out' }, t0);
+    const fin = Contador.contar(tl, num, { desde: S.desde ?? 0, hasta: S.valor, t0, dur: S.conteo ?? 1.6, escribir });
+    // el pulso de aterrizaje: se agranda apenas y vuelve, sin rebote
+    tl.to(num, { scale: 1.05, duration: 0.12, ease: 'power2.out' }, fin)
+      .to(num, { scale: 1, duration: 0.3, ease: 'power2.inOut' });
+    if (S.unidad) {
+      const u = crear('div', 'unidad', document.body, S.unidad);
+      u.dataset.caja = 'unidad';
+      u.dataset.t = t0;
+      u.style.top = (arriba + px * 0.85 + 28) + 'px';
+      tl.fromTo(u, { opacity: 0 }, { opacity: 1, duration: 0.4, ease: 'power2.out' }, t0 + 0.15);
+    }
+    tl.to({}, { duration: 1.5 });   // el número quieto, ya en su valor, antes del corte
+    cab.dibujar(0);
+    tl.eventCallback('onUpdate', () => cab.dibujar(tl.time()));
+    return tl;
+  });
+</script>
