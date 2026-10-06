@@ -129,3 +129,35 @@ _Se completa al cerrar cada rebanada._
   deliberada de esta rebanada), así que no se adaptan a dónde esta voz en particular
   concentra su energía. Queda para Juani decidir si vale la pena bajar `debajo_de_la_voz_lu`
   más, profundizar las bandas fijas, o retomar el análisis por voz.
+
+### H5 ronda 2 cerrada (06/10/2026, rama `feat/hito3`)
+- `pila`/`arbol`/`linea-de-vida` llenaban una franja chica en el centro del cuadro: se sacó
+  el ancho fijo de `pila` (560px -> ~1320px, FILA_MAX 140->260) y los topes fijos de ancho/alto
+  de `arbol` (190/96px -> toda la columna/fila); el texto principal escala con el espacio
+  disponible ("tan grande como entre"), triangulado con fibonacci(3) vs. fibonacci(5): a menos
+  nodos, letra más grande.
+- `pila` quedaba en blanco al desapilar todo: ahora al desapilar la raíz entra grande, centrado,
+  `"<llamada> = <valor>"` (p.ej. `"factorial(4) = 24"`), tan grande como entra en el ancho
+  disponible (medido con `medir()`, tope 140px).
+- `linea-de-vida`: `layout()` dejaba de crecer en el primer tamaño que entraba (tope fijo
+  120px/fila); ahora reparte el alto disponible entre los tramos, así que con pocos tramos cada
+  fila es mucho más alta. El trazo pasó de un tope de 14px (invisible, nunca "grueso") a
+  `max(24, min(90, fila*0.14))`; `.marca` del eje 22px -> 24px.
+- `curva`: con sólo 2-3 `puntos` el trazo entre ellos era una recta (interés compuesto = "dos
+  rectas"). Si el spec trae `"crecimiento": {"inicial", "tasa", "periodos"}`, el TRAZO se arma
+  con 12 segmentos interpolados por período de la fórmula compuesta; `puntos` sigue siendo sólo
+  lo que se marca (nunca una marca por segmento). Sin `crecimiento`, sigue uniendo `puntos` con
+  rectas (sin cambios de comportamiento para specs existentes).
+- **D7 "texto chico"** nuevo en `verificar.py` (texto visible < 24px, umbral configurable
+  `umbral_texto_chico`; kicker/etiqueta mono de 24px exactos pasa), registrado en
+  `editar.CHEQUEOS["D7"]` y corrido junto a D5/D6 en `revisar()`. Al correrlo contra las specs de
+  ejemplo de TODAS las plantillas aparecieron tres hallazgos reales fuera del alcance de las 4
+  escenas de esta rebanada: `datos.html .nota` (20px) y `codigo.html .pestana`/`.term .etq`
+  (22px/20px); los tres se subieron a 24px (y `datos.html` bajó `AIRE_NOTA` de 20 a 17 para
+  compensar el renglón más alto de la nota y no romper `test_datos_las_cifras_se_leen_en_un_
+  celular_y_el_grafico_usa_el_area`, que medía el alto exacto del gráfico).
+- Esto cambió el framemd5 de la base `tests/fixtures/s0/escenas.json` (su guion incluye una
+  escena `datos` con `"nota"`, que ahora renderiza distinto); el audio_md5 se verificó IDÉNTICO
+  y se regeneró sólo el framemd5, en un commit aparte, siguiendo la regla de S0.
+- Pendiente para quien siga: `references/escenas.md` documenta `crecimiento` sólo para `curva`;
+  si más escenas necesitan fórmulas en vez de puntos a mano, conviene generalizar el patrón.

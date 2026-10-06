@@ -90,7 +90,7 @@ transversales, no un flujo propio (ver la tabla de abajo).
 | Música de fondo, voiceover carve, perfiles de loudness, o efectos de sonido (sfx) | `references/audio.md` |
 | Elegir, agregar, o calibrar la velocidad de una voz TTS | `references/voces.md` |
 | Agregar o tocar una transición entre tramos (`corte`, `fundido`, `barrido`) | `references/transiciones.md` |
-| Escribir el guion como lo haría quien edita de profesión, o entender qué mide `editar.py revisar` (D1-D6) | `references/director.md` |
+| Escribir el guion como lo haría quien edita de profesión, o entender qué mide `editar.py revisar` (D1-D7) | `references/director.md` |
 | Correr la puerta de escenas (`verificar.py`), `editar.py revisar`, censurar con OCR, o verificar la voz con Whisper | `references/verificacion.md` |
 | Armar diapositivas de cátedra UTN/TUPaD (`presentaciones/`) | `references/catedra.md` |
 | Publicar en YouTube o en una carpeta de Drive | `references/publicacion.md` |

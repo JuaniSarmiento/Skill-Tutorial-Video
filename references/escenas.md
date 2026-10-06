@@ -131,12 +131,17 @@ pueden mezclar con segmentos de pantalla en el mismo guion. Ejemplo completo, si
     rama (si dos llamadas conviven a la misma profundidad se pisan: no es su caso de uso). Cada
     marco se apila en la cue de su llamada y, poco después de la cue de su retorno, se desapila
     mostrando "vuelve con `<valor>`"; el más profundo siempre sale primero (LIFO real, no
-    forzado). Más de 16 llamadas falla nombrando la cantidad.
+    forzado). Más de 16 llamadas falla nombrando la cantidad. El marco ocupa casi todo el ancho
+    del cuadro (no un ancho fijo chico) y su texto es tan grande como entra en la fila que le
+    toca (H5 ronda 2). Al desapilar el último marco no queda en blanco: entra grande, centrado,
+    el resultado de la raíz (`"<llamada> = <valor>"`, p.ej. `"factorial(4) = 24"`).
   - `arbol`: un `paso` por cada LLAMADA (no por retorno: el árbol nunca se achica). Las
     posiciones (profundidad, orden entre hermanos) salen del árbol completo, pero cada nodo sólo
     se ve desde SU cue. Una llamada con los mismos argumentos que una anterior ("trabajo que se
     recalcula") entra directo resaltada en el acento, sin paso extra. Más de 60 llamadas falla
-    nombrando la cantidad; un texto que no entra en los nodos, también.
+    nombrando la cantidad; un texto que no entra en los nodos, también. El nodo usa todo el ancho
+    de su columna (sin tope fijo chico) y su texto es tan grande como entra: con pocas hojas
+    (árboles chicos) se ve bastante más grande que con muchas (H5 ronda 2).
   - `formato` (ambas, opcional): mismo mini-lenguaje que `diagramas.py` (`"fib({n})"`); sin él,
     `"n = 4"` (los argumentos tal cual, repr de Python).
   - El `archivo` es relativo a `TUT_ROOT` desde un guion (`editar.py` lo resuelve igual que el de
@@ -154,6 +159,14 @@ pueden mezclar con segmentos de pantalla en el mismo guion. Ejemplo completo, si
   Cada punto entra (con su etiqueta y su valor) en SU PROPIA cue, no cuando el trazo lo alcanza
   píxel a píxel: una cue que no es proporcional a la posición en `x` hace que la etiqueta
   aparezca un poco antes o después del trazo real. Menos de dos puntos falla claro.
+  - **Curva suave con pocos puntos** (H5 ronda 2, HITO3.md): con sólo 2-3 `puntos` el trazo entre
+    ellos es una recta (el interés compuesto se ve como "dos rectas", no una curva). Si el spec
+    trae `"crecimiento": {"inicial": 1000, "tasa": 0.10, "periodos": 30}` (interés compuesto:
+    `inicial * (1 + tasa) ^ x`), el TRAZO se arma con muchos segmentos interpolados de la fórmula
+    (12 por período); `puntos` sigue siendo sólo lo que se marca (etiqueta, cue, el valor que
+    cuenta) — nunca entra una marca por segmento de la curva, sólo las nombradas. Sin
+    `crecimiento`, el trazo sigue uniendo los `puntos` con rectas (si ya vienen muchos puntos, el
+    resultado ya se ve suave sin hacer nada extra).
 - **Escena `linea-de-vida`**: un eje de años/edades con un tramo por fila que SE DIBUJA (GSAP
   DrawSVG) en su propia cue, con marcas en cada edad que aparece en algún tramo.
   ```json
@@ -163,15 +176,18 @@ pueden mezclar con segmentos de pantalla en el mismo guion. Ejemplo completo, si
   ```
   `eje` (opcional: `{"desde": ..., "hasta": ..., "unidad": "años"}`) fuerza el rango; sin él, sale
   del mínimo/máximo de los tramos. `hasta <= desde` (en el eje o en un tramo) falla claro, igual
-  que más tramos de los que entran legibles en una columna.
+  que más tramos de los que entran legibles en una columna. La fila de cada tramo llena el alto
+  disponible entre tramos (con pocos tramos, mucho más alta que con muchos): el trazo es grueso,
+  mínimo 24 px, y el nombre al lado va grande; las marcas del eje, en mono, nunca por debajo de
+  24 px (H5 ronda 2).
 - **Cero WebGL**: el motor bloquea `getContext('webgl'|'webgl2'|'experimental-webgl')` en
   cualquier plantilla (la GPU integrada de Juani la arrastra, PLAN.md); si una lo llama, sale
   como `ContratoError`, igual que cualquier otro error de JavaScript de la página.
 - **Plantilla propia**: un HTML con `window.DURATION` y `async window.seek(t)` donde todo es
   función pura de `t` (sin `Date.now`, timers, `requestAnimationFrame` ni transiciones CSS).
   `escena.py render` falla claro si falta el contrato o si el JS tira un error.
-- **La puerta antes del render** (contraste, superposición, elementos fuera de cue) corre en
-  `verificar.py`: ver `references/verificacion.md`.
+- **La puerta antes del render** (contraste, superposición, texto chico, elementos fuera de cue)
+  corre en `verificar.py`: ver `references/verificacion.md`.
 - **Plantilla con GSAP** (3.15.0 vendorizado en `assets/escenas/vendor/gsap/`, licencia en su
   `LEEME.md`): cargá `vendor/gsap/gsap.min.js` y los plugins que uses (`DrawSVGPlugin`,
   `MorphSVGPlugin`, `SplitText`, `CustomEase`) ANTES de `base.js`, registralos con

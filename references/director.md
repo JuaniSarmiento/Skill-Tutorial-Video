@@ -82,6 +82,10 @@ recorre de verdad — R-5.8; no alcanza con nombrarla en un comentario):
 - **D6**: ningún texto visible de una escena pisa a otro, se sale del cuadro útil (invade la
   banda de subtítulos, el 17 % de abajo) ni de su caja; misma puerta y mismos tiempos que D5.
   Si la puerta no puede correr (Chrome, un spec roto), D5 y D6 son "no corrió" con la causa.
+- **D7** (H5 ronda 2, HITO3.md): ningún texto visible de una escena mide menos de 24 px
+  (umbral configurable en `verificar.hallazgos_del_cuadro`, `umbral_texto_chico`); un kicker o
+  una etiqueta en mono de exactamente 24 px pasa. Misma puerta y mismos tiempos que D5/D6: si no
+  puede correr, D7 es "no corrió" con la causa, igual que D5 y D6.
 
 `revisar` informa los hallazgos pero sale con 0 igual; sólo con `--estricto` sale con 1 si
 encontró algún hallazgo real, O SI ALGÚN CHEQUEO NO CORRIÓ (decisión de Juani, 03/10/2026).

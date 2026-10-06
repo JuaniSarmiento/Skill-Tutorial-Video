@@ -5,13 +5,16 @@
 `escena.py render` lleva la escena a 12 tiempos parejos más justo antes y después de cada cue y
 NO renderiza si dos textos visibles se pisan, si un texto se sale del cuadro útil (invade la
 banda de subtítulos) o de su caja, si el contraste es menor a 4,5:1 (3:1 en texto de 32 px, o de
-24 en negrita), o si un elemento se ve antes de su cue (las plantillas marcan cada elemento con
-`data-t`). Nombra escena, tiempo y elemento. `--sin-verificar` la saltea a propósito; suelta:
-`verificar.py spec.json...` (sale con 1 si hay hallazgos). El fondo de un texto es el de sus
-ancestros: un texto encima de una forma que no lo contiene se mide contra la página.
+24 en negrita), si un texto visible mide menos de 24 px (umbral configurable,
+`umbral_texto_chico` en `verificar.hallazgos_del_cuadro`; un kicker o etiqueta en mono de
+exactamente 24 px pasa — hallazgo "texto chico", H5 ronda 2), o si un elemento se ve antes de su
+cue (las plantillas marcan cada elemento con `data-t`). Nombra escena, tiempo y elemento.
+`--sin-verificar` la saltea a propósito; suelta: `verificar.py spec.json...` (sale con 1 si hay
+hallazgos). El fondo de un texto es el de sus ancestros: un texto encima de una forma que no lo
+contiene se mide contra la página.
 
-Estos mismos chequeos (contraste y superposición) son los que mide D5/D6 de `editar.py revisar`
-sobre el guion completo: ver `references/director.md`.
+Estos mismos chequeos (contraste, superposición y texto chico) son los que mide D5/D6/D7 de
+`editar.py revisar` sobre el guion completo: ver `references/director.md`.
 
 ### Revisar el guion (`editar.py revisar`)
 
