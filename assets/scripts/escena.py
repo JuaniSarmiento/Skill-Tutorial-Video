@@ -303,19 +303,30 @@ def navegador():
 # Una fuente que no está hace que Chrome use otra EN SILENCIO (medido por QA: Noto
 # Sans en vez de Inter). Si la fuente existe, el texto mide distinto que con la
 # genérica de respaldo; si mide igual contra dos genéricas, no está.
-FUENTE_FALTA = """f => {
+FUENTE_FALTA = """async f => {
+  try { await document.fonts.load(`700 72px "${f}"`); } catch (e) {}
   const c = document.createElement('canvas').getContext('2d');
   const ancho = fam => { c.font = `700 72px ${fam}`; return c.measureText('Interés compuesto 0123').width; };
   return ['monospace', 'serif'].every(g => ancho(`"${f}", ${g}`) === ancho(g));
 }"""
 
 
-def avisar_si_falta_la_fuente(page, fuente) -> bool:
-    if fuente and page.evaluate(FUENTE_FALTA, fuente):
-        print(f"AVISO: la fuente {fuente!r} del brand no está instalada: Chrome va a usar otra. "
-              "Instalala (Inter es libre, OFL) o cambiá 'fuente' en brand.json.", file=sys.stderr)
-        return True
-    return False
+def avisar_si_falta_la_fuente(page, brand: dict) -> bool:
+    """Avisa por cada familia del brand (fuente, fuente_titulos, fuente_mono) que no existe.
+
+    Las de la skill vienen con @font-face local (assets/escenas/fuentes/); document.fonts.load
+    las carga aunque la escena todavía no las use, así que una declarada no se confunde con
+    una que falta.
+    """
+    falta = False
+    for clave in ("fuente", "fuente_titulos", "fuente_mono"):
+        fuente = brand.get(clave)
+        if fuente and page.evaluate(FUENTE_FALTA, fuente):
+            print(f"AVISO: la fuente {fuente!r} del brand ({clave}) no está ni en assets/escenas/fuentes/ "
+                  "ni instalada: Chrome va a usar otra. Sumala con su @font-face en base.css o "
+                  f"cambiá '{clave}' en brand.json.", file=sys.stderr)
+            falta = True
+    return falta
 
 
 # R-4.5 (PLAN.md): Canvas 2D / SVG, nunca WebGL (la GPU integrada de Juani la arrastra).
@@ -392,7 +403,7 @@ def pagina_de_escena(browser, plantilla, spec: dict, brand: dict):
         info = page.evaluate("({duracion: window.DURATION === undefined ? null : window.DURATION,"
                              " seek: typeof window.seek})")
         verificar_contrato(info, plantilla)
-        avisar_si_falta_la_fuente(page, brand.get("fuente"))
+        avisar_si_falta_la_fuente(page, brand)
         yield page, float(info["duracion"])
         if errores:
             raise ContratoError(f"{plantilla} tiró un error de JavaScript: {errores[0]}")

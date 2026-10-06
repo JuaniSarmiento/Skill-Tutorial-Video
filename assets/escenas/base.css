@@ -1,4 +1,12 @@
 /* Base común de las escenas. Sin transiciones ni animaciones CSS: el tiempo lo maneja seek(t). */
+/* Fuentes locales (el motor bloquea la red): ver fuentes/LEEME.md. */
+@font-face { font-family: "Barlow"; font-weight: 500; src: url("fuentes/barlow-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "Barlow"; font-weight: 600; src: url("fuentes/barlow-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "Barlow"; font-weight: 700; src: url("fuentes/barlow-latin-700-normal.woff2") format("woff2"); }
+@font-face { font-family: "Barlow"; font-weight: 800; src: url("fuentes/barlow-latin-800-normal.woff2") format("woff2"); }
+@font-face { font-family: "Barlow"; font-weight: 900; src: url("fuentes/barlow-latin-900-normal.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Mono"; font-weight: 500; src: url("fuentes/ibm-plex-mono-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Mono"; font-weight: 600; src: url("fuentes/ibm-plex-mono-latin-600-normal.woff2") format("woff2"); }
 * { box-sizing: border-box; margin: 0; padding: 0; transition: none !important; animation: none !important; }
 html, body { width: 1920px; height: 1080px; overflow: hidden; }
 body {
@@ -13,9 +21,9 @@ body {
 }
 .cabecera { position: absolute; left: 140px; top: 112px; right: 140px; }
 .kicker {
-  display: inline-block; margin-bottom: 20px;
+  display: inline-block; margin-bottom: 20px; font-family: var(--fuente-mono);
   font-size: 24px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; color: var(--acento);
 }
-.titulo { display: table; font-size: 76px; font-weight: 700; letter-spacing: -.025em; line-height: 1.1; }
+.titulo { display: table; font-family: var(--fuente-titulos); font-size: 76px; font-weight: 700; letter-spacing: -.025em; line-height: 1.1; }
 .titulo .palabra { display: inline-block; margin-right: .26em; }
 .titulo .palabra:last-child { margin-right: 0; }

@@ -15,7 +15,9 @@
 
   const raiz = document.documentElement.style;
   for (const [k, v] of Object.entries(C)) raiz.setProperty('--' + k, v);
-  raiz.setProperty('--fuente', `"${B.fuente || 'Inter'}", "Noto Sans", sans-serif`);
+  raiz.setProperty('--fuente', `"${B.fuente || 'Barlow'}", "Noto Sans", sans-serif`);
+  raiz.setProperty('--fuente-titulos', `"${B.fuente_titulos || B.fuente || 'Barlow'}", "Noto Sans", sans-serif`);
+  raiz.setProperty('--fuente-mono', `"${B.fuente_mono || 'IBM Plex Mono'}", ui-monospace, monospace`);
 
   const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
 

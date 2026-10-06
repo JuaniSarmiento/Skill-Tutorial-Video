@@ -1,5 +1,7 @@
 {
- "fuente": "Inter",
+ "fuente": "Barlow",
+ "fuente_titulos": "Barlow",
+ "fuente_mono": "IBM Plex Mono",
  "colores": {
   "fondo": "#111318",
   "superficie": "#1B1E25",
