@@ -54,17 +54,28 @@ metadata:
   "fundido"?}` arriba del guion (ver README → El guion); `"musica": false` en un segmento la apaga
   sólo ahí. `archivo` es relativo a `TUT_ROOT`; la música la pone quien arma el tutorial en
   `TUT_ROOT/musica/` (la skill no la trae, por licencia) y si falta o no se puede leer, aborta
-  antes de generar nada. Ducking en rampa EN dB (no en escalón ni en amplitud lineal, QA
-  04/10/2026): 18 LU bajo la voz mientras hay voz, 10 LU en los silencios
-  (`debajo_de_la_voz_lu` sólo ajusta el primero); ataque rápido, liberación lenta
-  (`ATTACK_S`/`RELEASE_S`, sin bombeo). El final sigue dando -16 LUFS / TP ≤ -1.5 dBTP
-  igual que sin música: `musica.normalizar_dos_pasadas` mide con `loudnorm` de dos pasadas
-  y aplica un limitador de TRUE PEAK aparte (una sola pasada no llega al integrado cuando el
-  TP la restringe, QA 04/10/2026). Música más corta que el total: bucle con una UNIDAD sin
+  antes de generar nada. **"Voiceover carve" (H1, Hito 3, `docs/explicador/HITO3.md`)**: ANTES del
+  ducking de banda ancha, un EQ peaking fijo (`musica.BANDAS_VOZ_HZ`: 250/400/630/1000/2500 Hz a
+  -7dB, 1600 Hz a -15dB -idea robada de HyperFrames, `packages/core/src/audioCarve.ts`, Apache 2.0,
+  bandas fijas en vez de su FFT por voz) baja la música SÓLO en esas bandas mientras hay voz, y
+  vuelve a sonar entera en los silencios -mismo ataque/liberación que el ducking
+  (`musica.aplicar_carve_voz`, `ATTACK_S`/`RELEASE_S`); los graves (< 150 Hz) no los toca. Con el
+  carve haciendo buena parte del trabajo de "sacarse del medio", el ducking de banda ancha baja
+  MENOS que antes del Hito 3: **10 LU** bajo la voz mientras hay voz (antes 18), 10 LU en los
+  silencios (`debajo_de_la_voz_lu` sólo ajusta el primero) -ducking en rampa EN dB (no en escalón
+  ni en amplitud lineal, QA 04/10/2026), ataque rápido, liberación lenta
+  (`ATTACK_S`/`RELEASE_S`, sin bombeo). **Perfiles de loudness por destino (H1)**: `"destino"`
+  arriba del guion, `"youtube"` (default, -16 LUFS / TP ≤ -1.5 dBTP, el mismo de antes del Hito 3)
+  o `"redes"` (-14 LUFS / TP ≤ -1.0 dBTP); cualquier otro valor aborta nombrando los dos válidos
+  (`musica.PERFILES_LOUDNESS`). El final sigue dando el perfil elegido igual que sin música:
+  `musica.normalizar_dos_pasadas` mide con `loudnorm` de dos pasadas y aplica un limitador de TRUE
+  PEAK aparte (una sola pasada no llega al integrado cuando el TP la restringe, QA 04/10/2026;
+  margen del AAC: `musica.tp_interno`). Música más corta que el total: bucle con una UNIDAD sin
   costura (el crossfade aplicado una vez, no por vuelta -el costo no crece con la cantidad
   de vueltas); rechaza con `SystemExit` una música más corta que 2x el crossfade. Sin la clave `musica`
-  el final pasa por las mismas dos pasadas (decisión del 04/10/2026: todo final a -16 LUFS),
-  así que el audio del Hito 1 cambió a propósito; el video no.
+  el final pasa por las mismas dos pasadas (decisión del 04/10/2026: todo final al perfil elegido),
+  así que el audio del Hito 1 cambió a propósito; el video no (G3 sigue siendo sólo framemd5 sin la
+  clave `musica`, el carve y el nuevo default de ducking no tocan ese camino).
 - **Efectos de sonido** (`editar.py voz`, `sfx.py`): `"sfx": [{"archivo", "cue", "ganancia_db"?}]`
   en un segmento (ver README → El guion). `archivo` es el nombre de un sonido generado (`pop`,
   `click`, `whoosh`, `ding`; decisión Q1 de Juani, `docs/explicador/HITO2.md`: sin licencia, se
