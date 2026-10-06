@@ -79,6 +79,38 @@ def test_con_un_solo_tramo_y_otro_rango_el_eje_cambia(chrome):
     assert "0 meses" in marcas and "6 meses" in marcas
 
 
+# --- llena el área: barras gruesas y etiquetas grandes (H5 ronda 2, HITO3.md) -------
+
+def _anchos_trazo(page, t):
+    escena._cuadro(page, t)
+    return page.evaluate("""() => [...document.querySelectorAll('svg line[stroke="var(--acento)"]')]
+        .map(l => parseFloat(getComputedStyle(l).strokeWidth))""")
+
+
+def test_las_barras_son_gruesas_legibles_en_celular(chrome):
+    with _abrir(chrome) as (page, d):
+        anchos = _anchos_trazo(page, d - 0.05)
+    assert anchos and all(w >= 24 for w in anchos), anchos
+
+
+def test_con_un_solo_tramo_la_barra_es_mas_gruesa_que_con_dos(chrome):
+    uno = {"tipo": "linea-de-vida", "tramos": [{"nombre": "Sola", "desde": 0, "hasta": 10, "cue": 0.2}],
+           "duracion": 1.5}
+    with _abrir(chrome, uno) as (page, d):
+        ancho_uno = _anchos_trazo(page, d - 0.05)[0]
+    with _abrir(chrome) as (page, d):   # ANA_SOFIA, dos tramos
+        ancho_dos = _anchos_trazo(page, d - 0.05)[0]
+    assert ancho_uno > ancho_dos, (ancho_uno, ancho_dos)
+
+
+def test_las_marcas_del_eje_miden_al_menos_24px(chrome):
+    with _abrir(chrome) as (page, d):
+        escena._cuadro(page, d - 0.05)
+        pxs = page.evaluate(
+            "() => [...document.querySelectorAll('.marca')].map(e => parseFloat(getComputedStyle(e).fontSize))")
+    assert pxs and all(p >= 24 for p in pxs), pxs
+
+
 # --- determinismo ---------------------------------------------------------------------
 
 def _hash(page, t):

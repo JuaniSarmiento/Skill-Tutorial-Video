@@ -39,13 +39,15 @@ recalcula, visible apenas aparece.
   const porId = Object.fromEntries(nodos.map(n => [n.id, n]));
   const hojas = nodos[0].hojas, filas = nodos[0].profundidad_total;
   const AREA = { x0: 160, x1: 1760, y0: 300, y1: BANDA };
-  const TOPE = 30, PISO = 14;
+  // TOPE subido (H5 ronda 2): "tan grande como entre". PISO es el mínimo antes de fallar.
+  const TOPE = 72, PISO = 14;
   let dibujarCab;
 
   function layout(cab) {
     AREA.y0 = cab.techo(AREA.y0, (AREA.y1 - AREA.y0) / filas, AREA.y1);
     const colW = (AREA.x1 - AREA.x0) / hojas, rowH = (AREA.y1 - AREA.y0) / filas;
-    const w = Math.min(190, colW * 0.84), h = Math.min(96, rowH * 0.62);
+    // sin tope fijo de ancho/alto (H5 ronda 2): el nodo usa toda su columna/fila, con aire
+    const w = colW * 0.86, h = Math.min(170, rowH * 0.66);
     for (const n of nodos) {
       n.cx = AREA.x0 + (n.x + 0.5) * colW;
       n.cy = AREA.y0 + n.profundidad * rowH + rowH / 2;

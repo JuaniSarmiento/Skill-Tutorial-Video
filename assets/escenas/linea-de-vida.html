@@ -18,11 +18,11 @@ marca en cada edad que aparece en algún tramo) está desde el arranque.
 <link rel="stylesheet" href="base.css">
 <style>
   svg { position: absolute; inset: 0; width: 1920px; height: 1080px; overflow: visible; }
-  .nombre { position: absolute; transform: translateY(-50%); font-weight: 650; font-size: 32px; white-space: nowrap; }
+  .nombre { position: absolute; transform: translateY(-50%); font-weight: 650; font-size: 44px; white-space: nowrap; }
   .rango { position: absolute; transform: translateY(-50%); font-family: var(--fuente-mono); font-weight: 500;
-           font-size: 24px; color: var(--tenue); white-space: nowrap; }
+           font-size: 26px; color: var(--tenue); white-space: nowrap; }
   .marca { position: absolute; transform: translate(-50%, 0); font-family: var(--fuente-mono); font-weight: 500;
-           font-size: 22px; color: var(--tenue); white-space: nowrap; }
+           font-size: 24px; color: var(--tenue); white-space: nowrap; }
 </style>
 <script src="vendor/gsap/gsap.min.js"></script>
 <script src="vendor/gsap/DrawSVGPlugin.min.js"></script>
@@ -39,19 +39,20 @@ marca en cada edad que aparece en algún tramo) está desde el arranque.
   if (!(max > min)) throw new Error(`el eje necesita hasta > desde (vino ${min}..${max})`);
   const AREA = { x0: 220, x1: 1760, y0: 320, y1: BANDA - 50 };
   const sx = v => AREA.x0 + (v - min) / (max - min) * (AREA.x1 - AREA.x0);
-  const FILA_MAX = 120, FILA_MIN = 64, GAP = 22;
+  // FILA_MAX subido (H5 ronda 2): llenar el área en vez de parar en el primer tamaño que
+  // entra. Con pocos tramos cada fila ocupa mucho más alto -> barras bien gruesas.
+  const FILA_MAX = 320, FILA_MIN = 64, GAP = 22;
   let dibujarCab;
 
   function layout(cab) {
     const minimo = tramos.length * FILA_MIN + (tramos.length - 1) * GAP;
     AREA.y0 = cab.techo(AREA.y0, minimo, AREA.y1);
     const disponible = AREA.y1 - AREA.y0;
-    for (let fila = FILA_MAX; fila >= FILA_MIN; fila -= 2) {
-      const alto = tramos.length * fila + (tramos.length - 1) * GAP;
-      if (alto <= disponible) return fila;
-    }
-    throw new Error(`la línea de vida no entra legible: ${tramos.length} tramos no caben ` +
-                    `en ${Math.round(disponible)}px a ${FILA_MIN}px cada uno: usá menos tramos`);
+    const fila = (disponible - (tramos.length - 1) * GAP) / tramos.length;
+    if (fila < FILA_MIN)
+      throw new Error(`la línea de vida no entra legible: ${tramos.length} tramos no caben ` +
+                      `en ${Math.round(disponible)}px a ${FILA_MIN}px cada uno: usá menos tramos`);
+    return Math.min(FILA_MAX, fila);
   }
 
   E.contrato(tramos.map(t => t.t0), () => {
@@ -82,15 +83,17 @@ marca en cada edad que aparece en algún tramo) está desde el arranque.
     tramos.forEach((t, i) => {
       const cy = AREA.y0 + i * (fila + GAP) + fila / 2;
       t.linea = document.createElementNS(NS, 'line');
+      // gruesas y legibles en celular (H5 ronda 2): piso de 24px aunque la fila sea la mínima
+      const grosor = Math.max(24, Math.min(90, fila * 0.14));
       Object.entries({ x1: sx(t.desde), y1: cy, x2: sx(t.hasta), y2: cy,
-                      stroke: 'var(--acento)', 'stroke-width': Math.min(14, fila * 0.16), 'stroke-linecap': 'round' })
+                      stroke: 'var(--acento)', 'stroke-width': grosor, 'stroke-linecap': 'round' })
         .forEach(([k, v]) => t.linea.setAttribute(k, v));
       svg.appendChild(t.linea);
       gsap.set(t.linea, { drawSVG: '0%' });
 
       t.nombreEl = crear('div', 'nombre', document.body, t.nombre || '');
       t.nombreEl.style.left = sx(t.desde) + 'px';
-      t.nombreEl.style.top = (cy - Math.min(14, fila * 0.16) / 2 - 24) + 'px';
+      t.nombreEl.style.top = (cy - grosor / 2 - 28) + 'px';
       t.nombreEl.dataset.caja = 'nombre ' + (t.nombre || i);
       t.nombreEl.dataset.t = t.t0;
 

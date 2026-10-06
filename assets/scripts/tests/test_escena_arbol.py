@@ -106,6 +106,31 @@ def _rgb(hexcolor):
     return f"rgb({r}, {g}, {b})"
 
 
+# --- llena el área: tan grande como entre (H5 ronda 2, HITO3.md) --------------------
+
+def test_con_pocas_hojas_los_nodos_son_mas_anchos_que_el_limite_viejo(carpeta, chrome):
+    # fibonacci(3): 5 llamadas, 3 hojas -> antes el ancho de nodo tenía un tope fijo de 190px
+    spec = _spec(carpeta, n=3, duracion=4.0)
+    with _abrir(chrome, spec) as (page, d):
+        escena._cuadro(page, d - 0.05)
+        anchos = page.evaluate("() => [...document.querySelectorAll('.nodo')].map(e => e.getBoundingClientRect().width)")
+    assert max(anchos) > 190, anchos
+
+
+def test_con_menos_nodos_el_texto_es_mas_grande_que_con_muchos(carpeta, chrome):
+    chico = _spec(carpeta, n=3, duracion=4.0)      # 5 llamadas
+    grande = _spec(carpeta, n=5, duracion=8.0)     # 15 llamadas
+    with _abrir(chrome, chico) as (page, d):
+        escena._cuadro(page, d - 0.05)
+        px_chico = page.evaluate(
+            "() => parseFloat(getComputedStyle(document.querySelector('.nodo .txt')).fontSize)")
+    with _abrir(chrome, grande) as (page, d):
+        escena._cuadro(page, d - 0.05)
+        px_grande = page.evaluate(
+            "() => parseFloat(getComputedStyle(document.querySelector('.nodo .txt')).fontSize)")
+    assert px_chico > px_grande, (px_chico, px_grande)
+
+
 # --- determinismo ---------------------------------------------------------------------
 
 def _hash(page, t):
