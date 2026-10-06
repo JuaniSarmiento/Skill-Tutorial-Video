@@ -22,7 +22,7 @@ body {
 .cabecera { position: absolute; left: 140px; top: 112px; right: 140px; }
 .kicker {
   display: inline-block; margin-bottom: 20px; font-family: var(--fuente-mono);
-  font-size: 22px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; color: var(--acento);
+  font-size: 24px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; color: var(--acento);
 }
 /* Jerarquía para video (H2): títulos 64–120 px, cuerpo 28–42, etiquetas 18–24 en mono. */
 .titulo { display: table; font-family: var(--fuente-titulos); font-size: 76px; font-weight: 800; letter-spacing: -.03em; line-height: 1.1; }

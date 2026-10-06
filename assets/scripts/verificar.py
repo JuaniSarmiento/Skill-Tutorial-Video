@@ -66,7 +66,12 @@ def umbral(px: float, peso: int) -> float:
 
 
 def color(css: str):
-    """'rgb(r, g, b)' / 'rgba(r, g, b, a)' de getComputedStyle -> (r, g, b, a)."""
+    """'rgb(r, g, b)' / 'rgba(r, g, b, a)' / 'color(srgb r g b [/ a])' (lo que da un
+    color-mix) de getComputedStyle -> (r, g, b, a), con r, g, b de 0 a 255."""
+    m = re.fullmatch(r"color\(srgb\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s*/\s*([\d.]+))?\s*\)", css.strip())
+    if m:
+        r, g, b = (round(float(x) * 255) for x in m.groups()[:3])
+        return (r, g, b, float(m.group(4)) if m.group(4) is not None else 1.0)
     m = re.fullmatch(r"rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:[,\s/]+([\d.]+))?\s*\)", css.strip())
     if not m:
         raise ValueError(f"color que no se sabe leer: {css!r}")

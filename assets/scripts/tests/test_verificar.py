@@ -35,6 +35,9 @@ def test_el_umbral_baja_a_3_para_texto_grande(px, peso, umbral):
     ("rgb(17, 19, 24)", (17, 19, 24, 1.0)),
     ("rgba(242, 181, 68, 0.5)", (242, 181, 68, 0.5)),
     ("rgba(0, 0, 0, 0)", (0, 0, 0, 0.0)),
+    # lo que devuelve Chrome para un color-mix(in srgb, ...)
+    ("color(srgb 0.665098 0.680392 0.705882)", (170, 173, 180, 1.0)),
+    ("color(srgb 1 0 0 / 0.5)", (255, 0, 0, 0.5)),
 ])
 def test_lee_los_colores_que_devuelve_getcomputedstyle(css, rgba):
     assert verificar.color(css) == rgba

@@ -30,7 +30,7 @@ El último elemento que entró es el foco y lleva el color de acento; el resto, 
     box-shadow: 0 24px 60px -30px rgba(0, 0, 0, .7);
   }
   .nodo .txt { font-weight: 650; letter-spacing: -.015em; white-space: pre; text-align: center; line-height: 1.15; }
-  .nodo .det { margin-top: 10px; font-size: 32px; font-weight: 500; color: var(--tenue); white-space: nowrap; }
+  .nodo .det { margin-top: 10px; font-size: 34px; font-weight: 500; color: var(--tenue); white-space: nowrap; }
   .etq {
     position: absolute; transform: translate(-50%, -50%); padding: 4px 14px; white-space: nowrap;
     font-size: 24px; color: var(--tenue); background: var(--fondo); border-radius: 8px;
@@ -65,8 +65,8 @@ El último elemento que entró es el foco y lleva el color de acento; el resto, 
 
   const medida = (n, px) => {
     n.lineas = renglones(n.texto, px);
-    const w = Math.max(...n.lineas.map(l => medir(l, px, 650)), n.detalle ? medir(n.detalle, 32, 500) : 0);
-    return { w: Math.max(px * 5.5, w + 120), h: n.lineas.length * px * 1.15 + 88 + (n.detalle ? 46 : 0) };
+    const w = Math.max(...n.lineas.map(l => medir(l, px, 650)), n.detalle ? medir(n.detalle, 34, 500) : 0);
+    return { w: Math.max(px * 5.5, w + 120), h: n.lineas.length * px * 1.15 + 88 + (n.detalle ? 48 : 0) };
   };
   const flechaEntre = (a, b) => flechas.find(f => [f.de, f.a].sort().join() === [a.id, b.id].sort().join());
   // el hueco entre dos nodos vecinos tiene que alojar la etiqueta de su flecha

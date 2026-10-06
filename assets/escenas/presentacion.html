@@ -34,13 +34,13 @@ tenue. Si no entran a 300 px la escena falla nombrando el número: acortalo ("1,
      centrado vertical reservaría su lugar desde el arranque (aunque todavía no
      hubiera entrado por su cue) y el kicker+título+barra quedarían pegados arriba
      con la mitad de abajo vacía mientras el subtítulo espera su turno. */
-  .sub { position: absolute; left: 0; top: 100%; display: table; font-size: 48px;
+  .sub { position: absolute; left: 0; top: 100%; display: table; font-size: 54px;
          font-weight: 500; color: var(--tenue); letter-spacing: -.01em; }
   .puntos { position: absolute; left: 140px; right: 140px; top: 300px; bottom: 184px;
             display: flex; flex-direction: column; justify-content: center; gap: 32px; }
   .punto { display: flex; align-items: baseline; gap: 32px; }
   .num { width: 56px; flex: none; font-family: var(--fuente-mono); font-size: 24px; font-weight: 600; color: var(--tenue); }
-  .txt { display: table; font-size: 42px; font-weight: 500; letter-spacing: -.01em; line-height: 1.18; }
+  .txt { display: table; font-size: 68px; font-weight: 500; letter-spacing: -.01em; line-height: 1.18; }
   .numeros { position: absolute; left: 140px; width: max-content; display: flex; align-items: baseline; gap: 120px; }
   .bloque { display: flex; align-items: baseline; gap: 28px; transform-origin: 0 100%; }
   .cifra { font-family: var(--fuente-titulos); font-weight: 900; line-height: .85; letter-spacing: -.045em; white-space: nowrap; }
@@ -52,6 +52,9 @@ tenue. Si no entran a 300 px la escena falla nombrando el número: acortalo ("1,
 <script>
   const { S, crear, tiempo, resorte, aparecer, contrato, cabecera, M, BANDA } = E;
   const CUERPO = 42, PISO = 28;   // px del cuerpo: de 42 se achica hasta 28, menos no se lee en un celular
+  // Una lista corta (hasta 4 puntos) no es cuerpo: es lo que se lee de la escena. Va de 68
+  // a 44 px y sólo si ni así entra sigue achicándose como cuerpo.
+  const CORTA = 4, GRANDE = 68, GRANDE_MIN = 44;
   const CIFRA = 360, CIFRA_MIN = 300;   // px del número protagonista
   const puntos = (S.puntos || []).map((p, i) => ({ ...p, t0: tiempo(p, 0.8 + i * 0.9) }));
   if (S.numero && puntos.length)
@@ -137,12 +140,13 @@ tenue. Si no entran a 300 px la escena falla nombrando el número: acortalo ("1,
     // se juntan los renglones antes de rendirse
     const alto = () => filas.length ? filas.at(-1).fila.getBoundingClientRect().bottom - filas[0].fila.getBoundingClientRect().top : 0;
     const intentos = [];
+    if (filas.length <= CORTA) for (let px = GRANDE; px >= GRANDE_MIN; px -= 2) intentos.push([px, 0.77]);
     for (let px = CUERPO; px >= PISO; px -= 2) intentos.push([px, 0.77]);
     intentos.push([PISO, 0.6]);   // 0.6 x 28 = 17 px: el aire mínimo entre dos renglones
     for (const [px, aire] of intentos) {
-      if (alto() <= lista.clientHeight) break;
       lista.style.gap = (px * aire).toFixed(1) + 'px';
       filas.forEach(x => { x.txt.style.fontSize = px + 'px'; });
+      if (alto() <= lista.clientHeight) break;
     }
     if (alto() > lista.clientHeight)
       throw new Error(`los ${filas.length} puntos no entran en pantalla ni a ${PISO} px: partilos en dos escenas${culpa}`);
@@ -173,7 +177,8 @@ tenue. Si no entran a 300 px la escena falla nombrando el número: acortalo ("1,
       x.fila.style.transform = `translateY(${((1 - resorte(t - x.t0)) * (M.subida ?? 28)).toFixed(2)}px)`;
       x.num.style.color = i === foco ? 'var(--acento)' : 'var(--tenue)';
       // el punto en foco en texto; los que ya pasaron, en tenue (se lee dónde va la voz)
-      x.txt.style.color = i === foco ? 'var(--texto)' : 'var(--tenue)';
+      // los anteriores, entre tenue y texto: ~8:1 sobre el fondo (el tenue solo, 5,9:1, casi no se veía)
+      x.txt.style.color = i === foco ? 'var(--texto)' : 'color-mix(in srgb, var(--texto) 30%, var(--tenue))';
     });
   });
 </script>

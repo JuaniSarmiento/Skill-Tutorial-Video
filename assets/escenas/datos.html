@@ -28,7 +28,7 @@ Si los números no entran ni a 24 px, la escena falla en vez de pisarlos.
            background: color-mix(in srgb, var(--texto) 20%, var(--fondo)); }
   .barra.destacada { background: var(--acento); }
   .valor { position: absolute; transform: translateX(-50%); white-space: nowrap;
-           font-size: 54px; font-weight: 700; letter-spacing: -.02em; }
+           font-size: 64px; font-weight: 700; letter-spacing: -.02em; }
   .cat { position: absolute; text-align: center; line-height: 1.2;
          font-size: 36px; font-weight: 500; color: var(--tenue); }
   .nota { position: absolute; right: 140px; font-size: 20px; color: var(--tenue); }
@@ -58,8 +58,11 @@ Si los números no entran ni a 24 px, la escena falla en vez de pisarlos.
     const n = Math.abs(v).toLocaleString('es-AR', { minimumFractionDigits: dec, maximumFractionDigits: dec });
     return (v < 0 && /[1-9]/.test(n) ? '-' : '') + (S.prefijo || '') + n + (S.sufijo || '');
   }
-  // abajo: deja lugar a dos renglones de rótulo y la nota antes de la banda de subtítulos
-  const G = { x0: 220, x1: 1700, arriba: 410, abajo: 740 };
+  // arriba: lo más alto que puede empezar el gráfico (la cabecera lo baja si hace falta);
+  // abajo: se calcula al armar, justo encima de los rótulos y la nota (antes de la banda)
+  const G = { x0: 220, x1: 1700, arriba: 330, abajo: 740 };
+  const VALOR = 64;                   // px de las cifras: Barlow es más angosta que Inter
+  const AIRE_CAT = 24, AIRE_NOTA = 20;
   const ALTO_MIN = 200;   // px de gráfico: ~60 % del alto normal (330, H2); con menos, las barras no se comparan
   const positivo = Math.max(0, ...barras.map(b => b.valor));
   const negativo = Math.min(0, ...barras.map(b => b.valor));
@@ -72,22 +75,48 @@ Si los números no entran ni a 24 px, la escena falla en vez de pisarlos.
     const ancho = Math.min(240, slot * 0.56);
     const cabe = slot - 24;
     // el número más ancho tiene que entrar en su slot; si ni al piso entra, se avisa
-    pxVal = Math.min(54, ...barras.map(b => 54 * cabe / Math.max(1, medir(formato(b.valor, b.dec), 54, 700))));
+    pxVal = Math.min(VALOR, ...barras.map(b => VALOR * cabe / Math.max(1, medir(formato(b.valor, b.dec), VALOR, 700))));
     if (pxVal < PISO)
       throw new Error(`los números de las ${barras.length} barras no entran ni a ${PISO} px: ` +
                       'usá menos barras o una unidad más grande (miles, millones)');
+    // Primero lo que va debajo del gráfico (rótulos y nota), medido: el gráfico termina
+    // justo arriba de eso, así usa todo el alto hasta la banda de subtítulos.
+    // los rótulos de categoría van a un solo tamaño; el que no entra a PISO se parte en renglones
+    const pxCat = Math.max(PISO, Math.min(36, ...barras.map(b => 36 * cabe / Math.max(1, medir(b.etiqueta, 36, 500)))));
+    barras.forEach((b, i) => {
+      b.cx = G.x0 + slot * (i + 0.5);
+      b.cat = crear('div', 'cat', document.body, b.etiqueta);
+      b.cat.dataset.caja = 'categoria ' + b.etiqueta;
+      b.cat.dataset.t = b.t0;
+      Object.assign(b.cat.style, { left: (b.cx - cabe / 2) + 'px', width: cabe + 'px', top: '0px', fontSize: pxCat + 'px' });
+      if (b.cat.scrollWidth > b.cat.clientWidth + 1 || b.cat.getBoundingClientRect().height > pxCat * 1.25 * 2 + 1)
+        throw new Error(`el rótulo ${JSON.stringify(b.etiqueta)} no entra en dos renglones de ${pxCat} px: acortalo`);
+    });
+    const altoCat = Math.max(0, ...barras.map(b => b.cat.getBoundingClientRect().height));
+    let nota = null;
+    if (S.nota) {
+      nota = crear('div', 'nota mono', document.body, S.nota);
+      nota.dataset.caja = 'nota';
+    }
+    // de abajo hacia arriba, desde la banda: la nota, los rótulos y ahí termina el gráfico
+    let piso = E.BANDA - 2;
+    if (nota) {
+      nota.style.top = piso + 'px';
+      piso -= nota.getBoundingClientRect().bottom - piso;   // su alto medido ya en su lugar
+      nota.style.top = piso + 'px';
+      piso -= AIRE_NOTA;
+    }
+    barras.forEach(b => { b.cat.style.top = (piso - altoCat) + 'px'; });
+    G.abajo = piso - altoCat - AIRE_CAT;
     // el número de la barra más alta va pxVal*1.4 por encima de ella: también tiene que
     // quedar debajo de la cabecera medida
     const encima = pxVal * 1.4;
     G.arriba = cab.techo(G.arriba - encima, encima + ALTO_MIN, G.abajo) + encima;
     escala = (G.abajo - G.arriba) / ((positivo - negativo) || 1);
     cero = G.arriba + positivo * escala;   // la línea de base es el cero, no el borde de abajo
-    // los rótulos de categoría van a un solo tamaño; el que no entra a PISO se parte en renglones
-    const pxCat = Math.max(PISO, Math.min(36, ...barras.map(b => 36 * cabe / Math.max(1, medir(b.etiqueta, 36, 500)))));
     const linea = crear('div', 'base');
     Object.assign(linea.style, { left: (G.x0 - 20) + 'px', width: (G.x1 - G.x0 + 40) + 'px', top: cero + 'px' });
-    barras.forEach((b, i) => {
-      b.cx = G.x0 + slot * (i + 0.5);
+    barras.forEach(b => {
       b.h = Math.abs(b.valor) * escala;
       b.el = crear('div', 'barra' + (b.destacar ? ' destacada' : ''));
       Object.assign(b.el.style, { left: (b.cx - ancho / 2) + 'px', width: ancho + 'px' });
@@ -95,21 +124,7 @@ Si los números no entran ni a 24 px, la escena falla en vez de pisarlos.
       b.val.dataset.caja = 'valor ' + b.etiqueta;
       b.val.dataset.t = b.t0;   // la puerta (verificar.py) mide que no se vea antes
       Object.assign(b.val.style, { left: b.cx + 'px', fontSize: pxVal + 'px' });
-      b.cat = crear('div', 'cat', document.body, b.etiqueta);
-      b.cat.dataset.caja = 'categoria ' + b.etiqueta;
-      b.cat.dataset.t = b.t0;
-      Object.assign(b.cat.style, { left: (b.cx - cabe / 2) + 'px', width: cabe + 'px', top: (G.abajo + 24) + 'px', fontSize: pxCat + 'px' });
-      if (b.cat.scrollWidth > b.cat.clientWidth + 1 || b.cat.getBoundingClientRect().height > pxCat * 1.25 * 2 + 1)
-        throw new Error(`el rótulo ${JSON.stringify(b.etiqueta)} no entra en dos renglones de ${pxCat} px: acortalo`);
     });
-    if (S.nota) {
-      const nota = crear('div', 'nota mono', document.body, S.nota);
-      nota.dataset.caja = 'nota';
-      const debajo = Math.max(...barras.map(b => b.cat.getBoundingClientRect().bottom), G.abajo);
-      nota.style.top = (debajo + 16) + 'px';
-      if (nota.getBoundingClientRect().bottom > E.BANDA)
-        throw new Error(`la nota ${JSON.stringify(S.nota)} no entra antes de la banda de subtítulos: acortala`);
-    }
   }, t => {
     dibujarCab(t);
     for (const b of barras) {

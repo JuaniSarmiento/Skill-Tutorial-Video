@@ -93,13 +93,18 @@
     };
   }
 
+  // Todas las caras declaradas (@font-face de base.css), cargadas: document.fonts.ready
+  // sólo espera las que ya se usaron, y una que se usa recién al armar (la mono 500 de una
+  // nota) se mediría con la de respaldo y después cambiaría de tamaño.
+  const fuentes = () => Promise.all([...document.fonts].map(f => f.load().catch(() => null)));
+
   // montar() arma el DOM una vez (con las fuentes ya cargadas, para medir bien);
   // dibujar(t) sólo fija estilos en función de t.
   function contrato(tiempos, montar, dibujar) {
     window.DURATION = S.duracion ?? Math.max(0, ...tiempos) + 2.5;
     let montado = false;
     window.seek = async t => {
-      if (!montado) { await document.fonts.ready; montar(); montado = true; }
+      if (!montado) { await document.fonts.ready; await fuentes(); montar(); montado = true; }
       dibujar(t);
     };
   }
@@ -115,7 +120,7 @@
     if (!g) throw new Error('E.lineaDeTiempo necesita GSAP: cargá vendor/gsap/gsap.min.js antes que base.js');
     g.globalTimeline.pause();
     let tl;
-    const lista = document.fonts.ready.then(() => {
+    const lista = document.fonts.ready.then(fuentes).then(() => {
       tl = construir().pause();
       // GSAP inicializa cada tween en su primer render (MorphSVG normaliza el path a
       // cúbicas, DrawSVG fija su dashoffset): sin esto el cuadro de t dependía de por
