@@ -1,0 +1,42 @@
+<!doctype html>
+<!--
+Plantilla de prueba de H0 (HITO3.md): GSAP sobre el contrato del motor.
+Una timeline pausada con los tres plugins: SplitText (el título entra palabra por
+palabra), DrawSVG (un trazo que se dibuja) y MorphSVG (un círculo que se vuelve
+estrella). La usan tests/test_gsap.py; no es un `tipo` de escena.
+
+spec: {"titulo": {"texto": "Todo es función de t"}}
+-->
+<meta charset="utf-8">
+<link rel="stylesheet" href="../../../../escenas/base.css">
+<style>
+  #titulo { position: absolute; left: 140px; top: 140px; font-size: 110px; letter-spacing: -.03em; }
+  svg { position: absolute; inset: 0; color: var(--acento); }
+</style>
+<h1 id="titulo" class="titulo"></h1>
+<svg width="1920" height="1080">
+  <path id="trazo" d="M 200 800 C 600 500, 1000 1000, 1700 700" fill="none" stroke="currentColor"
+        stroke-width="14" stroke-linecap="round"/>
+  <path id="forma" d="M 1400 420 m -120 0 a 120 120 0 1 0 240 0 a 120 120 0 1 0 -240 0" fill="currentColor"/>
+  <path id="estrella" d="M1400 290 L1435 375 L1525 380 L1455 435 L1480 525 L1400 475 L1320 525 L1345 435 L1275 380 L1365 375 Z"
+        fill="none" stroke="none"/>
+</svg>
+<script src="../../../../escenas/vendor/gsap/gsap.min.js"></script>
+<script src="../../../../escenas/vendor/gsap/DrawSVGPlugin.min.js"></script>
+<script src="../../../../escenas/vendor/gsap/MorphSVGPlugin.min.js"></script>
+<script src="../../../../escenas/vendor/gsap/SplitText.min.js"></script>
+<script src="../../../../escenas/base.js"></script>
+<script>
+  gsap.registerPlugin(DrawSVGPlugin, MorphSVGPlugin, SplitText);
+  const { S } = E;
+  E.lineaDeTiempo(() => {
+    const titulo = document.querySelector('#titulo');
+    titulo.textContent = S.titulo?.texto ?? 'Todo es función de t';
+    const { words } = SplitText.create(titulo, { type: 'words', wordsClass: 'palabra' });
+    return gsap.timeline()
+      .from(words, { opacity: 0, y: 40, duration: 0.5, stagger: 0.12, ease: 'power3.out' }, 0)
+      .fromTo('#trazo', { drawSVG: '0%' }, { drawSVG: '100%', duration: 1.2, ease: 'power2.inOut' }, 0.6)
+      .to('#forma', { morphSVG: '#estrella', duration: 1.0, ease: 'power2.inOut' }, 1.6)
+      .set({}, {}, 3);
+  });
+</script>

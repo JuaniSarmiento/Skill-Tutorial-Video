@@ -111,6 +111,11 @@
     let tl;
     const lista = document.fonts.ready.then(() => {
       tl = construir().pause();
+      // GSAP inicializa cada tween en su primer render (MorphSVG normaliza el path a
+      // cúbicas, DrawSVG fija su dashoffset): sin esto el cuadro de t dependía de por
+      // dónde pasó antes la timeline (medido en la prueba de H0). Se recorre entera una
+      // vez, sin eventos, y vuelve a 0: desde ahí cada t se ve igual en cualquier orden.
+      tl.totalTime(tl.totalDuration(), true).totalTime(0, true);
       window.DURATION = S.duracion ?? tl.duration();
     });
     window.seek = async t => { await lista; tl.totalTime(t, false); };
