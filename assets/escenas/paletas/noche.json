@@ -1,0 +1,10 @@
+{
+ "colores": {
+  "fondo": "#111318",
+  "superficie": "#1B1E25",
+  "borde": "#2C313B",
+  "texto": "#F1F0EC",
+  "tenue": "#8B919C",
+  "acento": "#F2B544"
+ }
+}

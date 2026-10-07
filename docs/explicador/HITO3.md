@@ -97,6 +97,74 @@ vez** (se llegó al límite de uso con dos agentes Opus en paralelo).
 ## Pendientes
 _Se completa al cerrar cada rebanada._
 
+### H10 cerrada (07/10/2026, rama `feat/hito3`)
+Paletas de color elegibles, pedido de Juani.
+
+- **Archivos**: `assets/escenas/paletas/{noche,utn,navy,papel}.json`, cada uno con el set
+  completo de `colores` de `brand.json` (`fondo`, `superficie`, `borde`, `texto`, `tenue`,
+  `acento`). `noche` es byte a byte la paleta de siempre (S0 no cambia). `utn` sale de
+  `presentaciones/references/estilo.md` (NAVY/ACC/TXT/GRIS/CARD/BORDE/CODEBG/NARANJA):
+  fondo blanco, `acento` = NARANJA `#B54708` (el "acento fuerte" de esa paleta, literal).
+  `navy` es la misma familia en oscuro (fondo `#1B365D`, texto claro, acento celeste
+  `#8FB0D6`, derivado — no está en `estilo.md`). `papel` es un claro neutro cálido (fondo
+  crema, acento terracota) diseñado para esta skill, no de ninguna referencia.
+- **Selección**: `"paleta": "utn"` arriba del todo en `guion/vNN.json`. Precedencia default
+  `noche` < paleta elegida < `brand.json` del proyecto (`escena.cargar_brand(ruta,
+  paleta=None)`, mismo merge de un nivel que ya usaba `brand.json`). Una paleta
+  desconocida aborta `editar.py imagen` ANTES de generar nada (`escena.paletas_validas()`),
+  listando las que hay.
+- **Wireado** en los 3 puntos donde `editar.py` carga el brand: la escena (`build_segment`),
+  el rótulo (`_aplicar_rotulo`) y las transiciones (`imagen()`), los tres con un parámetro
+  `paleta` nuevo que viaja desde `g.get("paleta")`. `_verificacion_de_escena` (la que usa
+  `editar.py revisar`) quedó **fuera de este wireado a propósito** (no estaba en el pedido):
+  sigue mirando sólo `ROOT/brand.json`, así que `revisar --estricto` contra una paleta
+  elegida por guion se probó con el mecanismo YA EXISTENTE de `brand.json` de proyecto (ver
+  Prueba), no con el campo `paleta` nuevo. Queda pendiente si se quiere que `revisar` sepa
+  de `paleta` directamente.
+- **Dos arreglos de H9b que quedaban sueltos** (mismos templates, mismo pedido): el punto
+  del label de `curva` (`"30 años US$ 17.449"`) pisando el contador grande — no se pudo
+  **reproducir** con la spec del pedido ni variando kicker/título/duración (la geometría ya
+  deja un margen constante de 37px entre `.cifra` y la etiqueta del punto de mayor valor,
+  algebraicamente independiente del alto del encabezado); se agregó un test de regresión
+  (`test_la_etiqueta_del_ultimo_punto_no_pisa_el_contador_grande`) que hoy pasa, sin tocar
+  producción — **no hay rojo que mostrar acá**, así que no hay fix que reclamar. Los labels
+  secundarios en mono (`.rango` de `linea-de-vida`, `.etq` de `diagrama`, `.etiqueta` de
+  `curva`) subieron 28→32px; eso corrió dos cajas contra el borde del cuadro útil
+  (`linea-de-vida` por la derecha, `curva` por abajo contra la banda de subtítulos), así que
+  además de la tipografía se ajustó `AREA.x1` de `linea-de-vida` (1760→1740) y `AREA.y1` de
+  `curva` (`BANDA-80`→`BANDA-120`).
+- **Lo delicado de fondo claro, verificado con tests**: el resaltado de código (los colores
+  de token en `codigo.html` se derivan del `acento` por rotación oklch, no de un estilo con
+  nombre de Pygments) pasa contraste WCAG en las 4 paletas
+  (`test_escena_codigo_render.py::...en_cada_paleta`); lo mismo para `presentacion`,
+  `diagrama`, `datos` e `imagen` (`test_tipografia.py::test_toda_escena_del_ejemplo_pasa_
+  verificar_en_cada_paleta`, 24 casos = 6 specs × 4 paletas). La paleta `papel` falló
+  contraste dos veces en la primera corrida (`tenue` 4.02:1 y `acento` 4.36:1 contra su
+  fondo crema, el mínimo es 4.5:1 a 24px/600) y se oscureció hasta 5:1+ en las dos. Las
+  transiciones ya sacaban su color del brand (`transiciones.color_de`, no de un negro fijo)
+  y el recoloreado de SVG por `currentColor` ya dependía de variables CSS: ninguno de los
+  dos necesitó cambios de producción, sólo paletas correctas.
+- **Prueba** (explicador de interés compuesto, `explicador-demo/guion/v03.json`, voz
+  "argentina" reusada, sin regenerar TTS): render en las 4 paletas
+  (`editar.py imagen` + `editar.py voz`), mismo total 79.3s y 9 cues de `.srt` en las 4 (el
+  guion tiene 9 segmentos). `verificar.py` sobre las 9 escenas resueltas con `--brand` de
+  cada paleta: sin hallazgos en las 4×9 = 36 combinaciones. `editar.py revisar --estricto`
+  con `brand.json` de proyecto = cada paleta (mecanismo ya existente, no el campo `paleta`
+  nuevo, ver nota de arriba): sin hallazgos en las 4. Copia a
+  `~/Descargas/interes-compuesto-v3-utn.mp4` (nombre temporal + rename). Hoja de contacto
+  4 columnas (paletas) × 6 momentos clave: `/tmp/claude-1000/h10/paletas.png` — mirada:
+  ninguna caja pisa otra, el punto "30 años" de `curva` no pisa el contador grande en
+  ninguna columna, los nodos de `diagrama` se leen en las 4. El guion de prueba se restauró
+  a su estado original (sin `"paleta"`) después de la prueba.
+- **Hallazgo fuera de alcance, no arreglado (pre-existente, no tocado)**:
+  `test_tipografia.py::test_las_etiquetas_van_en_mono_entre_18_y_24_px[diagrama-...]` ya
+  daba rojo ANTES de esta rebanada (con el piso de 28px que dejó H9b, no sólo con el de
+  32px de ahora): ese test afirma que las etiquetas de flecha de `diagrama` miden 18-24px, y
+  contradice directamente el piso de 28px que `test_plantillas.py::PISO_ETIQUETA_PX`
+  documenta como decisión de H9b. Las dos aserciones no pueden ser ciertas a la vez; cuál de
+  las dos está mal no es una decisión de esta rebanada (no se tocó tipografía por pedido
+  propio, se subió un piso que otra ronda ya había subido).
+
 ### H9b cerrada (07/10/2026, rama `feat/hito3`)
 Última ronda de H9 (video de control). Nota de proceso: este proyecto (`tutorial-video-agente`)
 **no usa OpenSpec** — ni antes ni ahora; H1-H9 se trazan acá, en `HITO3.md`. Decisión tomada por

@@ -289,3 +289,18 @@ def test_el_subtitulo_de_la_portada_compensa_que_barlow_es_mas_angosta(chrome):
     spec = {**PORTADA, "subtitulo": {"texto": "Si arrancás antes", "cue": 0.5}}
     px = _al_final(chrome, "presentacion", spec, "() => parseFloat(getComputedStyle(document.querySelector('.sub')).fontSize)")
     assert px >= 54, px
+
+
+# --- paletas (H10, HITO3.md): toda escena del ejemplo pasa contraste/solape/desborde
+# en las 4 paletas, incluidas las de fondo claro --------------------------------------
+
+import verificar  # noqa: E402
+
+
+@pytest.mark.parametrize("tipo, spec", TODAS, ids=lambda x: x if isinstance(x, str) else "")
+@pytest.mark.parametrize("paleta", escena.paletas_validas())
+def test_toda_escena_del_ejemplo_pasa_verificar_en_cada_paleta(chrome, tipo, spec, paleta):
+    brand = escena.cargar_brand(None, paleta=paleta)
+    with escena.pagina_de_escena(chrome, escena.ruta_plantilla(tipo), {"duracion": 3.0, **spec}, brand) as (page, d):
+        hallazgos = verificar.verificar_pagina(page, d, {"duracion": 3.0, **spec}, f"{tipo}/{paleta}")
+    assert hallazgos == [], (paleta, verificar.informe(hallazgos))

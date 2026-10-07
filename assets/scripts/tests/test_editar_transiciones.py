@@ -106,6 +106,24 @@ def test_r67_tipo_desconocido_aborta_antes_de_generar_ningun_seg(tmp_path, monke
     assert not seg_dir.exists() or not list(seg_dir.glob("*.mp4"))
 
 
+def test_una_paleta_desconocida_en_el_guion_aborta_antes_de_generar_ningun_seg(tmp_path, monkeypatch):
+    """H10 (HITO3.md): "paleta" se valida apenas se carga el guion, igual que R-6.7
+    con "transicion", y no sólo cuando algo renderiza con el motor de escenas (un
+    guion sin escenas ni transición también debe rechazar una paleta inventada)."""
+    guion = {"paleta": "fantasia", "segmentos": [
+        {"tipo": "titulo", "titulo": "a", "texto": "a"},
+        {"tipo": "titulo", "titulo": "b", "texto": "b"}]}
+    _armar_guion(tmp_path, monkeypatch, guion)
+
+    with pytest.raises(SystemExit) as e:
+        editar.imagen("v09", "juani")
+
+    assert "fantasia" in str(e.value)
+    assert "utn" in str(e.value)
+    seg_dir = tmp_path / "videos" / "v09" / "seg"
+    assert not seg_dir.exists() or not list(seg_dir.glob("*.mp4"))
+
+
 def test_g1_g4_con_barrido_entre_pantalla_y_escena(tmp_path, monkeypatch):
     _raw(tmp_path)
     guion = {"raw": "raw/v09.mp4", "transicion": {"tipo": "barrido", "duracion": 0.3}, "segmentos": [
@@ -135,3 +153,23 @@ def test_g1_g4_con_barrido_entre_pantalla_y_escena(tmp_path, monkeypatch):
     assert _cerca(_pixel(work / "seg" / "01.mp4", 0.0), acento)
     # y lejos del corte no (no tapa toda la pantalla)
     assert not _cerca(_pixel(work / "seg" / "00.mp4", 0.05), acento)
+
+
+def test_barrido_con_paleta_elegida_pinta_el_acento_de_esa_paleta(tmp_path, monkeypatch):
+    """H10 (HITO3.md): "paleta" arriba del guion también gobierna el color de la
+    transición (R-6.3 sale del brand, y el brand ahora puede traer una paleta)."""
+    _raw(tmp_path)
+    guion = {"raw": "raw/v09.mp4", "paleta": "utn",
+             "transicion": {"tipo": "barrido", "duracion": 0.3}, "segmentos": [
+                 {"inicio": 0, "fin": 2, "texto": "Pantalla."},
+                 {"escena": {"tipo": "presentacion", "titulo": {"texto": "Hola"}}, "texto": "Escena."},
+             ]}
+    _armar_guion(tmp_path, monkeypatch, guion)
+
+    editar.imagen("v09", "juani")
+
+    work = tmp_path / "videos" / "v09"
+    slots = json.loads((work / "slots-juani.json").read_text())
+    acento_utn = (181, 71, 8)  # #B54708
+    ultimo_cuadro_00 = (round(slots[0] * 30) - 1) / 30
+    assert _cerca(_pixel(work / "seg" / "00.mp4", ultimo_cuadro_00), acento_utn)

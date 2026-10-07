@@ -185,6 +185,15 @@ def test_el_brand_de_la_serie_vive_en_la_raiz_del_tutorial(raiz, monkeypatch):
     assert llamadas[0]["colores"]["acento"] == "#00AA88"
 
 
+def test_una_escena_usa_la_paleta_elegida_por_el_guion(raiz, monkeypatch):
+    llamadas = []
+    monkeypatch.setattr(escena, "render", lambda plantilla, spec, salida, brand=None, **kw: llamadas.append(brand))
+
+    editar.build_segment("v01", None, {"escena": ESCENA, "texto": "x"}, 4.2, raiz / "o.mp4", VOZ, paleta="utn")
+
+    assert llamadas[0]["colores"]["fondo"] == "#FFFFFF"
+
+
 # --- editar.py escenas: preparar sin renderizar ------------------------------
 
 def test_escenas_deja_cada_spec_resuelto_para_la_hoja_de_contacto(raiz, monkeypatch):

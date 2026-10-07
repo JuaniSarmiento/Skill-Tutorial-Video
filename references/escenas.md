@@ -51,6 +51,20 @@ pueden mezclar con segmentos de pantalla en el mismo guion. Ejemplo completo, si
   `LEEME.md`): Barlow para títulos, números y cuerpo, IBM Plex Mono (sin ligaduras) para
   etiquetas. Otra familia se suma con su `@font-face` local en `base.css`: el motor bloquea
   la red, y una fuente que no está avisa con `AVISO` en vez de cambiarse en silencio.
+- **Paletas (H10, HITO3.md)**: `assets/escenas/paletas/{noche,utn,navy,papel}.json` traen cada
+  una el set completo de `colores` (`fondo`, `superficie`, `borde`, `texto`, `tenue`, `acento`).
+  `noche` es la de siempre (fondo oscuro, acento ámbar); `utn` es la institucional de TUPaD
+  (fondo blanco, acento naranja `NARANJA` de `presentaciones/references/estilo.md`); `navy` es
+  la misma paleta UTN en oscuro (fondo navy, texto claro, acento celeste); `papel` es un claro
+  neutro cálido (fondo crema, acento terracota). El guion elige con `"paleta": "utn"` arriba del
+  todo (`guion/vNN.json`); precedencia default `noche` < paleta elegida < `brand.json` del
+  proyecto (cada capa pisa sólo lo que declara, `escena.cargar_brand(ruta, paleta=...)`). Una
+  paleta que no existe aborta `editar.py imagen` listando las que hay, antes de generar nada.
+  Las paletas de fondo claro pasan la misma puerta de contraste (WCAG) que `noche`: el
+  resaltado de código (derivado del acento por rotación oklch, `codigo.html`), las transiciones
+  (`color_de` de `transiciones.py` ya sale del brand, no de un negro fijo) y el recoloreado de
+  SVG por `currentColor` se verificaron en las 4 (`tests/test_tipografia.py`,
+  `tests/test_escena_codigo_render.py`).
 - **Escena `imagen`**: metáforas dibujadas, no fotos (decidido por Juani, Q8). El `svg` de cada
   dibujo es una ruta a un archivo en `assets/escenas/dibujos/` (o al de la serie): SVG local
   escrito a mano para esta skill, o de un set de licencia MIT/ISC recoloreado, nunca una foto

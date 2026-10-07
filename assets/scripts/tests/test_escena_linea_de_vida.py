@@ -129,10 +129,12 @@ def _fin_de_barra(page, t):
         parseFloat(l.getAttribute('x2')) + parseFloat(getComputedStyle(l).strokeWidth) / 2)""")
 
 
-def test_la_etiqueta_de_rango_mide_al_menos_28px(chrome):
+def test_la_etiqueta_de_rango_mide_al_menos_32px(chrome):
+    # piso subido de 28 a 32px (H10, HITO3.md): a 28 se veía chico al lado del
+    # resto de las etiquetas secundarias en mono de la misma familia de escenas.
     with _abrir(chrome) as (page, d):
         rangos = _rangos(page, d - 0.05)
-    assert rangos and all(r["px"] >= 28 for r in rangos), rangos
+    assert rangos and all(r["px"] >= 32 for r in rangos), rangos
 
 
 def test_la_etiqueta_de_rango_no_pisa_la_punta_redondeada_de_la_barra(chrome):

@@ -59,6 +59,27 @@ def test_al_final_el_contador_termina_exacto_en_el_ultimo_punto(chrome):
     assert all(op > 0.9 for op in m["puntos"])
 
 
+# --- la etiqueta del último punto no pisa el contador grande (H10, HITO3.md) ---------
+
+def _rects(page, t):
+    escena._cuadro(page, t)
+    return page.evaluate("""() => {
+        const r = e => { const b = e.getBoundingClientRect(); return {t: b.top, r: b.right, b: b.bottom, l: b.left}; };
+        return {cifra: r(document.querySelector('[data-caja=cifra]')),
+                etiqueta: r(document.querySelector('[data-caja="etiqueta Año 30"]'))};
+    }""")
+
+
+def _se_pisan(a, b):
+    return a["l"] < b["r"] and a["r"] > b["l"] and a["t"] < b["b"] and a["b"] > b["t"]
+
+
+def test_la_etiqueta_del_ultimo_punto_no_pisa_el_contador_grande(chrome):
+    with _abrir(chrome) as (page, d):
+        r = _rects(page, d - 0.05)
+    assert not _se_pisan(r["cifra"], r["etiqueta"]), r
+
+
 def test_el_trazo_avanza_entre_la_primera_y_la_ultima_cue(chrome):
     with _abrir(chrome) as (page, d):
         recien_arrancado = float(_medir(page, 0.5)["dashoffset"].replace("px", ""))
@@ -144,17 +165,18 @@ def _px_etiquetas(page, t):
         "() => [...document.querySelectorAll('.etiqueta')].map(e => parseFloat(getComputedStyle(e).fontSize))")
 
 
-def test_las_etiquetas_de_punto_miden_al_menos_28px(chrome):
+def test_las_etiquetas_de_punto_miden_al_menos_32px(chrome):
+    # piso subido de 28 a 32px (H10, HITO3.md), igual que .rango y .etq.
     with _abrir(chrome) as (page, d):
         pxs = _px_etiquetas(page, d - 0.05)
-    assert pxs and all(p >= 28 for p in pxs), pxs
+    assert pxs and all(p >= 32 for p in pxs), pxs
 
 
-def test_con_otro_spec_las_etiquetas_de_punto_tambien_miden_al_menos_28px(chrome):
+def test_con_otro_spec_las_etiquetas_de_punto_tambien_miden_al_menos_32px(chrome):
     spec = {"tipo": "curva", "titulo": {"texto": "Otra curva"},
             "puntos": [{"x": 0, "y": 5, "etiqueta": "Inicio", "cue": 0.2},
                        {"x": 1, "y": 9, "etiqueta": "Fin", "cue": 1.0}],
             "duracion": 2.0}
     with _abrir(chrome, spec) as (page, d):
         pxs = _px_etiquetas(page, d - 0.05)
-    assert pxs and all(p >= 28 for p in pxs), pxs
+    assert pxs and all(p >= 32 for p in pxs), pxs

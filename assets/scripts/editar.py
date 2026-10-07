@@ -338,7 +338,7 @@ def spec_de_rotulo(seg: dict, slot: float, voz_palabras: list[dict]) -> dict:
     return escena.resolver_spec({**seg["rotulo"], "duracion": slot}, corridas)
 
 
-def _aplicar_rotulo(seg: dict, slot: float, voz_palabras, out: Path, fps: int) -> None:
+def _aplicar_rotulo(seg: dict, slot: float, voz_palabras, out: Path, fps: int, paleta: str | None = None) -> None:
     """Si el segmento trae "rotulo" (H6), lo renderiza con canal alfa y lo compone
     ENCIMA de `out` con `overlay` de ffmpeg: capa, no escena aparte. G1 (cuadros)
     y G4 (códec) quedan intactos porque el overlay se renderiza del mismo largo
@@ -348,7 +348,7 @@ def _aplicar_rotulo(seg: dict, slot: float, voz_palabras, out: Path, fps: int) -
         return
     import escena
     spec = spec_de_rotulo(seg, slot, voz_palabras or [])
-    brand = escena.cargar_brand(ROOT / "brand.json" if (ROOT / "brand.json").exists() else None)
+    brand = escena.cargar_brand(ROOT / "brand.json" if (ROOT / "brand.json").exists() else None, paleta=paleta)
     overlay = out.with_name(out.stem + ".rotulo.mov")
     escena.render(escena.ruta_plantilla("rotulo"), spec, overlay, brand=brand, fps=fps, alpha=True)
     compuesto = out.with_name(out.stem + ".rotulo-out.mp4")
@@ -361,7 +361,8 @@ def _aplicar_rotulo(seg: dict, slot: float, voz_palabras, out: Path, fps: int) -
     compuesto.replace(out)
 
 
-def build_segment(vid: str, raw: Path, seg: dict, slot: float, out: Path, voz_palabras=None) -> None:
+def build_segment(vid: str, raw: Path, seg: dict, slot: float, out: Path, voz_palabras=None,
+                   paleta: str | None = None) -> None:
     """Arma el tramo de video de un segmento y lo deja durando exactamente `slot`.
 
     El segmento puede traer su propio "raw": un tutorial largo se graba por
@@ -371,14 +372,17 @@ def build_segment(vid: str, raw: Path, seg: dict, slot: float, out: Path, voz_pa
     "rotulo" (H6, HITO3.md) es una capa que se superpone al tramo YA ARMADO,
     sea escena, título o pantalla grabada: por eso se aplica al final, antes de
     cada return, nunca remplazando el camino que ya construye `out`.
+
+    "paleta" (H10, HITO3.md) es la elegida por el guion ("paleta" arriba del
+    todo); None usa el default "noche" (cargar_brand sin paleta).
     """
     fps = 30
     if es_escena(seg):
         import escena
         spec = spec_de_escena(seg, slot, voz_palabras or [])
-        brand = escena.cargar_brand(ROOT / "brand.json" if (ROOT / "brand.json").exists() else None)
+        brand = escena.cargar_brand(ROOT / "brand.json" if (ROOT / "brand.json").exists() else None, paleta=paleta)
         escena.render(escena.ruta_plantilla(spec["tipo"]), spec, out, brand=brand, fps=fps)
-        _aplicar_rotulo(seg, slot, voz_palabras, out, fps)
+        _aplicar_rotulo(seg, slot, voz_palabras, out, fps, paleta=paleta)
         return
     if seg.get("raw"):
         raw = ROOT / seg["raw"]
@@ -389,7 +393,7 @@ def build_segment(vid: str, raw: Path, seg: dict, slot: float, out: Path, voz_pa
         )
         run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", f"color=c=0x16161D:s=1920x1080:r={fps}:d={slot:.3f}",
              "-vf", encoder.vf(vf), *encoder.cv_args(crf=20, preset="veryfast"), str(out)])
-        _aplicar_rotulo(seg, slot, voz_palabras, out, fps)
+        _aplicar_rotulo(seg, slot, voz_palabras, out, fps, paleta=paleta)
         return
     tmp = out.with_suffix(".tmp.mp4")
     pre = "mpdecimate=hi=64*24:lo=64*8:frac=0.2," if seg.get("decimar", True) else ""
@@ -427,7 +431,7 @@ def build_segment(vid: str, raw: Path, seg: dict, slot: float, out: Path, voz_pa
     run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(tmp), "-vf", encoder.vf(vf), "-t", f"{slot:.3f}",
          *encoder.cv_args(crf=20, preset="veryfast"), str(out)])
     tmp.unlink()
-    _aplicar_rotulo(seg, slot, voz_palabras, out, fps)
+    _aplicar_rotulo(seg, slot, voz_palabras, out, fps, paleta=paleta)
 
 
 def es_escena(seg: dict) -> bool:
@@ -624,23 +628,29 @@ def imagen(vid: str, voz_name: str = "argentina") -> None:
     falta = crudo_faltante(g)
     if falta:
         sys.exit(f"  ABORTADO: el segmento {falta[0]:02d} apunta a un crudo que no existe: {falta[1]}")
+    if g.get("paleta"):
+        import escena
+        validas = escena.paletas_validas()
+        if g["paleta"] not in validas:
+            sys.exit(f"  ABORTADO: paleta {g['paleta']!r} desconocida; hay: {', '.join(validas)}")
     import transiciones
     try:
         transiciones.validar(g)  # R-6.7: tipo de transición desconocido, antes de generar nada
     except transiciones.TransicionError as e:
         sys.exit(f"  ABORTADO: {e}")
+    paleta = g.get("paleta")
     work = ROOT / "videos" / vid
     (work / "seg").mkdir(parents=True, exist_ok=True)
     tramos = list(preparar(vid, voz_name))
     slots = [slot for _, slot, _ in tramos]
     for i, (seg, slot, pal) in enumerate(tramos):
-        build_segment(vid, raw, seg, slot, work / "seg" / f"{i:02d}.mp4", pal)
+        build_segment(vid, raw, seg, slot, work / "seg" / f"{i:02d}.mp4", pal, paleta=paleta)
     (work / f"slots-{voz_name}.json").write_text(json.dumps(slots))
     # G3: sin "transicion" en ningún lado del guion, ni se mira brand.json ni se toca
     # un solo byte de los seg/NN.mp4 ya armados (sale igual que antes del Hito 2).
     if len(tramos) > 1 and (g.get("transicion") or any(s.get("transicion") for s in g["segmentos"])):
         import escena
-        brand = escena.cargar_brand(ROOT / "brand.json" if (ROOT / "brand.json").exists() else None)
+        brand = escena.cargar_brand(ROOT / "brand.json" if (ROOT / "brand.json").exists() else None, paleta=paleta)
         transiciones.aplicar_todas(work / "seg", g, tramos, brand)
     lst = work / "seg" / "lista.txt"
     lst.write_text("".join(f"file '{i:02d}.mp4'\n" for i in range(len(slots))))

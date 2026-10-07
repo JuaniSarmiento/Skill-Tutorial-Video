@@ -168,6 +168,40 @@ def test_el_brand_de_la_serie_pisa_solo_lo_que_declara(tmp_path):
     assert b["fuente"] == defecto["fuente"]
 
 
+# --- paletas (H10, HITO3.md) --------------------------------------------------
+
+def test_la_paleta_utn_pisa_los_colores_del_default_noche():
+    b = escena.cargar_brand(None, paleta="utn")
+    assert b["colores"]["fondo"] == "#FFFFFF"
+    assert b["colores"]["acento"] == "#B54708"
+
+
+def test_la_paleta_navy_trae_sus_propios_colores_no_los_de_utn():
+    b = escena.cargar_brand(None, paleta="navy")
+    assert b["colores"]["fondo"] == "#1B365D"
+    assert b["colores"]["fondo"] != escena.cargar_brand(None, paleta="utn")["colores"]["fondo"]
+
+
+def test_una_paleta_desconocida_aborta_listando_las_validas():
+    with pytest.raises(ValueError, match="noche") as exc:
+        escena.cargar_brand(None, paleta="fantasia")
+    assert "utn" in str(exc.value)
+
+
+def test_el_brand_de_la_serie_pisa_la_paleta_elegida(tmp_path):
+    serie = tmp_path / "brand.json"
+    serie.write_text(json.dumps({"colores": {"acento": "#00AA88"}}))
+
+    b = escena.cargar_brand(serie, paleta="utn")
+
+    assert b["colores"]["acento"] == "#00AA88"          # el brand.json del proyecto gana
+    assert b["colores"]["fondo"] == "#FFFFFF"            # lo que no pisa, lo trae la paleta
+
+
+def test_la_paleta_noche_es_identica_al_default_sin_paleta():
+    assert escena.cargar_brand(None, paleta="noche") == escena.cargar_brand(None)
+
+
 # --- hoja de contacto --------------------------------------------------------
 
 def test_los_cuadros_de_contacto_caen_al_10_50_y_90_por_ciento():

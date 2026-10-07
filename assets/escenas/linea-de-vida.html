@@ -20,7 +20,7 @@ marca en cada edad que aparece en algún tramo) está desde el arranque.
   svg { position: absolute; inset: 0; width: 1920px; height: 1080px; overflow: visible; }
   .nombre { position: absolute; transform: translateY(-50%); font-weight: 650; font-size: 44px; white-space: nowrap; }
   .rango { position: absolute; transform: translateY(-50%); font-family: var(--fuente-mono); font-weight: 500;
-           font-size: 28px; color: var(--tenue); white-space: nowrap; }
+           font-size: 32px; color: var(--tenue); white-space: nowrap; }
   .marca { position: absolute; transform: translate(-50%, 0); font-family: var(--fuente-mono); font-weight: 500;
            font-size: 24px; color: var(--tenue); white-space: nowrap; }
 </style>
@@ -37,7 +37,9 @@ marca en cada edad que aparece en algún tramo) está desde el arranque.
   const min = eje.desde ?? Math.min(...tramos.map(t => t.desde));
   const max = eje.hasta ?? Math.max(...tramos.map(t => t.hasta));
   if (!(max > min)) throw new Error(`el eje necesita hasta > desde (vino ${min}..${max})`);
-  const AREA = { x0: 220, x1: 1760, y0: 320, y1: BANDA - 50 };
+  // x1 en 1740 (H10, HITO3.md): a 1760 el "rango" del tramo más a la derecha se salía
+  // del cuadro por la derecha con el piso de 32px (antes 28px, más angosto).
+  const AREA = { x0: 220, x1: 1740, y0: 320, y1: BANDA - 50 };
   const sx = v => AREA.x0 + (v - min) / (max - min) * (AREA.x1 - AREA.x0);
   // FILA_MAX subido (H5 ronda 2): llenar el área en vez de parar en el primer tamaño que
   // entra. Con pocos tramos cada fila ocupa mucho más alto -> barras bien gruesas.

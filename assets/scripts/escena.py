@@ -283,9 +283,25 @@ def resolver_codigo(spec: dict, plantilla, base_dir=None) -> dict:
     return spec
 
 
-def cargar_brand(ruta) -> dict:
-    """Brand de la skill, con lo que declare el de la serie encima (un nivel de profundidad)."""
+PALETAS = ESCENAS / "paletas"
+
+
+def paletas_validas() -> list[str]:
+    return sorted(p.stem for p in PALETAS.glob("*.json"))
+
+
+def cargar_brand(ruta, paleta: str | None = None) -> dict:
+    """Brand de la skill, con la paleta elegida encima y lo que declare el de la
+    serie por último (H10, HITO3.md): default "noche" < paleta elegida <
+    brand.json del proyecto, cada capa pisando sólo lo que declara (un nivel de
+    profundidad). Una paleta que no existe aborta listando las que hay."""
     brand = json.loads((ESCENAS / "brand.json").read_text())
+    if paleta:
+        archivo = PALETAS / f"{paleta}.json"
+        if not archivo.exists():
+            raise ValueError(f"paleta {paleta!r} desconocida; hay: {', '.join(paletas_validas())}")
+        for k, v in json.loads(archivo.read_text()).items():
+            brand[k] = {**brand[k], **v} if isinstance(v, dict) and isinstance(brand.get(k), dict) else v
     if ruta:
         for k, v in json.loads(Path(ruta).read_text()).items():
             brand[k] = {**brand[k], **v} if isinstance(v, dict) and isinstance(brand.get(k), dict) else v

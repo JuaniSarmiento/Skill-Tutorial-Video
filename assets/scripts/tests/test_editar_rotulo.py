@@ -63,6 +63,15 @@ def test_con_rotulo_durante_la_ventana_se_ve_el_chip_oscuro(tmp_path, monkeypatc
     assert _cerca(_pixel(out, 1.8), (27, 30, 37))   # var(--superficie) del brand default
 
 
+def test_con_rotulo_y_paleta_elegida_usa_el_color_de_esa_paleta(tmp_path, monkeypatch):
+    """H10 (HITO3.md): el rótulo también respeta la paleta elegida por el guion."""
+    monkeypatch.setattr(editar, "ROOT", tmp_path)
+    raw = _raw(tmp_path)
+    out = tmp_path / "out.mp4"
+    editar.build_segment("v01", raw, {"inicio": 0, "fin": 5, "rotulo": ROTULO}, 5.0, out, paleta="utn")
+    assert _cerca(_pixel(out, 1.8), (232, 238, 246))   # var(--superficie) de la paleta "utn"
+
+
 def test_con_rotulo_antes_y_despues_de_la_ventana_sigue_rojo(tmp_path, monkeypatch):
     monkeypatch.setattr(editar, "ROOT", tmp_path)
     raw = _raw(tmp_path)

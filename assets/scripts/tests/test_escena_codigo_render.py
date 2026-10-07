@@ -29,6 +29,20 @@ def test_la_escena_completa_pasa_la_puerta_de_verificar(tmp_path, cabecera, paso
     assert verificar.verificar_escena(escena.ruta_plantilla("codigo"), spec) == []
 
 
+# --- el resaltado de código (derivado del acento, oklch) pasa el contraste en toda
+# paleta, incluidas las de fondo claro (H10, HITO3.md) -------------------------------
+
+@pytest.mark.parametrize("paleta", escena.paletas_validas())
+def test_la_escena_completa_pasa_la_puerta_de_verificar_en_cada_paleta(tmp_path, paleta):
+    (tmp_path / "fibonacci_memo.py").write_text(MEMO)
+    (tmp_path / "llamadas.py").write_text(LLAMADAS)
+    spec = codigo.resolver({"tipo": "codigo", "archivo": "fibonacci_memo.py", "desde": 4, "hasta": 11,
+                            "duracion": 9.0, "pasos": COMPLETO}, tmp_path)
+    brand = escena.cargar_brand(None, paleta=paleta)
+    hallazgos = verificar.verificar_escena(escena.ruta_plantilla("codigo"), spec, brand)
+    assert hallazgos == [], (paleta, verificar.informe(hallazgos))
+
+
 # --- el motor resuelve el código: render, contacto, verificar.py y editar.py -----------
 
 import json  # noqa: E402
