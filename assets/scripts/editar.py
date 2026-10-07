@@ -1150,6 +1150,38 @@ def _hallazgos_roles(segmentos: list[dict]) -> list[str]:
     return hallazgos
 
 
+def _hallazgos_ritmo(segmentos: list[dict]) -> list[str]:
+    """D8 (ritmo, H8 HITO3.md): ninguna racha de MÁS de 2 escenas consecutivas del
+    mismo `tipo` (la racha real que se sintió repetitiva en el explicador de
+    interés compuesto, HITO3.md: tres `datos` seguidas). Sólo mira segmentos que
+    SON escena (`es_escena`): un segmento de pantalla grabada entre dos escenas
+    corta la racha, igual que un cambio de tipo. Una escena sin 'tipo' declarado
+    (guion mal armado) nunca se compara, así que nunca prolonga ni corta una
+    racha ya empezada por accidente."""
+    hallazgos = []
+    racha_tipo = None
+    racha_inicio = 0
+    racha_largo = 0
+
+    def _cerrar(hasta: int):
+        if racha_largo > 2:
+            hallazgos.append(
+                f"ritmo: {racha_largo} escenas '{racha_tipo}' seguidas (segmentos "
+                f"{racha_inicio}-{hasta}), variá el tipo de escena")
+
+    for i, seg in enumerate(segmentos):
+        tipo = seg.get("escena", {}).get("tipo") if es_escena(seg) else None
+        if tipo is not None and tipo == racha_tipo:
+            racha_largo += 1
+        else:
+            _cerrar(i - 1)
+            racha_tipo = tipo
+            racha_inicio = i
+            racha_largo = 1 if tipo is not None else 0
+    _cerrar(len(segmentos) - 1)
+    return hallazgos
+
+
 # D5/D6 (H2, HITO3.md): la puerta de verificar.py sobre el spec resuelto de cada escena.
 # Una sola pasada de Chrome por spec (y por brand): D5 y D6 leen la misma verificación.
 _VERIFICADAS: dict[tuple, list] = {}
@@ -1202,6 +1234,7 @@ CHEQUEOS = {
     "D5": _contraste_escena,
     "D6": _desborde_escena,
     "D7": _texto_chico_escena,
+    "D8": _hallazgos_ritmo,
 }
 
 
@@ -1287,6 +1320,7 @@ def revisar(vid: str, voz_name: str = "argentina", n: float = N_CAMBIO_VISUAL) -
         no_corrio.append(f"silencios: no corrió, falta {voz_wav} (correr 'editar.py voz {vid} {voz_name}')")
 
     hallazgos.extend(CHEQUEOS["D4"](g["segmentos"]))
+    hallazgos.extend(CHEQUEOS["D8"](g["segmentos"]))
 
     return hallazgos, no_corrio
 

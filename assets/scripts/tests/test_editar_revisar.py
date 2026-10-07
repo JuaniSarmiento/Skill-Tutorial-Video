@@ -861,6 +861,56 @@ def test_estricto_falla_si_algun_chequeo_no_corrio(raiz, monkeypatch, capsys):
     assert code == 1
 
 
+# --- D8 (H8, HITO3.md): ritmo, ninguna racha de más de 2 escenas del mismo tipo --
+
+def _seg_escena(tipo, **kw):
+    return {"inicio": 0, "fin": 1, "texto": "x", "escena": {"tipo": tipo, **kw}}
+
+
+def test_tres_escenas_del_mismo_tipo_seguidas_se_reporta(raiz):
+    """La racha real que se sintió repetitiva en el explicador de interés
+    compuesto (HITO3.md): tres escenas 'datos' seguidas."""
+    _guion(raiz, {"segmentos": [
+        _seg_escena("datos"), _seg_escena("datos"), _seg_escena("datos")]})
+
+    hallazgos, _ = editar.revisar("v09", "argentina")
+
+    assert any("ritmo" in h and "datos" in h for h in hallazgos), hallazgos
+
+
+def test_dos_escenas_del_mismo_tipo_seguidas_no_se_reporta(raiz):
+    """Borde: DOS seguidas del mismo tipo no es una racha (sólo MÁS de 2)."""
+    _guion(raiz, {"segmentos": [_seg_escena("datos"), _seg_escena("datos")]})
+
+    hallazgos, _ = editar.revisar("v09", "argentina")
+
+    assert not any("ritmo" in h for h in hallazgos)
+
+
+def test_un_segmento_de_pantalla_entre_dos_escenas_corta_la_racha(raiz):
+    """Un segmento que no es escena (pantalla grabada) entre dos tandas de 2
+    'datos' no deja que se sumen a una racha de 4."""
+    _guion(raiz, {"segmentos": [
+        _seg_escena("datos"), _seg_escena("datos"),
+        {"inicio": 0, "fin": 1, "texto": "pantalla"},
+        _seg_escena("datos"), _seg_escena("datos")]})
+
+    hallazgos, _ = editar.revisar("v09", "argentina")
+
+    assert not any("ritmo" in h for h in hallazgos), hallazgos
+
+
+def test_tipos_distintos_alternados_no_se_reporta(raiz):
+    """Triangulación: tipos distintos, aunque sean muchas escenas, nunca forman racha."""
+    _guion(raiz, {"segmentos": [
+        _seg_escena("presentacion"), _seg_escena("datos"), _seg_escena("diagrama"),
+        _seg_escena("presentacion"), _seg_escena("datos")]})
+
+    hallazgos, _ = editar.revisar("v09", "argentina")
+
+    assert not any("ritmo" in h for h in hallazgos)
+
+
 # --- M12: --estricto tiene que fallar también por hallazgos de D1-D3, no sólo D4 --
 
 def test_estricto_falla_por_un_hallazgo_de_tiempo_muerto_sin_que_haya_problema_de_roles(

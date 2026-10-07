@@ -44,6 +44,69 @@ necesita lo dice en vez de omitirlo en silencio.
   contra qué compararlo, `contra`: "10 años" en acento contra "30" en tenue), no en un punto
   más de una lista.
 
+### Director 2.0: guion de explicador, no de resumen (H8, HITO3.md)
+
+Lo de arriba mide que el guion esté bien ARMADO (ritmo de planos, transiciones, dirección
+visual). Esto es anterior: cómo decidir QUÉ escribir antes de armar un solo segmento. Ideas
+adaptadas (nunca copiadas) del método de entrevista de intención y de diseño de guion de
+HyperFrames (Apache 2.0).
+
+- **Brief antes del guion, en `BRIEF.md`**: antes de escribir el primer segmento, un archivo
+  corto (10-15 líneas) con dos grupos separados y cada uno con su origen:
+  - **Dicho**: lo que el usuario pidió tal cual (tema, voz, si pidió un tono o una duración).
+  - **Inferido**: lo que el agente asumió sin que se lo pidieran (público, duración si no la
+    dijo, objetivo del video, tono), cada uno con una razón corta ("duración: ~3 min, inferido
+    porque el tema tiene 4 ideas y cada una necesita su ejemplo").
+  Separar los dos grupos importa porque lo inferido es lo que hay que corregir si el video
+  sale raro: mezclado con lo dicho, nadie sabe después qué palabra del usuario respaldaba qué
+  decisión. `BRIEF.md` no es un artefacto que `revisar` lea ni que el motor consuma: es
+  documentación para quien retoma el guion.
+- **Estructuras narrativas con nombre** (elegí UNA por guion, no mezcles fases de dos):
+  | Estructura | Usela cuando... | Forma |
+  |---|---|---|
+  | Problema → analogía → mecanismo → ejemplo → repaso | el tema es un mecanismo que se entiende mejor con una metáfora antes que con la definición (la "clase de profe" de arriba, con `rol`) | gancho, una `analogia`, el `diagrama`/`curva` que muestra el mecanismo, un `ejemplo` con números reales, `repaso` |
+  | Antes/después | hay un cambio medible con un número de cada lado (plata, tiempo, cantidad) | `datos` o `curva` con los dos extremos, nunca el tramo intermedio como protagonista |
+  | Mito y verdad | la audiencia ya cree algo que es falso o incompleto | gancho con la creencia común, giro ("en realidad..."), evidencia, repaso que nombra las dos |
+  | Pregunta abierta → respuesta | el tema tiene una pregunta natural que la audiencia ya se hace | gancho como pregunta literal (ver catálogo de ganchos), el resto del guion la responde por partes |
+  | Lista de N (listicle) | el tema es un conjunto de ítems paralelos, sin jerarquía entre ellos (errores comunes, pasos de un checklist) | gancho que anuncia el N, un segmento por ítem (regla de 3 es la más fuerte: ni 2 se siente poco, ni 6 se siente mucho) |
+- **Catálogo de ganchos** (el gancho es el primer `rol`; elegí UNO, no encadenes dos en el
+  mismo segmento):
+  | Gancho | Ejemplo de una línea |
+  |---|---|
+  | El dato que sorprende | "El 90 % del plástico que se fabricó nunca se recicló." |
+  | Contraste de números gigantes | "10 años de ahorro le ganan a 30, si arrancás antes." |
+  | La pregunta que el alumno se hace | "¿Por qué el tiempo parece acelerarse con la edad?" |
+  | El error común | "Todos dicen 'usá memoización'. Casi nadie explica qué guarda." |
+  | La promesa concreta | "En 3 minutos sabés por qué tu función recursiva tarda una eternidad." |
+  | La afirmación contraintuitiva | "Agregar más carriles a una autopista empeora el tráfico." |
+  | La metáfora visceral | "Tu memoria caché es un escritorio: lo último que usaste queda arriba." |
+  | El anuncio del término | "Hay una palabra para esto: programación dinámica." |
+  | La apuesta/consecuencia | "Un solo índice mal puesto y la consulta tarda diez veces más." |
+- **Cada frase con su revelado, elegida la escena**: una frase corta, una sola idea, y el
+  elemento entra en la palabra que lo nombra (regla ya de arriba). La tabla de abajo es la
+  decisión de QUÉ escena usar según lo que la frase tiene que mostrar (catálogo completo en
+  Escenas):
+  | Si querés mostrar... | Usá... |
+  |---|---|
+  | Un título o una idea que abre/cierra, sin más | `presentacion` sin puntos (portada) |
+  | El dato clave de toda la escena, un número contra otro | `presentacion` con `numero`/`contra`, o `contador` si el número cuenta solo |
+  | Una palabra puntual que hay que resaltar dentro de un título ya en pantalla | `marcar` (`subrayado`/`circulo`/`resaltado`) sobre ese título |
+  | Relaciones o flujo entre partes (A produce B, B se suma a C) | `diagrama` (nodos y flechas) |
+  | Comparar cantidades entre sí | `datos` (barras) |
+  | Una cantidad que crece de forma continua en el tiempo | `curva` (con `crecimiento` si son pocos puntos y la fórmula es conocida) |
+  | Un rango de edades/años con tramos que se solapan o no | `linea-de-vida` |
+  | Una metáfora que no es un número ni una relación lógica | `imagen` (dibujo de línea) |
+  | Código real: tipeo, resaltado, diff o la salida de ejecutarlo | `codigo` |
+  | Una recursión lineal (una sola rama, como `factorial`) | `pila` |
+  | Una recursión que se ramifica (como `fibonacci`) | `arbol` |
+  | Quién es el tema de este tramo sin ocupar un segmento aparte | `rotulo` (lower-third) sobre el tramo que ya está |
+- **Ritmo: no repitas el mismo tipo de escena más de 2 veces seguidas** (medido por D8, abajo).
+  Tres `datos` seguidas en el explicador de interés compuesto (HITO3.md) se sentían
+  repetitivas aunque cada una mostrara números distintos — el ojo se acostumbra a la FORMA
+  antes que al contenido. Si dos ideas consecutivas piden la misma escena, intercalá una
+  `presentacion` corta, un `diagrama`, o un segmento de pantalla grabada entre las dos; también
+  variá el LARGO de los planos (una escena de 3s después de una de 8s rompe el metrónomo).
+
 **Reglas que mide `revisar`** (cada una es una clave de `editar.CHEQUEOS`, que `revisar()`
 recorre de verdad — R-5.8; no alcanza con nombrarla en un comentario):
 
@@ -86,6 +149,12 @@ recorre de verdad — R-5.8; no alcanza con nombrarla en un comentario):
   (umbral configurable en `verificar.hallazgos_del_cuadro`, `umbral_texto_chico`); un kicker o
   una etiqueta en mono de exactamente 24 px pasa. Misma puerta y mismos tiempos que D5/D6: si no
   puede correr, D7 es "no corrió" con la causa, igual que D5 y D6.
+- **D8** (ritmo, H8 HITO3.md): ninguna racha de MÁS de 2 segmentos de escena consecutivos
+  (`"escena"` en el segmento) con el mismo `tipo`; dos seguidas del mismo tipo pasan, tres no.
+  Calculado directo del guion (`g["segmentos"]`), sin renderizar ni necesitar ningún artefacto:
+  corre siempre, nunca es "no corrió". Un segmento de pantalla grabada entre dos escenas corta
+  la racha, igual que un cambio de tipo; una escena sin `tipo` declarado no se compara (ni
+  prolonga ni corta una racha, se informa como caso aparte si hiciera falta en otro chequeo).
 
 `revisar` informa los hallazgos pero sale con 0 igual; sólo con `--estricto` sale con 1 si
 encontró algún hallazgo real, O SI ALGÚN CHEQUEO NO CORRIÓ (decisión de Juani, 03/10/2026).

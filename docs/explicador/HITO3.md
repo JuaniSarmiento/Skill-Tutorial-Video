@@ -97,6 +97,28 @@ vez** (se llegó al límite de uso con dos agentes Opus en paralelo).
 ## Pendientes
 _Se completa al cerrar cada rebanada._
 
+### H8 cerrada (07/10/2026, rama `feat/hito3`)
+- **Director 2.0** (`references/director.md`, nueva sección): brief antes del guion
+  (`BRIEF.md` corto, dicho vs. inferido con su razón), 5 estructuras narrativas con nombre
+  (problema→analogía→mecanismo→ejemplo→repaso, antes/después, mito y verdad, pregunta
+  abierta→respuesta, lista de N), catálogo de 9 ganchos con ejemplo de una línea, tabla
+  "si querés mostrar X → usá Y" con las escenas que existen hoy, y la regla de ritmo (no
+  repetir el mismo tipo de escena más de 2 veces seguidas). Ideas adaptadas (reformuladas,
+  nunca copiadas) del método de entrevista de intención y de diseño de guion de HyperFrames
+  (Apache 2.0): `intent-interview.md` (brief dicho/inferido) y `story-design.md`
+  (estructuras, catálogo de ganchos).
+- **D8** nuevo en `editar.CHEQUEOS` (ritmo): ninguna racha de MÁS de 2 segmentos de escena
+  consecutivos con el mismo `tipo`; calculado directo de `g["segmentos"]`, sin renderizar,
+  así que corre siempre (nunca "no corrió"). Es la regla medible que sale de la racha real de
+  tres `datos` seguidas que se sintió repetitiva en el explicador de interés compuesto (nota
+  de la "Prueba comparativa con HyperFrames" de arriba). Un segmento de pantalla grabada
+  entre dos escenas corta la racha, igual que un cambio de tipo.
+- Tabla de ruteo de `SKILL.md` actualizada ("escribir un guion de explicador" → ya la lleva
+  a `references/director.md`; se sumó la mención y el rango pasó de "D1-D7" a "D1-D8").
+- No entró en esta rebanada (sin pedido de Juani, fuera de alcance): un chequeo que mida el
+  LARGO de los planos (mencionado en la regla de ritmo como sugerencia, no como D9) — D8 sólo
+  mide la repetición de tipo, no la variación de duración.
+
 ### H6 cerrada (06/10/2026, rama `feat/hito3`)
 - **Rótulo** (lower-third): `seg["rotulo"]` (título, subtítulo opcional, `cue`, `dura`) se
   renderiza aparte con `escena.render(..., alpha=True)` (qtrle, sin pix_fmt forzado: el PNG
