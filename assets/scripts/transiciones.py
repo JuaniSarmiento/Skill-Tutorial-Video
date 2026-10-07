@@ -5,7 +5,7 @@ from pathlib import Path
 
 import encoder
 
-TIPOS = ("corte", "fundido", "barrido")
+TIPOS = ("corte", "fundido", "barrido", "whip")
 
 
 class TransicionError(ValueError):
@@ -120,8 +120,8 @@ def avisar_si_tapa_cue(i: int, spec_entrante: dict | None, mitad: float) -> None
 
 def color_de(tipo: str, brand: dict) -> str:
     """R-6.3: el color sale del brand. Barrido usa el acento (lo que se destaca);
-    fundido usa el fondo (una pantalla "en blanco" entre dos tramos, no un flash
-    de acento en cada corte)."""
+    fundido y whip usan el fondo (una pantalla "en blanco" entre dos tramos, o
+    el "vacío" que el whip revela al correrse, no un flash de acento)."""
     colores = brand.get("colores", {})
     hexcolor = colores["acento"] if tipo == "barrido" else colores.get("fondo", "#000000")
     return "0x" + hexcolor.lstrip("#").upper()
@@ -201,6 +201,63 @@ def comandos_barrido(anchos: list[tuple[float, int, int]], filtro: str = "t6") -
     return "".join(partes)
 
 
+SIGMA_MAX_WHIP = 20.0
+
+
+def anchos_whip(fase: str, t0: float, mitad: float, ancho: int = 1920, fps: int = 30,
+                 sigma_max: float = SIGMA_MAX_WHIP) -> list[tuple[float, int, float]]:
+    """[(t_del_cuadro, x_del_recorte, sigma_del_desenfoque)] por cuadro de la
+    ventana del whip (H7, HITO3.md): "sale acelerando, entra frenando", con
+    velocidades pareadas en el corte.
+
+    MISMA curva de `anchos_barrido` (`sweep(p) = ancho * (1 - cos(pi*p))`, p en
+    [0,1] sobre TODA la transición: 0=arranca, 0.5=el corte, 1=termina), así que
+    la derivada (la velocidad) es continua en el corte por construcción: no hay
+    dos curvas independientes que puedan desencajar, es la MISMA función vista
+    desde cada mitad.
+
+    `x` es el desplazamiento del recorte (`crop`) sobre un lienzo `2×ancho`
+    (la imagen ocupa su mitad, la otra es el color de fondo, `aplicar_whip`):
+    en la mitad SALIENTE 0->ancho (la imagen sale, descubriendo el fondo); en
+    la ENTRANTE 0->ancho también (arranca tapada por el fondo y termina
+    asentada), MISMO rango, para que `aplicar_whip` use un solo filtro de
+    recorte en los dos casos.
+
+    `sigma` (el desenfoque de movimiento, `gblur`) sigue la derivada de
+    `sweep`: `sin(pi*p)`, que es 0 en los dos extremos (reposo, nítido) y
+    máxima exactamente en el corte (p=0.5) -LA MISMA en saliente y entrante,
+    otra vez por ser la misma curva-, así que crece en la salida y decrece en
+    la entrada sin salto.
+    """
+    n = max(1, int(mitad * fps + 0.5))
+    ultimo_frame_t = (round((t0 + mitad) * fps) - 1) / fps if fase == "saliente" else None
+    salida = []
+    for i in range(n + 1):
+        p_local = i / n
+        p = 0.5 * p_local if fase == "saliente" else 0.5 + 0.5 * p_local
+        if fase == "saliente":
+            t = ultimo_frame_t - (n - i) / fps
+        else:
+            t = i / fps
+        sweep = ancho * (1 - math.cos(math.pi * p))
+        x = sweep if fase == "saliente" else sweep - ancho
+        x = round(min(max(x, 0.0), ancho))
+        sigma = round(sigma_max * math.sin(math.pi * p), 2)
+        salida.append((t, x, sigma))
+    return salida
+
+
+def comandos_whip(cuadros: list[tuple[float, int, float]],
+                   filtro_crop: str = "wc", filtro_blur: str = "wb") -> str:
+    """Script de `sendcmd` (un `x` de `crop@filtro_crop` y un `sigma` de
+    `gblur@filtro_blur` por cuadro), mismo patrón que `comandos_barrido`."""
+    partes = []
+    for t, x, sigma in cuadros:
+        partes.append(f"{t:.6f} crop@{filtro_crop} x '{x}';\n")
+        partes.append(f"{t:.6f} gblur@{filtro_blur} sigma '{sigma}';\n")
+    return "".join(partes)
+
+
 def vf_fundido(fase: str, t0: float, mitad: float, color: str) -> str:
     """"fundido" (R-6.3): fundido A UN COLOR del brand (el fondo), no cross-dissolve:
     cada tramo vive en su propio seg/NN.mp4 (concat -c copy, hallazgo 2 de HITO2.md) y
@@ -271,6 +328,9 @@ def aplicar_todas(seg_dir, g: dict, tramos: list, brand: dict, ancho: int = 1920
         if transicion["tipo"] == "barrido":
             aplicar_barrido(archivo_saliente, "saliente", slot_saliente - mitad, mitad, color, ancho=ancho, fps=fps)
             aplicar_barrido(archivo_entrante, "entrante", 0.0, mitad, color, ancho=ancho, fps=fps)
+        elif transicion["tipo"] == "whip":
+            aplicar_whip(archivo_saliente, "saliente", slot_saliente - mitad, mitad, color, ancho=ancho, fps=fps)
+            aplicar_whip(archivo_entrante, "entrante", 0.0, mitad, color, ancho=ancho, fps=fps)
         else:  # fundido
             aplicar(archivo_saliente, vf_fundido("saliente", slot_saliente - mitad, mitad, color), fps=fps)
             aplicar(archivo_entrante, vf_fundido("entrante", 0.0, mitad, color), fps=fps)
@@ -290,6 +350,36 @@ def aplicar_barrido(entrada, fase: str, t0: float, mitad: float, color: str,
     try:
         vf = (f"sendcmd=f={cmds},drawbox@t6=x=0:y=0:w=1:h=ih:color={color}:thickness=fill:"
               f"enable='between(t,{a:.6f},{b:.6f})'")
+        _reencodar(entrada, vf, fps)
+    finally:
+        cmds.unlink(missing_ok=True)
+
+
+def aplicar_whip(entrada, fase: str, t0: float, mitad: float, color: str,
+                  ancho: int = 1920, fps: int = 30) -> None:
+    """"whip" (H7, HITO3.md): latigazo de cámara con velocidades pareadas. Ver
+    `anchos_whip` para la curva. Igual que `aplicar_barrido`, necesita un
+    script de `sendcmd` (mismo gotcha: `crop`/`gblur` no reevalúan sus
+    parámetros por cuadro con una expresión de `t`), que se borra siempre.
+
+    La imagen se estira sobre un lienzo `2×ancho` (`pad`) con el color de
+    fondo del brand del otro lado, y `crop` recorta una ventana de `ancho`
+    que se desplaza siguiendo `x` (sendcmd): en SALIENTE la imagen arranca
+    entera (`pad` a la derecha, `x=0`) y el recorte avanza hasta `x=ancho`
+    (pura franja de fondo: la imagen ya "salió" por la izquierda). En
+    ENTRANTE es al revés (`pad` a la izquierda, la imagen vive en
+    [ancho, 2·ancho)): arranca en `x=0` (pura franja de fondo, la imagen
+    todavía no "llegó" desde la derecha) y termina en `x=ancho` (la imagen
+    entera, asentada). `gblur` sigue la misma `sigma` por cuadro (desenfoque
+    de movimiento creciente/decreciente)."""
+    entrada = Path(entrada)
+    cuadros = anchos_whip(fase, t0, mitad, ancho=ancho, fps=fps)
+    cmds = entrada.with_name(entrada.stem + ".sendcmd.txt")
+    cmds.write_text(comandos_whip(cuadros))
+    pad_x = 0 if fase == "saliente" else ancho
+    try:
+        vf = (f"pad={2 * ancho}:ih:{pad_x}:0:color={color},sendcmd=f={cmds},"
+              f"crop@wc={ancho}:ih:0:0,gblur@wb=sigma=0")
         _reencodar(entrada, vf, fps)
     finally:
         cmds.unlink(missing_ok=True)

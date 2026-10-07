@@ -39,7 +39,7 @@ def test_normalizar_un_numero_no_es_valido():
 # --- validar_tipo() / resolver(): R-6.7 (tipo desconocido) y herencia del default ---
 
 def test_validar_tipo_con_un_tipo_valido_no_rompe():
-    for tipo in ("corte", "fundido", "barrido"):
+    for tipo in ("corte", "fundido", "barrido", "whip"):
         transiciones.validar_tipo(tipo)
 
 
@@ -48,6 +48,12 @@ def test_validar_tipo_desconocido_nombra_los_validos():
         transiciones.validar_tipo("transicon")
     assert "transicon" in str(e.value)
     assert "corte" in str(e.value) and "fundido" in str(e.value) and "barrido" in str(e.value)
+
+
+def test_validar_tipo_desconocido_nombra_whip_entre_los_validos_r67():
+    with pytest.raises(transiciones.TransicionError) as e:
+        transiciones.validar_tipo("transicon")
+    assert "whip" in str(e.value)
 
 
 def test_resolver_sin_nada_en_ningun_lado_da_corte():
@@ -210,6 +216,70 @@ def test_barrido_es_un_solo_cruce_con_una_curva_sin_salto_de_velocidad_en_el_cor
     assert salto_costura <= max(resto) + 1  # +1: margen de redondeo a entero (px)
 
 
+# --- anchos_whip() / comandos_whip(): H7 (HITO3.md) -- "whip" con velocidades --
+# pareadas: el tramo saliente acelera desplazándose (desenfoque creciente) y el
+# entrante llega frenando (desenfoque decreciente), con la MISMA curva sweep de
+# anchos_barrido (continuidad de la derivada en el corte, p=0.5).
+
+def test_anchos_whip_saliente_arranca_quieto_y_nitido_y_termina_desplazado_y_maximo_de_desenfoque():
+    cuadros = transiciones.anchos_whip("saliente", t0=0.0, mitad=0.3, ancho=320, fps=30)
+    assert cuadros[0][1:] == (0, 0.0)          # x=0 (imagen completa), sigma=0 (nítido): reposo
+    assert cuadros[-1][1] == 320                # x=ancho: la imagen ya salió del todo en el corte
+    assert cuadros[-1][2] == pytest.approx(20.0, abs=0.01)  # sigma máxima justo en el corte
+
+
+def test_anchos_whip_entrante_arranca_con_el_mismo_desenfoque_maximo_que_el_corte_y_termina_nitido():
+    cuadros = transiciones.anchos_whip("entrante", t0=0.0, mitad=0.3, ancho=320, fps=30)
+    assert cuadros[0][1:] == (0, pytest.approx(20.0, abs=0.01))   # continuidad: mismo sigma que el final del saliente
+    assert cuadros[-1][1:] == (320, 0.0)        # imagen asentada, nítida
+
+
+def test_anchos_whip_tiene_un_punto_por_cuadro_de_la_ventana_r64():
+    # 0.2s a 30fps = 6 cuadros -> 7 puntos (igual criterio que anchos_barrido)
+    cuadros = transiciones.anchos_whip("saliente", t0=0.0, mitad=0.2, ancho=320, fps=30)
+    assert len(cuadros) == 7
+
+
+def test_anchos_whip_x_es_monotono_en_las_dos_mitades():
+    # el desplazamiento nunca retrocede dentro de cada mitad (misma curva que barrido)
+    saliente = transiciones.anchos_whip("saliente", t0=0.0, mitad=0.3, ancho=320, fps=30)
+    entrante = transiciones.anchos_whip("entrante", t0=0.0, mitad=0.3, ancho=320, fps=30)
+    assert all(a[1] <= b[1] for a, b in zip(saliente, saliente[1:]))
+    assert all(a[1] <= b[1] for a, b in zip(entrante, entrante[1:]))
+
+
+def test_whip_es_un_solo_cruce_con_una_curva_sin_salto_de_velocidad_en_el_corte():
+    # Mismo chequeo que test_barrido_es_un_solo_cruce_...: el desplazamiento por
+    # cuadro (x) en las dos mitades es la MISMA curva vista desde cada lado, así
+    # que el salto de velocidad justo en la costura no es mayor que el máximo del
+    # resto de la curva.
+    mitad, fps, ancho = 0.3, 30, 320
+    saliente = transiciones.anchos_whip("saliente", t0=0.0, mitad=mitad, ancho=ancho, fps=fps)
+    entrante = transiciones.anchos_whip("entrante", t0=0.0, mitad=mitad, ancho=ancho, fps=fps)
+
+    # línea de tiempo única: saliente ve 0->ancho, entrante (trasladado) ve ancho->2ancho
+    desplazamiento = [x for _, x, _ in saliente] + [ancho + x for _, x, _ in entrante]
+    assert all(a <= b for a, b in zip(desplazamiento, desplazamiento[1:]))  # monótono de punta a punta
+
+    velocidad = [b - a for a, b in zip(desplazamiento, desplazamiento[1:])]
+    saltos = [abs(b - a) for a, b in zip(velocidad, velocidad[1:])]
+    idx_costura = len(saliente) - 2  # costura entre el último punto de saliente y el primero de entrante
+    salto_costura = saltos[idx_costura]
+    resto = saltos[:idx_costura] + saltos[idx_costura + 1:]
+    assert salto_costura <= max(resto) + 1  # +1: margen de redondeo a entero (px)
+
+
+def test_comandos_whip_un_comando_x_de_crop_y_un_comando_sigma_de_desenfoque_por_cuadro():
+    cuadros = [(0.0, 0, 0.0), (0.033333, 50, 10.5), (0.066667, 320, 20.0)]
+    texto = transiciones.comandos_whip(cuadros)
+
+    assert texto.count("crop@wc x") == 3
+    assert texto.count("gblur@wb sigma") == 3
+    assert "0.000000 crop@wc x '0';" in texto
+    assert "0.066667 crop@wc x '320';" in texto
+    assert "0.066667 gblur@wb sigma '20.0';" in texto
+
+
 def test_vf_fundido_saliente_usa_fade_out_con_el_color():
     vf = transiciones.vf_fundido("saliente", t0=5.5, mitad=0.25, color="0x111318")
     assert vf == "fade=t=out:st=5.500000:d=0.250000:color=0x111318"
@@ -302,6 +372,41 @@ def test_aplicar_barrido_saliente_empieza_despejado_y_termina_cubierto(tmp_path)
 
     assert not _cerca(_pixel(clip, 0.1), (242, 181, 68))
     assert _cerca(_pixel(clip, 0.966), (242, 181, 68))
+
+
+# --- aplicar_whip(): H7 (HITO3.md) -- whip pan con velocidades pareadas -----------
+
+def test_aplicar_whip_no_cambia_la_cantidad_de_cuadros_ni_el_codec(tmp_path):
+    clip = _clip(tmp_path, "00.mp4", dur=1.0)
+    antes = _cuadros(clip)
+
+    transiciones.aplicar_whip(clip, "entrante", t0=0.0, mitad=0.25, color="0x111318",
+                               ancho=320, fps=30)
+
+    despues = _cuadros(clip)
+    assert despues[-1] == antes[-1] == "30"  # G1: mismo número de cuadros
+    assert despues[:4] == ["h264", "320", "240", "yuv420p"]  # G4
+
+
+def test_aplicar_whip_saliente_en_el_corte_la_pantalla_quedo_del_color_de_fondo(tmp_path):
+    # pad=2*ancho:h:0:0:color=fondo pone la imagen (rojo) a la izquierda y el
+    # fondo a la derecha; en el corte (último cuadro real) el recorte ya se fue
+    # del todo sobre el fondo: no debería quedar nada de rojo en pantalla.
+    clip = _clip_color(tmp_path, "00.mp4", "red", dur=1.0, w=320, h=240)
+    transiciones.aplicar_whip(clip, "saliente", t0=0.75, mitad=0.25, color="0x111318",
+                               ancho=320, fps=30)
+
+    ultimo_frame_t = (round(1.0 * 30) - 1) / 30
+    assert _cerca(_pixel(clip, ultimo_frame_t), (0x11, 0x13, 0x18), tol=10)
+
+
+def test_aplicar_whip_entrante_arranca_del_color_de_fondo_y_termina_mostrando_la_imagen(tmp_path):
+    clip = _clip_color(tmp_path, "00.mp4", "red", dur=1.0, w=320, h=240)
+    transiciones.aplicar_whip(clip, "entrante", t0=0.0, mitad=0.25, color="0x111318",
+                               ancho=320, fps=30)
+
+    assert _cerca(_pixel(clip, 0.0), (0x11, 0x13, 0x18), tol=10)   # arranca tapado por el fondo
+    assert _cerca(_pixel(clip, 0.9), (255, 0, 0), tol=10)          # bien asentada: la imagen (roja)
 
 
 # --- BLOCKING (QA): la caja de `drawbox` queda montada en todo el archivo con w=1 -
@@ -461,6 +566,19 @@ def test_aplicar_todas_con_un_lado_escena_aplica_el_barrido(tmp_path):
     seg_dir = _seg_dir(tmp_path, 2)
     antes = [(seg_dir / "00.mp4").read_bytes(), (seg_dir / "01.mp4").read_bytes()]
     g = {"transicion": {"tipo": "barrido", "duracion": 0.2},
+         "segmentos": [{"texto": "a"}, {"escena": {"tipo": "presentacion"}, "texto": "b"}]}
+    tramos = [({"texto": "a"}, 1.0, None), (g["segmentos"][1], 1.0, [])]
+
+    transiciones.aplicar_todas(seg_dir, g, tramos, BRAND, ancho=320, fps=30)
+
+    despues = [(seg_dir / "00.mp4").read_bytes(), (seg_dir / "01.mp4").read_bytes()]
+    assert despues != antes  # al menos un lado es escena: Q4 no lo frena
+
+
+def test_aplicar_todas_con_un_lado_escena_aplica_el_whip(tmp_path):
+    seg_dir = _seg_dir(tmp_path, 2)
+    antes = [(seg_dir / "00.mp4").read_bytes(), (seg_dir / "01.mp4").read_bytes()]
+    g = {"transicion": {"tipo": "whip", "duracion": 0.2},
          "segmentos": [{"texto": "a"}, {"escena": {"tipo": "presentacion"}, "texto": "b"}]}
     tramos = [({"texto": "a"}, 1.0, None), (g["segmentos"][1], 1.0, [])]
 
