@@ -47,10 +47,18 @@ tenue. Si no entran a 300 px la escena falla nombrando el número: acortalo ("1,
   .unidad { font-family: var(--fuente-titulos); font-size: 72px; font-weight: 700; color: var(--tenue); white-space: nowrap; }
   .lema { position: absolute; left: 140px; display: table; font-family: var(--fuente-titulos);
           font-size: 64px; font-weight: 800; letter-spacing: -.02em; }
+  /* "marcar" (H6, HITO3.md): subrayado/círculo/resaltado dibujados a mano sobre una
+     palabra, con la misma técnica de stroke-dasharray/dashoffset de imagen.html
+     (nunca GSAP: presentacion.html usa el "contrato" manual, no E.lineaDeTiempo). */
+  svg.marcas { position: absolute; inset: 0; width: 1920px; height: 1080px; overflow: visible; pointer-events: none; }
+  .marca { fill: none; stroke-linecap: round; }
+  .marca.subrayado { stroke: var(--acento); stroke-width: 6; }
+  .marca.circulo { stroke: var(--acento); stroke-width: 5; }
+  .marca.resaltado { stroke: var(--acento); stroke-width: 34; }
 </style>
 <script src="base.js"></script>
 <script>
-  const { S, crear, tiempo, resorte, aparecer, contrato, cabecera, M, BANDA } = E;
+  const { S, crear, tiempo, resorte, aparecer, salida, contrato, cabecera, M, BANDA } = E;
   const CUERPO = 42, PISO = 28;   // px del cuerpo: de 42 se achica hasta 28, menos no se lee en un celular
   // Una lista corta (hasta 4 puntos) no es cuerpo: es lo que se lee de la escena. Va de 68
   // a 44 px y sólo si ni así entra sigue achicándose como cuerpo.
@@ -60,6 +68,81 @@ tenue. Si no entran a 300 px la escena falla nombrando el número: acortalo ("1,
   if (S.numero && puntos.length)
     throw new Error('"numero" y "puntos" no van juntos: el número protagonista va solo en su escena');
   const numeros = S.numero ? [S.numero, S.contra].filter(Boolean).map((n, i) => ({ ...n, t0: tiempo(n, 0.4 + i * 0.8) })) : [];
+  const COMO_VALIDOS = ['subrayado', 'circulo', 'resaltado'];
+  const marcas = (S.marcar || []).map(m => {
+    if (!COMO_VALIDOS.includes(m.como))
+      throw new Error(`"marcar" tiene un "como" inválido (${JSON.stringify(m.como)}): ` +
+                      `tiene que ser ${COMO_VALIDOS.join(' | ')}`);
+    return { ...m, t0: tiempo(m, 0) };
+  });
+  const NS = 'http://www.w3.org/2000/svg';
+
+  // Envuelve la primera ocurrencia (como palabra completa, sin mirar mayúsculas)
+  // de `texto` dentro de `raiz` en un <span>, y devuelve ese span (o null si no
+  // está). No es un selector CSS: busca en los NODOS DE TEXTO ya armados, así
+  // que funciona sobre el título, un punto o el subtítulo por igual.
+  function envolverPalabra(raiz, texto) {
+    const buscar = texto.toLowerCase();
+    const walker = document.createTreeWalker(raiz, NodeFilter.SHOW_TEXT);
+    let nodo;
+    while ((nodo = walker.nextNode())) {
+      const low = nodo.textContent.toLowerCase();
+      const i = low.indexOf(buscar);
+      if (i === -1) continue;
+      const antes = i === 0 || /\s/.test(low[i - 1]);
+      const despues = i + buscar.length >= low.length || /\s/.test(low[i + buscar.length]);
+      if (!antes || !despues) continue;
+      const span = document.createElement('span');
+      span.textContent = nodo.textContent.slice(i, i + texto.length);
+      const resto = document.createTextNode(nodo.textContent.slice(i + texto.length));
+      nodo.textContent = nodo.textContent.slice(0, i);
+      nodo.parentNode.insertBefore(resto, nodo.nextSibling);
+      nodo.parentNode.insertBefore(span, resto);
+      return span;
+    }
+    return null;
+  }
+
+  function pathDeMarca(como, r) {
+    if (como === 'subrayado') {
+      const y = r.bottom + 6;
+      return `M ${(r.left - 4).toFixed(1)},${y.toFixed(1)} Q ${((r.left + r.right) / 2).toFixed(1)},${(y + 9).toFixed(1)} ${(r.right + 4).toFixed(1)},${y.toFixed(1)}`;
+    }
+    if (como === 'circulo') {
+      const cx = (r.left + r.right) / 2, cy = (r.top + r.bottom) / 2;
+      const rx = (r.right - r.left) / 2 + 20, ry = (r.bottom - r.top) / 2 + 16;
+      return `M ${(cx - rx).toFixed(1)},${cy.toFixed(1)} ` +
+             `C ${(cx - rx).toFixed(1)},${(cy - ry).toFixed(1)} ${(cx + rx).toFixed(1)},${(cy - ry).toFixed(1)} ${(cx + rx).toFixed(1)},${cy.toFixed(1)} ` +
+             `C ${(cx + rx).toFixed(1)},${(cy + ry).toFixed(1)} ${(cx - rx).toFixed(1)},${(cy + ry).toFixed(1)} ${(cx - rx).toFixed(1)},${cy.toFixed(1)} Z`;
+    }
+    // resaltado: una pasada gruesa y translúcida por el medio de la palabra
+    const y = (r.top + r.bottom) / 2;
+    return `M ${(r.left - 6).toFixed(1)},${y.toFixed(1)} L ${(r.right + 6).toFixed(1)},${y.toFixed(1)}`;
+  }
+
+  // arma el SVG de las marcas DESPUÉS de que el resto del DOM ya tiene su texto
+  // final: envolverPalabra mide el layout real, no uno a medio construir.
+  function montarMarcas() {
+    if (!marcas.length) return;
+    const svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('class', 'marcas');
+    document.body.appendChild(svg);
+    for (const m of marcas) {
+      const span = envolverPalabra(document.body, m.texto);
+      if (!span)
+        throw new Error(`"marcar" no encontró la palabra ${JSON.stringify(m.texto)} en el texto de la escena`);
+      const r = span.getBoundingClientRect();
+      const path = document.createElementNS(NS, 'path');
+      path.setAttribute('class', 'marca ' + m.como);
+      path.setAttribute('d', pathDeMarca(m.como, r));
+      path.dataset.caja = 'marca ' + m.texto;
+      path.dataset.t = m.t0;
+      if (m.como === 'resaltado') path.style.opacity = 0;   // se corrige en dibujar(t): 0.35 x fundido
+      svg.appendChild(path);
+      m.el = path;
+      m.largo = path.getTotalLength();
+    }
+  }
   const portada = !puntos.length && !numeros.length;
   const tTitulo = tiempo(S.titulo, 0);
   const tSub = S.subtitulo ? tiempo(S.subtitulo, tTitulo + 0.6) : null;
@@ -111,9 +194,10 @@ tenue. Si no entran a 300 px la escena falla nombrando el número: acortalo ("1,
       throw new Error('el número protagonista no entra entre el título y la banda de subtítulos: acortá el título');
     fila.style.top = y + 'px';
     if (sub) sub.style.top = (y + alto + 48) + 'px';
+    montarMarcas();
   }
 
-  contrato([tTitulo, tSub ?? 0, ...puntos.map(p => p.t0), ...numeros.map(n => n.t0)], () => {
+  contrato([tTitulo, tSub ?? 0, ...puntos.map(p => p.t0), ...numeros.map(n => n.t0), ...marcas.map(m => m.t0)], () => {
     const cab = cabecera(S.titulo, S.kicker);
     dibujarCab = cab.dibujar;
     if (numeros.length) return montarNumeros(cab);
@@ -150,8 +234,15 @@ tenue. Si no entran a 300 px la escena falla nombrando el número: acortalo ("1,
     }
     if (alto() > lista.clientHeight)
       throw new Error(`los ${filas.length} puntos no entran en pantalla ni a ${PISO} px: partilos en dos escenas${culpa}`);
+    montarMarcas();
   }, t => {
     dibujarCab(t);
+    for (const m of marcas) {
+      const p = salida((t - m.t0) / 0.5);
+      m.el.setAttribute('stroke-dasharray', m.largo);
+      m.el.setAttribute('stroke-dashoffset', (m.largo * (1 - p)).toFixed(2));
+      m.el.style.opacity = m.como === 'resaltado' ? 0.35 * aparecer(t, m.t0) : aparecer(t, m.t0, 0.12);
+    }
     for (const n of numeros) {
       const v = resorte(t - n.t0);
       n.el.style.opacity = aparecer(t, n.t0);
