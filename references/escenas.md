@@ -180,6 +180,43 @@ pueden mezclar con segmentos de pantalla en el mismo guion. Ejemplo completo, si
   disponible entre tramos (con pocos tramos, mucho más alta que con muchos): el trazo es grueso,
   mínimo 24 px, y el nombre al lado va grande; las marcas del eje, en mono, nunca por debajo de
   24 px (H5 ronda 2).
+- **`presentacion`: "marcar" resalta una palabra** (H6, HITO3.md). `"marcar":
+  [{"texto": "memoización", "como": "subrayado|circulo|resaltado", "cue": "..."}]` busca esa
+  palabra (completa, sin mirar mayúsculas) en el texto YA armado de la escena (título, un
+  punto o el subtítulo) y dibuja la marca sobre su caja real en su cue: `subrayado` (una
+  curva bajo la palabra), `circulo` (una elipse alrededor) o `resaltado` (una pasada gruesa
+  y translúcida por el medio, como un marcador). Se dibuja con `stroke-dasharray`/
+  `stroke-dashoffset` en función de `t` (la misma técnica de la escena `imagen`, nunca
+  GSAP). `como` inválido o la palabra no encontrada falla claro, antes de renderizar.
+  Idea (no código) de `hw-underline`/`hw-callout-circle`/`mk-callout-highlight` de
+  HyperFrames (Apache 2.0).
+  ```json
+  {"tipo": "presentacion", "titulo": {"texto": "Programación dinámica", "cue": 0},
+   "puntos": [{"texto": "Guardamos cada resultado en memoización", "cue": "guardamos"}],
+   "marcar": [{"texto": "memoización", "como": "subrayado", "cue": "memoización"}]}
+  ```
+- **`presentacion`: texto cinético con `"entrada": "palabras"`** en `titulo` (H6, HITO3.md).
+  `{"titulo": {"texto": "...", "cue": 0, "entrada": "palabras"}}` parte el título con GSAP
+  SplitText (no el split manual de `cabecera()` de `base.js`) y cada palabra sube con
+  resorte (`back.out`), de a una, en vez de la entrada default. Sin `"entrada"`, sigue el
+  camino actual sin cambios. La timeline de GSAP corre en pausa (`gsap.globalTimeline.pause()`)
+  y se scrubea a mano en `dibujar(t)`, igual de determinista que el resto de la escena.
+- **Rótulo (lower-third), capa sobre CUALQUIER tramo** (H6, HITO3.md): no es un `tipo` de
+  escena ni un segmento aparte. `"rotulo": {"titulo": "Memoización", "subtitulo": "Unidad
+  10 · Programación I", "cue": "...", "dura": 4}` va en el segmento, junto a su contenido
+  normal (pantalla grabada, diapositiva o escena). Entra con el título subiendo con resorte
+  y una barra de acento que se dibuja (GSAP, `scaleX`); sale limpio antes de que termine
+  `dura`. Va arriba de la banda de subtítulos, alineado a la izquierda (x=140px, el mismo
+  margen que `.cabecera`), para no chocar nunca con los subtítulos. Se renderiza aparte con
+  canal alfa real (`escena.render(..., alpha=True)`: qtrle, sin pix_fmt forzado) y se compone
+  con `overlay` de ffmpeg ENCIMA del tramo ya armado del segmento (ver
+  `references/guion-y-edicion.md` → "Rótulo"): G1 (cuadros) y G4 (códec) quedan intactos, y
+  sin `"rotulo"` en el segmento no se toca nada (G3). Idea (no código) de
+  `lt-kicker-name`/`lt-accent-underline` de HyperFrames (Apache 2.0).
+  ```json
+  {"inicio": 12.0, "fin": 28.0, "rotulo": {"titulo": "Memoización",
+   "subtitulo": "Unidad 10 · Programación I", "cue": "memoización", "dura": 4}}
+  ```
 - **Cero WebGL**: el motor bloquea `getContext('webgl'|'webgl2'|'experimental-webgl')` en
   cualquier plantilla (la GPU integrada de Juani la arrastra, PLAN.md); si una lo llama, sale
   como `ContratoError`, igual que cualquier otro error de JavaScript de la página.

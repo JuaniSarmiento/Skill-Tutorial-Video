@@ -1,5 +1,15 @@
 ## El guion y `editar.py`
 
+- **Rótulo (lower-third), capa sobre el tramo** (H6, HITO3.md): `"rotulo"` en un segmento
+  (pantalla grabada, diapositiva o escena) se renderiza aparte con `escena.render(...,
+  alpha=True)` (canal alfa real, qtrle) y se compone con `overlay` de ffmpeg encima del
+  tramo YA ARMADO de ese segmento (`editar._aplicar_rotulo`), después de `build_segment`
+  construir `out` por el camino que sea. El overlay se renderiza del MISMO largo que `out`
+  (transparente fuera de su ventana), así que no hace falta `itsoffset` ni recortar nada: G1
+  (cuadros) y G4 (códec, `encoder.cv_args()`) quedan intactos. Sin `"rotulo"` en el segmento,
+  `_aplicar_rotulo` no llama a ffmpeg (G3: el tramo no cambia un bit). Ver el spec en
+  `references/escenas.md` → "Rótulo".
+
 - **Encoder de video** (`editar.py`, `escena.py`): `TUT_ENCODER` elige `software` (libx264,
   default, idéntico a como salía antes) | `auto` (VAAPI si el GPU codifica h264 de verdad,
   probado codificando 1 cuadro; si no, libx264 con un aviso) | `vaapi` (exige VAAPI, aborta
