@@ -60,8 +60,21 @@ def tiempos_de_cuadros(duracion: float, fps: int) -> list[float]:
     return [i / fps for i in range(n)]
 
 
-def comando_ffmpeg(salida, fps: int, ancho: int = ANCHO_BASE) -> list[str]:
-    """PNGs por stdin -> h264 yuv420p, el mismo formato que los segmentos de editar.py."""
+def comando_ffmpeg(salida, fps: int, ancho: int = ANCHO_BASE, alpha: bool = False) -> list[str]:
+    """PNGs por stdin -> h264 yuv420p, el mismo formato que los segmentos de editar.py.
+
+    `alpha` (H6, HITO3.md): qtrle en vez de libx264, SIN forzar pix_fmt (el PNG
+    de entrada ya viene RGBA cuando la página tiene fondo transparente). Se usa
+    para el rótulo (lower-third), que se compone con `overlay` de ffmpeg encima
+    de un tramo ya armado: no pasa por TUT_ENCODER/VAAPI (no soporta alfa) ni por
+    el pix_fmt fijo de los tramos normales.
+    """
+    if alpha:
+        vf = f"scale={ancho}:-2:flags=lanczos" if ancho != ANCHO_BASE else ""
+        return ["ffmpeg", "-y", "-loglevel", "error",
+                "-f", "image2pipe", "-framerate", str(fps), "-c:v", "png", "-i", "-",
+                *(["-vf", vf] if vf else []),
+                "-c:v", "qtrle", "-r", str(fps), "-an", str(salida)]
     vf = encoder.vf(f"scale={ancho}:-2:flags=lanczos" if ancho != ANCHO_BASE else "")
     return ["ffmpeg", "-y", "-loglevel", "error",
             "-f", "image2pipe", "-framerate", str(fps), "-c:v", "png", "-i", "-",
@@ -444,15 +457,16 @@ SEEK = """async t => {
 }"""
 
 
-def _cuadro(page, t: float) -> bytes:
+def _cuadro(page, t: float, alpha: bool = False) -> bytes:
     error = page.evaluate(SEEK, t)
     if error:
         raise ContratoError(f"window.seek({t:.3f}) tiró un error de JavaScript: {error}")
-    return page.screenshot(type="png")
+    return page.screenshot(type="png", omit_background=alpha)
 
 
 def render(plantilla, spec: dict, salida, brand: dict | None = None, palabras=None,
-           fps: int = 30, ancho: int = ANCHO_BASE, base_dir=None, verificar: bool = True) -> float:
+           fps: int = 30, ancho: int = ANCHO_BASE, base_dir=None, verificar: bool = True,
+           alpha: bool = False) -> float:
     """Renderiza la escena a `salida` y devuelve su duración (cuadros / fps).
 
     Se escribe a un .parcial.mp4 y se renombra al final: si algo falla a mitad, no
@@ -480,10 +494,11 @@ def render(plantilla, spec: dict, salida, brand: dict | None = None, palabras=No
                         f"{Path(plantilla).name} no pasa la verificación antes del render "
                         f"(--sin-verificar para saltearla):\n" + _verificar.informe(hallazgos))
             tiempos = tiempos_de_cuadros(duracion, fps)
-            ff = subprocess.Popen(comando_ffmpeg(parcial, fps, ancho), stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+            ff = subprocess.Popen(comando_ffmpeg(parcial, fps, ancho, alpha=alpha),
+                                  stdin=subprocess.PIPE, stderr=subprocess.PIPE)
             try:
                 for t in tiempos:
-                    ff.stdin.write(_cuadro(page, t))
+                    ff.stdin.write(_cuadro(page, t, alpha=alpha))
             finally:
                 ff.stdin.close()
                 err = ff.stderr.read().decode()

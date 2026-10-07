@@ -1,0 +1,14 @@
+<!doctype html>
+<!-- Fixture para test_escena_alpha_render.py: fondo transparente con un cuadrado
+     opaco a la izquierda. Sirve para medir que render(..., alpha=True) deja el
+     fondo con canal alfa 0 y el cuadrado con alfa 255. No es un `tipo` de escena. -->
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: transparent; }
+  #cuadrado { position: absolute; left: 100px; top: 100px; width: 200px; height: 200px; background: #F2B544; }
+</style>
+<div id="cuadrado"></div>
+<script>
+  window.DURATION = 1;
+  window.seek = async t => {};
+</script>
