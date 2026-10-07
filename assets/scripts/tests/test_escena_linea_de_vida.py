@@ -111,6 +111,50 @@ def test_las_marcas_del_eje_miden_al_menos_24px(chrome):
     assert pxs and all(p >= 24 for p in pxs), pxs
 
 
+# --- etiqueta de rango legible y sin pisar el fin de la barra (H9b, HITO3.md) ---------
+
+def _rangos(page, t):
+    escena._cuadro(page, t)
+    return page.evaluate("""() => [...document.querySelectorAll('.rango')].map(e => {
+        const r = e.getBoundingClientRect();
+        return {px: parseFloat(getComputedStyle(e).fontSize), izq: r.left};
+    })""")
+
+
+def _fin_de_barra(page, t):
+    """x2 + la mitad del grosor de cada trazo: el punto más a la derecha donde el
+    stroke-linecap:round todavía pinta algo (H9b)."""
+    escena._cuadro(page, t)
+    return page.evaluate("""() => [...document.querySelectorAll('svg line[stroke="var(--acento)"]')].map(l =>
+        parseFloat(l.getAttribute('x2')) + parseFloat(getComputedStyle(l).strokeWidth) / 2)""")
+
+
+def test_la_etiqueta_de_rango_mide_al_menos_28px(chrome):
+    with _abrir(chrome) as (page, d):
+        rangos = _rangos(page, d - 0.05)
+    assert rangos and all(r["px"] >= 28 for r in rangos), rangos
+
+
+def test_la_etiqueta_de_rango_no_pisa_la_punta_redondeada_de_la_barra(chrome):
+    with _abrir(chrome) as (page, d):
+        rangos = _rangos(page, d - 0.05)
+        fines = _fin_de_barra(page, d - 0.05)
+    assert len(rangos) == len(fines)
+    for r, fin in zip(rangos, fines):
+        assert r["izq"] >= fin, (r, fin)
+
+
+def test_con_un_solo_tramo_grueso_la_etiqueta_de_rango_tampoco_pisa_la_barra(chrome):
+    # un solo tramo: la barra es más gruesa (ver test_con_un_solo_tramo_la_barra_es_mas_gruesa_que_con_dos),
+    # así que el gorro redondeado avanza más: el caso que más fuerza el solape.
+    spec = {"tipo": "linea-de-vida", "tramos": [{"nombre": "Sola", "desde": 0, "hasta": 10, "cue": 0.2}],
+            "duracion": 1.5}
+    with _abrir(chrome, spec) as (page, d):
+        rangos = _rangos(page, d - 0.05)
+        fines = _fin_de_barra(page, d - 0.05)
+    assert rangos[0]["izq"] >= fines[0], (rangos, fines)
+
+
 # --- determinismo ---------------------------------------------------------------------
 
 def _hash(page, t):

@@ -39,8 +39,10 @@ recalcula, visible apenas aparece.
   const porId = Object.fromEntries(nodos.map(n => [n.id, n]));
   const hojas = nodos[0].hojas, filas = nodos[0].profundidad_total;
   const AREA = { x0: 160, x1: 1760, y0: 300, y1: BANDA };
-  // TOPE subido (H5 ronda 2): "tan grande como entre". PISO es el mínimo antes de fallar.
-  const TOPE = 72, PISO = 14;
+  // TOPE subido (H5 ronda 2): "tan grande como entre". PISO es el mínimo antes de fallar;
+  // subido a 24 (H9b, HITO3.md): el mismo mínimo legible que D7 en verificar.py, así un
+  // árbol que no entra legible falla en vez de renderizar texto que se ve pero no se lee.
+  const TOPE = 72, PISO = 24;
   let dibujarCab;
 
   function layout(cab) {

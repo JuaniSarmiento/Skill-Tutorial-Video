@@ -359,6 +359,18 @@ def test_diagrama_con_cuatro_nodos_no_crece_mas_alla_del_tope_de_siempre(chrome)
     assert max(_al_final(chrome, "diagrama", spec, PX_NODOS)) <= 54
 
 
+# --- etiquetas de flecha legibles en celular (H9b, HITO3.md) -----------------------
+
+PX_ETQ = "() => [...document.querySelectorAll('.etq')].map(e => parseFloat(getComputedStyle(e).fontSize))"
+PISO_ETIQUETA_PX = 28  # las etiquetas de flecha, más chicas que PISO_PX, se veían ilegibles en celular
+
+
+def test_la_etiqueta_de_flecha_mide_al_menos_28px(chrome):
+    spec = _cadena(["Tu capital", "Intereses", "Capital nuevo"], flecha="genera")
+    pxs = _al_final(chrome, "diagrama", spec, PX_ETQ)
+    assert pxs and all(p >= PISO_ETIQUETA_PX for p in pxs), pxs
+
+
 LINEAS = """() => [...document.querySelectorAll('svg line')].map(l =>
     ['x1', 'y1', 'x2', 'y2'].map(k => +l.getAttribute(k)))"""
 

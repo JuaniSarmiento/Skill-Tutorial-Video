@@ -134,3 +134,27 @@ def test_una_curva_con_un_solo_punto_falla_claro(chrome):
     with pytest.raises(escena.ContratoError, match="al menos dos"):
         with _abrir(chrome, spec) as (page, d):
             escena._cuadro(page, d - 0.05)
+
+
+# --- etiquetas de punto legibles en celular (H9b, HITO3.md) ---------------------------
+
+def _px_etiquetas(page, t):
+    escena._cuadro(page, t)
+    return page.evaluate(
+        "() => [...document.querySelectorAll('.etiqueta')].map(e => parseFloat(getComputedStyle(e).fontSize))")
+
+
+def test_las_etiquetas_de_punto_miden_al_menos_28px(chrome):
+    with _abrir(chrome) as (page, d):
+        pxs = _px_etiquetas(page, d - 0.05)
+    assert pxs and all(p >= 28 for p in pxs), pxs
+
+
+def test_con_otro_spec_las_etiquetas_de_punto_tambien_miden_al_menos_28px(chrome):
+    spec = {"tipo": "curva", "titulo": {"texto": "Otra curva"},
+            "puntos": [{"x": 0, "y": 5, "etiqueta": "Inicio", "cue": 0.2},
+                       {"x": 1, "y": 9, "etiqueta": "Fin", "cue": 1.0}],
+            "duracion": 2.0}
+    with _abrir(chrome, spec) as (page, d):
+        pxs = _px_etiquetas(page, d - 0.05)
+    assert pxs and all(p >= 28 for p in pxs), pxs

@@ -97,6 +97,88 @@ vez** (se llegó al límite de uso con dos agentes Opus en paralelo).
 ## Pendientes
 _Se completa al cerrar cada rebanada._
 
+### H9b cerrada (07/10/2026, rama `feat/hito3`)
+Última ronda de H9 (video de control). Nota de proceso: este proyecto (`tutorial-video-agente`)
+**no usa OpenSpec** — ni antes ni ahora; H1-H9 se trazan acá, en `HITO3.md`. Decisión tomada por
+el orquestador durante esta ronda (el implementador había parado a reportarlo como bloqueo antes
+de escribir código), para que quede registrado quién la tomó.
+
+- **Datum sobre la hipótesis de un bug en D7** (`verificar.py`, texto < 24 px): corrida sobre
+  `explicador-demo/videos/v03/escenas/*.json` (linea-de-vida, diagrama, curva) y sobre un árbol
+  `fibonacci(6)` armado a propósito (25 llamadas, el piso viejo de `arbol.html` lo rendereaba a
+  20 px). **D7 no tiene bug**: en los tres primeros casos no reportó nada porque los tamaños
+  declarados (24-26 px) ya cumplían el piso técnico; en el caso de `arbol` SÍ lo reportó
+  correctamente (`texto_chico: ... 'nodo N' mide 20 px`). Lo ilegible en la hoja de contacto no
+  era el verificador fallando: eran plantillas con tamaños apenas en el piso técnico (24-26 px),
+  muy chico para una hoja de contacto en miniatura, más dos solapamientos reales que D6 no
+  cubre (una caja de texto contra una forma SVG que no es `[data-caja]`, no contra otra caja de
+  texto).
+- **Arreglo (TDD, 8 tests nuevos, triangulados)**: `.rango` de linea-de-vida 26→28 px y su
+  posición pasa de `sx(hasta)+14` a `sx(hasta)+grosor/2+14` (el gorro redondeado del trazo,
+  `stroke-linecap:round`, pintaba `grosor/2` más allá de `x2`, y con `grosor` hasta 90 px eso
+  pisaba la etiqueta); `.etiqueta` de curva 26→28 px; `.etq` de diagrama 24→28 px; `PISO` de
+  `arbol` 14→24 px (un árbol que no entra legible ahora falla claro en vez de renderizar texto
+  que se ve pero no se lee). Framemd5 de `tests/fixtures/s0/escenas.json` regenerado (cambia la
+  imagen por el `.etq` de diagrama en el guion de la base; `audio_md5` no se tocó, verificado
+  igual antes/después). Suite acotada: 180 tests verdes (ver tabla); suite rápida completa
+  (`-m "not integracion"`) no se corrió aparte por tiempo — los archivos tocados ya están
+  cubiertos arriba con Chrome real.
+- **Hallazgo fuera de alcance, no arreglado**: `codigo.html` calcula el tamaño de letra (`px`)
+  resolviendo a la vez ancho y alto contra el MISMO valor, así que cuando el alto es la
+  restricción que ata (muchas líneas) el panel queda angosto aunque sobre ancho (`pxAncho` se
+  computa contra `ANCHO_MAX`, pero el `ancho` final del panel se recalcula después con el `px`
+  ya chico) — es el "caja que no usa el ancho" que se ve en `memo.png` cuadro 7. No es un bug
+  de tamaño de texto (el piso ya es 28 px, por encima de D7); es de layout. Se evitó en vez de
+  arreglarse: el beat nuevo de memoización (abajo) usa pocas líneas a propósito para no pisar
+  esta restricción. Si se quiere una escena `codigo` con mucho texto de salida, este algoritmo
+  necesita revisarse aparte (no se tocó: tocar el balance ancho/alto de `codigo.html` sin tests
+  dedicados, con el resto del time-box ya consumido, era más riesgo del que esta ronda podía
+  pagar).
+- **Guion v03** (`explicador-demo/guion/v03.json`): nueva escena `datos` ("Gana la que ahorró
+  menos", US$ 105.174 Ana contra US$ 94.461 Sofía, mismos supuestos de v02) inmediatamente
+  después de la línea de vida — la prueba del gancho, antes solo aparecía diluida cerca del
+  final. La regla del 72 ahora muestra `72 ÷ 10 ≈ 7` (campo `subtitulo` de `numero`/`contra`)
+  junto al número protagonista. `revisar --estricto` y `verificar` limpios (9 escenas). Re-render
+  a `~/Descargas/interes-compuesto-v3.mp4` (79.3s).
+- **Memoización** (`u10-recursividad/produccion-v2/guion/v01.json`): beat nuevo "Python también
+  tiene un límite", con `codigo/limite_recursion.py` (nuevo, basado en el de
+  `material/Microteaching-Video1.../codigo/`) ejecutado DE VERDAD — una función sin caso base
+  que agota la pila y tira `RecursionError`, capturado con `try/except` y un print corto (se
+  descartó dejar el traceback crudo de Python: con el nombre de función original la línea
+  `File "...", line N, in factorial_sin_caso_base` desbordaba su caja por un problema de
+  redondeo del ancho en `codigo.html`, el mismo de arriba — más que perseguirlo, se cambió el
+  contenido para no pisar el borde). Insertado ANTES del árbol (no después, para no formar una
+  racha de 3 escenas `codigo` seguidas y violar D8). Sin D1/D2: se sumó un paso `resaltar` a
+  mitad del beat para que no quede un tramo sin elemento nuevo. Total del video 61.4s (≥ 60s
+  pedido). `revisar --estricto` y `verificar` limpios. Re-render a
+  `~/Descargas/memoizacion-v2-demo.mp4`.
+- **Gotcha de proceso (costó dos renders incompletos)**: `editar.py voz <vNN> <voz>` LEE
+  `slots-<voz>.json` del disco, no lo recalcula — si se corre `voz` sin haber corrido `imagen`
+  primero con el guion ya en su forma final, usa un `slots-*.json` viejo (de una corrida
+  anterior, con otra cantidad de segmentos) y el video final sale corto, con el último segmento
+  directamente ausente y sin ningún error que lo avise. Pasó dos veces en esta ronda (v03 quedó
+  en 49.4s con el repaso final mudo; v01 en 49.4s también) hasta notar que `slots-argentina.json`
+  tenía menos entradas que `segmentos` en el guion. El orden correcto siempre es `imagen` antes
+  que `voz` cuando el guion cambió de forma (no sólo de texto). Vale la pena un chequeo de
+  `editar.py voz` que aborte si `len(slots) != len(g["segmentos"])` en vez de fallar en
+  silencio — no entró en esta rebanada (es un cambio de código fuera de lo pedido).
+- **Hoja de contacto nueva**: `/tmp/claude-1000/h9/v3b.png` (explicador v03b, mismos momentos
+  que `v2-vs-v3.png`) y `/tmp/claude-1000/h9/memo-b.png` (memoización, 10 cuadros). Miradas:
+  ningún texto ilegible — las etiquetas de linea-de-vida, curva y diagrama se leen, el árbol de
+  memoización se lee, la salida de `limite_recursion.py` entra clara en su caja.
+
+### Pendientes que siguen abiertos (arrastrados de H9/H9a, no tocados en H9b por alcance)
+- Bola de nieve sin animación continua (los tres dibujos de `imagen` entran y quedan quietos: no
+  hay una curva de "crece y empieza a rodar" entre ellos).
+- Carve adaptativo de música (hoy las bandas de voz para el "voiceover carve" son fijas,
+  `musica.BANDAS_VOZ_HZ`; adaptarlas a la voz real de cada toma quedó afuera).
+- Whip con ~0,13 s de fondo visible en el corte (el colchón de fondo del brand entre el
+  recorte saliente y el entrante mide eso de más de lo ideal; no se ajustó la curva).
+- S7a/S7b sin cerrar (sub-rebanadas mencionadas en rondas anteriores, sin entrar en el orden de
+  esta sección todavía).
+- El algoritmo de ancho/alto de `codigo.html` (arriba, "hallazgo fuera de alcance").
+- El chequeo de `len(slots) == len(segmentos)` en `editar.py voz` (arriba, "gotcha de proceso").
+
 ### H8 cerrada (07/10/2026, rama `feat/hito3`)
 - **Director 2.0** (`references/director.md`, nueva sección): brief antes del guion
   (`BRIEF.md` corto, dicho vs. inferido con su razón), 5 estructuras narrativas con nombre

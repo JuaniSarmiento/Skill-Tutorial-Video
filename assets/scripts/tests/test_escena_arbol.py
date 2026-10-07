@@ -153,3 +153,27 @@ def test_un_arbol_con_textos_que_no_entran_falla_claro(carpeta, chrome):
     with pytest.raises(escena.ContratoError, match="no entra"):
         with _abrir(chrome, spec) as (page, d):
             escena._cuadro(page, d - 0.05)
+
+
+# --- piso legible: nunca por debajo de 24 px (H9b, HITO3.md) -------------------------
+
+def test_un_arbol_que_no_entra_legible_a_24px_falla_en_vez_de_achicarse_mas(carpeta, chrome):
+    # fibonacci(6): 25 llamadas, 13 hojas. Con el piso viejo (14 px) esto renderizaba texto
+    # a 20 px: se veía, pero no se leía en celular. El piso sube a 24 px (mismo mínimo que
+    # D7 en verificar.py); si no entra legible a esa altura, la escena tiene que fallar en
+    # vez de seguir achicando el texto.
+    spec = recursion.resolver({"tipo": "arbol", "archivo": "fibonacci.py", "llamada": "fibonacci(6)",
+                               "formato": "fib({n})", "titulo": {"texto": "x"},
+                               "pasos": _pasos(25, paso=0.15), "duracion": 12.0}, carpeta)
+    with pytest.raises(escena.ContratoError, match="no entra legible"):
+        with _abrir(chrome, spec) as (page, d):
+            escena._cuadro(page, d - 0.05)
+
+
+def test_un_arbol_que_entra_a_24px_lo_hace_y_no_falla(carpeta, chrome):
+    # fibonacci(5), el caso de referencia del resto del archivo, entra sin problema a 24 px.
+    spec = _spec(carpeta, n=5, duracion=8.0)
+    with _abrir(chrome, spec) as (page, d):
+        escena._cuadro(page, d - 0.05)
+        px = page.evaluate("() => parseFloat(getComputedStyle(document.querySelector('.nodo .txt')).fontSize)")
+    assert px >= 24, px

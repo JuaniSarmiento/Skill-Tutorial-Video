@@ -20,7 +20,7 @@ marca en cada edad que aparece en algún tramo) está desde el arranque.
   svg { position: absolute; inset: 0; width: 1920px; height: 1080px; overflow: visible; }
   .nombre { position: absolute; transform: translateY(-50%); font-weight: 650; font-size: 44px; white-space: nowrap; }
   .rango { position: absolute; transform: translateY(-50%); font-family: var(--fuente-mono); font-weight: 500;
-           font-size: 26px; color: var(--tenue); white-space: nowrap; }
+           font-size: 28px; color: var(--tenue); white-space: nowrap; }
   .marca { position: absolute; transform: translate(-50%, 0); font-family: var(--fuente-mono); font-weight: 500;
            font-size: 24px; color: var(--tenue); white-space: nowrap; }
 </style>
@@ -98,7 +98,9 @@ marca en cada edad que aparece en algún tramo) está desde el arranque.
       t.nombreEl.dataset.t = t.t0;
 
       t.rangoEl = crear('div', 'rango', document.body, `${t.desde} → ${t.hasta}`);
-      t.rangoEl.style.left = sx(t.hasta) + 14 + 'px';
+      // sx(t.hasta) + 14 no alcanza (H9b, HITO3.md): el gorro redondeado (stroke-linecap:round)
+      // de la barra pinta grosor/2 más allá de x2, así que ese tramo pisaba la etiqueta.
+      t.rangoEl.style.left = sx(t.hasta) + grosor / 2 + 14 + 'px';
       t.rangoEl.style.top = cy + 'px';
       t.rangoEl.dataset.caja = 'rango ' + (t.nombre || i);
       t.rangoEl.dataset.t = t.t0;
