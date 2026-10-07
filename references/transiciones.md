@@ -4,8 +4,8 @@
 el default para todos los cambios de tramo; **en un segmento** es la transición **de entrada**
 de ESE segmento (la que pasa entre él y el anterior). Un string es taquigrafía de su objeto
 (`"transicion": "barrido"` ≡ `{"tipo": "barrido"}`). Sin la clave en ningún lado: `corte` (seco,
-el comportamiento de siempre). Tipos: `corte` | `fundido` | `barrido`; cualquier otro valor
-aborta antes de generar nada, listando los tres válidos.
+el comportamiento de siempre). Tipos: `corte` | `fundido` | `barrido` | `whip`; cualquier otro
+valor aborta antes de generar nada, listando los cuatro válidos.
 
 - **Decisión de Juani (Q4)**: hay transición sólo si **al menos uno de los dos lados es una
   escena** (`"escena"` en el segmento); pantalla→pantalla queda siempre en corte seco, sin
@@ -39,6 +39,28 @@ aborta antes de generar nada, listando los tres válidos.
   blanco" entre dos tramos, no un flash de acento en cada corte), con el filtro nativo `fade` de
   ffmpeg — no es un cross-dissolve: cada tramo vive en su propio `seg/NN.mp4` (`concat -c copy`)
   y no tiene acceso a los píxeles del otro lado del corte.
+- **`whip`** (H7, HITO3.md): latigazo de cámara con **velocidades pareadas** — el tramo saliente
+  sale desplazándose (hacia la izquierda) acelerando, con desenfoque de movimiento CRECIENTE; el
+  entrante llega desde el lado opuesto (la derecha) frenando, con el desenfoque DECRECIENTE, así
+  que la velocidad en el corte es la misma de los dos lados. Usa el color de **fondo** del brand
+  (como `fundido`: no hay acento de por medio, es el "vacío" que se revela cuando el cuadro se
+  corrió), nunca el acento.
+  - **Misma curva que `barrido`** (`sweep(p) = ancho·(1 − cos(π·p))`, p de 0 a 1 en TODA la
+    transición, 0.5 = el corte): no son dos efectos independientes por mitad, es la MISMA función
+    continua vista desde cada lado, así que la derivada (la velocidad) es continua en el corte por
+    construcción — no hay salto que ajustar a mano. `anchos_whip` la reusa para el desplazamiento
+    del recorte (`x`, 0→ancho en cada mitad) y para el desenfoque (`sigma = sigma_max·sin(π·p)`:
+    0 en los dos extremos -reposo, nítido-, máxima exactamente en el corte, la MISMA en saliente y
+    entrante).
+  - **Mecánica**: la imagen se estira sobre un lienzo `2×ancho` (`pad`, con el color de fondo del
+    lado libre) y `crop` recorta una ventana de `ancho` que se desplaza (`x`) según la curva de
+    arriba; `gblur` sigue la misma `sigma` por cuadro (desenfoque de movimiento). Mismo gotcha que
+    `barrido` (`crop`/`gblur` no reevalúan sus parámetros por cuadro con una expresión de `t` en
+    ffmpeg 6.1.1): se maneja cuadro a cuadro con `sendcmd` (un `x` de `crop` y un `sigma` de
+    `gblur` por cuadro), igual arquitectura que el barrido (G1/G2/G4 intactos por construcción,
+    archivo de `sendcmd` que se borra siempre).
+  - **Q4 también aplica**: sólo hay `whip` si al menos uno de los dos lados es una escena;
+    pantalla→pantalla queda en corte seco.
 - **R-6.5**: si la primera cue de la escena ENTRANTE cae dentro de la ventana de la transición,
   avisa (no aborta: la escena sigue siendo válida, nace con su primer elemento tapado un
   instante).
