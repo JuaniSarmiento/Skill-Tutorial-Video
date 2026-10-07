@@ -55,8 +55,12 @@ tenue. Si no entran a 300 px la escena falla nombrando el número: acortalo ("1,
   .marca.subrayado { stroke: var(--acento); stroke-width: 6; }
   .marca.circulo { stroke: var(--acento); stroke-width: 5; }
   .marca.resaltado { stroke: var(--acento); stroke-width: 34; }
-  /* texto cinético (H6, HITO3.md): "entrada": "palabras" en el título, con SplitText */
-  .titulo .word { display: inline-block; }
+  /* texto cinético (H6, HITO3.md): "entrada": "palabras" en el título, con SplitText.
+     margin-right en vez de depender del espacio entre <div>: .titulo es display:table
+     (base.css) y esa maquetación colapsa el espacio en blanco entre hijos inline-block
+     a cero (el mismo motivo por el que .palabra, el split manual de cabecera(), ya
+     usa margin-right en vez de un espacio real). */
+  .titulo .word { display: inline-block; margin-right: .26em; }
 </style>
 <script src="vendor/gsap/gsap.min.js"></script>
 <script src="vendor/gsap/SplitText.min.js"></script>

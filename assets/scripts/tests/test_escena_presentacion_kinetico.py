@@ -58,6 +58,18 @@ def test_sin_entrada_palabras_no_usa_split_text(chrome):
     assert hay == 0
 
 
+def test_las_palabras_no_quedan_pegadas_sin_espacio(chrome):
+    # bug real (visto en la hoja de contacto, /tmp/claude-1000/h6/hoja.png): .titulo es
+    # display:table (base.css) y esa maquetación colapsa a 0 el espacio en blanco entre
+    # <div class="word"> hermanos -- se repara con margin-right (como .palabra).
+    with _abrir(chrome, SPEC) as (page, _):
+        escena._cuadro(page, 1.5)
+        rects = page.evaluate("[...document.querySelectorAll('.titulo .word')]"
+                              ".map(w => { const r = w.getBoundingClientRect(); return [r.x, r.right]; })")
+    for (_, right_a), (left_b, _) in zip(rects, rects[1:]):
+        assert left_b - right_a > 5, f"dos palabras seguidas quedaron pegadas: {rects}"
+
+
 def test_con_mas_palabras_hay_mas_elementos_word(chrome):
     spec = {**SPEC, "titulo": {"texto": "Uno dos tres cuatro cinco", "cue": 0, "entrada": "palabras"}}
     with _abrir(chrome, spec) as (page, _):
