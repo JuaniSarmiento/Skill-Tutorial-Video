@@ -135,7 +135,41 @@ _Se completa al cerrar cada rebanada._
     (antes de que entre o después de que salga) y no prueba nada a ojo.
 - **No entró en esta rebanada** (time-box ~2h): un hand-drawn "wobble" (el bamboleo
   aleatorio-con-semilla de `hw-underline`/`hw-boil` de HyperFrames) en las marcas — quedaron
-  con un trazo liso, no tembloroso; y la transición `whip` (H7) sigue para la próxima.
+  con un trazo liso, no tembloroso.
+- **Arreglo posterior (07/10/2026, H7)**: el círculo de `"marcar"` pisaba la letra anterior
+  (margen fijo de +20px sin medir el hueco real) — ver "H7 cerrada" abajo.
+
+### H7 cerrada (07/10/2026, rama `feat/hito3`)
+- **Transición `whip`** (latigazo de cámara, velocidades pareadas): misma arquitectura que
+  `barrido`/`fundido` (cada mitad pinta DENTRO de su propio slot, en su propio `seg/NN.mp4`; la
+  voz y el `.srt` no se mueven; Q4 sigue valiendo: sólo hay `whip` si al menos un lado es
+  escena). Reusa LITERALMENTE la curva de `anchos_barrido`
+  (`sweep(p) = ancho·(1 − cos(π·p))`, p de 0 a 1 en TODA la transición, 0.5 = el corte) en vez de
+  inventar una nueva: es la MISMA función continua vista desde cada mitad, así que la velocidad
+  en el corte es igual de los dos lados por construcción (no hay dos curvas independientes que
+  puedan desencajar). `anchos_whip` la usa para el desplazamiento del recorte (`crop x`, 0→ancho
+  en cada mitad: saliente se va hacia la izquierda revelando el fondo del brand, entrante llega
+  desde la derecha) y para el desenfoque de movimiento (`gblur sigma = sigma_max·sin(π·p)`: 0 en
+  los dos extremos -reposo, nítido-, máxima exactamente en el corte, LA MISMA en saliente y
+  entrante). Mismo gotcha que `barrido` (ffmpeg 6.1.1: `crop`/`gblur` no reevalúan sus parámetros
+  por cuadro con una expresión de `t`): se maneja cuadro a cuadro con `sendcmd`
+  (`comandos_whip`), script que se borra siempre (`try/finally`, igual que `aplicar_barrido`).
+  Color: el de **fondo** del brand (como `fundido`, nunca el acento: no hay nada que destacar,
+  es el "vacío" que el corrimiento revela). Verificado con una hoja de 8 cuadros alrededor de un
+  corte real (dos escenas `presentacion` renderizadas de verdad): el título sale acelerando y
+  desenfocándose hacia la izquierda, el siguiente entra desde la derecha desenfocado y se asienta
+  nítido — mirala en el informe de esta rebanada.
+- **Arreglo H6**: el círculo de `"marcar"` (`pathDeMarca`, `presentacion.html`) usaba un margen
+  horizontal FIJO (+20px) sin mirar si había una palabra vecina ahí cerca — con palabras pegadas
+  por un solo espacio (ej. "...lo mismo trabajo" marcando "trabajo"), el círculo entraba 7px
+  en la "o" de "mismo". `envolverPalabra` ahora devuelve también los nodos de texto `antes`/
+  `despues` del span envuelto (ya existían como variables locales, sólo había que exponerlos), y
+  `pathDeMarca` mide con `Range.getClientRects()` el borde real del renglón vecino más cercano
+  (sólo el renglón que comparte línea con la marca, por si el punto es largo y el texto
+  "antes"/"despues" ocupa más de un renglón) y acota el margen a la mitad de ese hueco menos 2px
+  de aire, nunca por debajo de 2px. Sin vecina de ese lado (la marca es la primera o la última
+  palabra del texto), sigue el margen fijo de 20px de siempre.
+- **Pendiente para quien siga**: el wobble a mano de las marcas (H6, arriba) sigue sin entrar.
 
 ### H1 cerrada (06/10/2026, worktree `feat/hito3-h1`)
 - "Voiceover carve" (`musica.aplicar_carve_voz`, `musica.BANDAS_VOZ_HZ`): bandas FIJAS
