@@ -117,9 +117,12 @@ tenue. Si no entran a 300 px la escena falla nombrando el número: acortalo ("1,
   const NS = 'http://www.w3.org/2000/svg';
 
   // Envuelve la primera ocurrencia (como palabra completa, sin mirar mayúsculas)
-  // de `texto` dentro de `raiz` en un <span>, y devuelve ese span (o null si no
-  // está). No es un selector CSS: busca en los NODOS DE TEXTO ya armados, así
-  // que funciona sobre el título, un punto o el subtítulo por igual.
+  // de `texto` dentro de `raiz` en un <span>, y devuelve {span, antes, despues}
+  // (o null si no está): `antes`/`despues` son los nodos de texto que quedan
+  // justo antes y después del span (la palabra anterior y la siguiente, para
+  // que "circulo" pueda medir el hueco real y no pisarlas, H6 bugfix HITO3.md).
+  // No es un selector CSS: busca en los NODOS DE TEXTO ya armados, así que
+  // funciona sobre el título, un punto o el subtítulo por igual.
   function envolverPalabra(raiz, texto) {
     const buscar = texto.toLowerCase();
     const walker = document.createTreeWalker(raiz, NodeFilter.SHOW_TEXT);
@@ -137,19 +140,44 @@ tenue. Si no entran a 300 px la escena falla nombrando el número: acortalo ("1,
       nodo.textContent = nodo.textContent.slice(0, i);
       nodo.parentNode.insertBefore(resto, nodo.nextSibling);
       nodo.parentNode.insertBefore(span, resto);
-      return span;
+      return { span, antes: nodo, despues: resto };
     }
     return null;
   }
 
-  function pathDeMarca(como, r) {
+  // Borde del vecino más cercano a la marca, en la MISMA línea (un nodo de
+  // texto largo puede ocupar varios renglones; sólo importa el que comparte
+  // renglón con la palabra marcada). 'antes' mide el borde DERECHO de su
+  // último renglón (el que queda pegado a la marca); 'despues' el IZQUIERDO
+  // de su primer renglón. null si no hay nada de ese lado (la marca es la
+  // primera o la última palabra del texto).
+  function limiteVecino(nodo, lado) {
+    if (!nodo || !nodo.textContent) return null;
+    const range = document.createRange();
+    range.selectNodeContents(nodo);
+    const rects = [...range.getClientRects()];
+    if (!rects.length) return null;
+    return lado === 'antes' ? rects[rects.length - 1].right : rects[0].left;
+  }
+
+  function pathDeMarca(como, r, antes, despues) {
     if (como === 'subrayado') {
       const y = r.bottom + 6;
       return `M ${(r.left - 4).toFixed(1)},${y.toFixed(1)} Q ${((r.left + r.right) / 2).toFixed(1)},${(y + 9).toFixed(1)} ${(r.right + 4).toFixed(1)},${y.toFixed(1)}`;
     }
     if (como === 'circulo') {
       const cx = (r.left + r.right) / 2, cy = (r.top + r.bottom) / 2;
-      const rx = (r.right - r.left) / 2 + 20, ry = (r.bottom - r.top) / 2 + 16;
+      // Margen fijo (20px horizontal) a menos que la palabra vecina esté tan
+      // cerca que el círculo la tocaría: ahí se acota a la mitad del hueco
+      // real medido (menos 2px de aire), nunca por debajo de 2px (bugfix H6,
+      // HITO3.md: "trabajo" pegado a "mismo" pisaba su "o" con el margen fijo).
+      const MARGEN_X = 20, MARGEN_Y = 16, AIRE = 2;
+      const limiteAntes = limiteVecino(antes, 'antes');
+      const limiteDespues = limiteVecino(despues, 'despues');
+      const gapAntes = limiteAntes == null ? Infinity : r.left - limiteAntes;
+      const gapDespues = limiteDespues == null ? Infinity : limiteDespues - r.right;
+      const margenX = Math.max(AIRE, Math.min(MARGEN_X, gapAntes / 2 - AIRE, gapDespues / 2 - AIRE));
+      const rx = (r.right - r.left) / 2 + margenX, ry = (r.bottom - r.top) / 2 + MARGEN_Y;
       return `M ${(cx - rx).toFixed(1)},${cy.toFixed(1)} ` +
              `C ${(cx - rx).toFixed(1)},${(cy - ry).toFixed(1)} ${(cx + rx).toFixed(1)},${(cy - ry).toFixed(1)} ${(cx + rx).toFixed(1)},${cy.toFixed(1)} ` +
              `C ${(cx + rx).toFixed(1)},${(cy + ry).toFixed(1)} ${(cx - rx).toFixed(1)},${(cy + ry).toFixed(1)} ${(cx - rx).toFixed(1)},${cy.toFixed(1)} Z`;
@@ -167,13 +195,14 @@ tenue. Si no entran a 300 px la escena falla nombrando el número: acortalo ("1,
     svg.setAttribute('class', 'marcas');
     document.body.appendChild(svg);
     for (const m of marcas) {
-      const span = envolverPalabra(document.body, m.texto);
-      if (!span)
+      const envuelto = envolverPalabra(document.body, m.texto);
+      if (!envuelto)
         throw new Error(`"marcar" no encontró la palabra ${JSON.stringify(m.texto)} en el texto de la escena`);
+      const { span, antes, despues } = envuelto;
       const r = span.getBoundingClientRect();
       const path = document.createElementNS(NS, 'path');
       path.setAttribute('class', 'marca ' + m.como);
-      path.setAttribute('d', pathDeMarca(m.como, r));
+      path.setAttribute('d', pathDeMarca(m.como, r, antes, despues));
       path.dataset.caja = 'marca ' + m.texto;
       path.dataset.t = m.t0;
       if (m.como === 'resaltado') path.style.opacity = 0;   // se corrige en dibujar(t): 0.35 x fundido
