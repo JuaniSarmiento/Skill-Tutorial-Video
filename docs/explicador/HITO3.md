@@ -97,6 +97,46 @@ vez** (se llegó al límite de uso con dos agentes Opus en paralelo).
 ## Pendientes
 _Se completa al cerrar cada rebanada._
 
+### H6 cerrada (06/10/2026, rama `feat/hito3`)
+- **Rótulo** (lower-third): `seg["rotulo"]` (título, subtítulo opcional, `cue`, `dura`) se
+  renderiza aparte con `escena.render(..., alpha=True)` (qtrle, sin pix_fmt forzado: el PNG
+  ya sale RGBA con `omit_background`) y se compone con `overlay` de ffmpeg ENCIMA del tramo
+  YA ARMADO del segmento (escena, título o pantalla grabada), después de que `build_segment`
+  lo construye por el camino que sea (`editar._aplicar_rotulo`, llamada antes de cada
+  `return`). El overlay se renderiza del mismo largo que el tramo (transparente fuera de su
+  ventana): no hace falta `itsoffset` ni recortar nada, así que G1 (cuadros) y G4 (códec)
+  quedan intactos por construcción, no por un chequeo aparte. Va arriba de la banda de
+  subtítulos (x=140, el margen de `.cabecera`), con un chip de fondo opaco (para que el
+  contraste de `verificar.py` se mida contra algo real, no contra el blanco default que
+  asume un fondo transparente).
+- **`marcar`** (subrayado/círculo/resaltado) en `presentacion`: busca la palabra en los
+  nodos de texto YA armados (título, un punto o el subtítulo) y la envuelve; la marca se
+  dibuja con `stroke-dasharray`/`dashoffset` en función de `t`, la misma técnica (sin GSAP)
+  de la escena `imagen`. Ojo con el wrapper: darle `data-caja` al `<svg>` o a un contenedor
+  que ENVUELVE texto con `data-caja` hace que `verificar.py` lo compare contra sus propios
+  hijos y reporte un "solape" falso (los dos bounding boxes se contienen) — ninguno de los
+  dos wrappers de esta rebanada (el `<svg class="marcas">`, el chip `.rotulo`) lleva
+  `data-caja`, sólo sus hijos de texto.
+- **Texto cinético** (`"entrada": "palabras"` en `titulo`, sólo en `presentacion`): GSAP
+  SplitText (`wordsClass: "word"`, hace falta pasarlo: sin la opción no pone clase) +
+  timeline propia, en pausa (`gsap.globalTimeline.pause()`) y scrubeada a mano en
+  `dibujar(t)` — nunca `E.lineaDeTiempo` (presentacion.html sigue con el "contrato" manual de
+  base.js, no con una timeline GSAP dueña de todo el render).
+  - **Bug real, visto recién en la hoja de contacto** (no en ningún test antes de mirarla):
+    `.titulo` es `display: table` (base.css), y esa maquetación colapsa a CERO el espacio en
+    blanco entre los `<div class="word">` que separa SplitText (quedaban pegados: "Memoi​za​
+    ciónexplicadapasoapaso"). Es el mismo motivo por el que `.palabra` (el split manual de
+    `cabecera()`) ya usa `margin-right: .26em` en vez de confiar en el espacio real; `.word`
+    necesitaba el mismo parche. Se agregó un test que mide que dos palabras seguidas no
+    compartan el mismo borde (`rect.right == rect.left` de la siguiente).
+  - La hoja de contacto (10/50/90 % del `duracion` de cada spec de prueba) hay que diseñarla
+    con el `cue`/`dura` del rótulo y la ventana de dibujo de las marcas a propósito: con los
+    tiempos por defecto, el muestreo genérico cae fácil fuera de la ventana interesante
+    (antes de que entre o después de que salga) y no prueba nada a ojo.
+- **No entró en esta rebanada** (time-box ~2h): un hand-drawn "wobble" (el bamboleo
+  aleatorio-con-semilla de `hw-underline`/`hw-boil` de HyperFrames) en las marcas — quedaron
+  con un trazo liso, no tembloroso; y la transición `whip` (H7) sigue para la próxima.
+
 ### H1 cerrada (06/10/2026, worktree `feat/hito3-h1`)
 - "Voiceover carve" (`musica.aplicar_carve_voz`, `musica.BANDAS_VOZ_HZ`): bandas FIJAS
   (250/400/630/1000/2500 Hz -7dB, 1600 Hz -15dB, robadas de HyperFrames
