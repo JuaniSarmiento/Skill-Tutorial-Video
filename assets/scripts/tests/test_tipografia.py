@@ -122,8 +122,10 @@ def test_el_cuerpo_mide_entre_28_y_42_px(chrome, tipo, spec, prefijo):
     assert all(28 <= c["px"] <= 42 for c in cajas), [(c["n"], c["px"]) for c in cajas]
 
 
+# la etiqueta de flecha de diagrama salió de este rango en H9b/H10: lleva contenido y se lee
+# en celular, su piso (32 px) lo fija test_plantillas.py
 @pytest.mark.parametrize("tipo, spec, prefijo", [
-    ("presentacion", PORTADA, "kicker"), ("datos", DATOS, "nota"), ("diagrama", DIAGRAMA, "flecha")])
+    ("presentacion", PORTADA, "kicker"), ("datos", DATOS, "nota")])
 def test_las_etiquetas_van_en_mono_entre_18_y_24_px(chrome, tipo, spec, prefijo):
     cajas = [c for c in _al_final(chrome, tipo, spec, CAJAS) if c["n"].startswith(prefijo)]
     assert cajas
