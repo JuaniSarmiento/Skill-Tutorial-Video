@@ -328,12 +328,49 @@ def voice_wav(vid: str, voz: str, idx: int, text: str) -> Path:
     return out
 
 
+def spec_de_rotulo(seg: dict, slot: float, voz_palabras: list[dict]) -> dict:
+    """Spec del "rotulo" de un segmento (H6, HITO3.md), resuelto con la misma convención
+    de cue que las escenas: LEAD-shift de las palabras de la voz, duracion = slot entero
+    (el rótulo se renderiza del largo completo del tramo, transparente fuera de su
+    ventana, para componerse con `overlay` sin tocar la duración de nadie)."""
+    import escena
+    corridas = [{**p, "inicio": p["inicio"] + LEAD, "fin": p["fin"] + LEAD} for p in voz_palabras]
+    return escena.resolver_spec({**seg["rotulo"], "duracion": slot}, corridas)
+
+
+def _aplicar_rotulo(seg: dict, slot: float, voz_palabras, out: Path, fps: int) -> None:
+    """Si el segmento trae "rotulo" (H6), lo renderiza con canal alfa y lo compone
+    ENCIMA de `out` con `overlay` de ffmpeg: capa, no escena aparte. G1 (cuadros)
+    y G4 (códec) quedan intactos porque el overlay se renderiza del mismo largo
+    que `out` y el resultado vuelve a pasar por encoder.cv_args(). Sin "rotulo"
+    en el segmento no hace nada (G3: el tramo no cambia un bit)."""
+    if not seg.get("rotulo"):
+        return
+    import escena
+    spec = spec_de_rotulo(seg, slot, voz_palabras or [])
+    brand = escena.cargar_brand(ROOT / "brand.json" if (ROOT / "brand.json").exists() else None)
+    overlay = out.with_name(out.stem + ".rotulo.mov")
+    escena.render(escena.ruta_plantilla("rotulo"), spec, overlay, brand=brand, fps=fps, alpha=True)
+    compuesto = out.with_name(out.stem + ".rotulo-out.mp4")
+    extra = encoder.vf("")
+    filtro = "[0:v][1:v]overlay=0:0" + (f",{extra}" if extra else "") + "[o]"
+    run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(out), "-i", str(overlay),
+         "-filter_complex", filtro, "-map", "[o]", "-an",
+         *encoder.cv_args(crf=20, preset="veryfast"), str(compuesto)])
+    overlay.unlink()
+    compuesto.replace(out)
+
+
 def build_segment(vid: str, raw: Path, seg: dict, slot: float, out: Path, voz_palabras=None) -> None:
     """Arma el tramo de video de un segmento y lo deja durando exactamente `slot`.
 
     El segmento puede traer su propio "raw": un tutorial largo se graba por
     capitulos, y con un solo crudo global regrabar un capitulo obliga a rehacer
     la toma entera. Con `raw` por segmento se regraba solo ese archivo.
+
+    "rotulo" (H6, HITO3.md) es una capa que se superpone al tramo YA ARMADO,
+    sea escena, título o pantalla grabada: por eso se aplica al final, antes de
+    cada return, nunca remplazando el camino que ya construye `out`.
     """
     fps = 30
     if es_escena(seg):
@@ -341,6 +378,7 @@ def build_segment(vid: str, raw: Path, seg: dict, slot: float, out: Path, voz_pa
         spec = spec_de_escena(seg, slot, voz_palabras or [])
         brand = escena.cargar_brand(ROOT / "brand.json" if (ROOT / "brand.json").exists() else None)
         escena.render(escena.ruta_plantilla(spec["tipo"]), spec, out, brand=brand, fps=fps)
+        _aplicar_rotulo(seg, slot, voz_palabras, out, fps)
         return
     if seg.get("raw"):
         raw = ROOT / seg["raw"]
@@ -351,6 +389,7 @@ def build_segment(vid: str, raw: Path, seg: dict, slot: float, out: Path, voz_pa
         )
         run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", f"color=c=0x16161D:s=1920x1080:r={fps}:d={slot:.3f}",
              "-vf", encoder.vf(vf), *encoder.cv_args(crf=20, preset="veryfast"), str(out)])
+        _aplicar_rotulo(seg, slot, voz_palabras, out, fps)
         return
     tmp = out.with_suffix(".tmp.mp4")
     pre = "mpdecimate=hi=64*24:lo=64*8:frac=0.2," if seg.get("decimar", True) else ""
@@ -388,6 +427,7 @@ def build_segment(vid: str, raw: Path, seg: dict, slot: float, out: Path, voz_pa
     run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(tmp), "-vf", encoder.vf(vf), "-t", f"{slot:.3f}",
          *encoder.cv_args(crf=20, preset="veryfast"), str(out)])
     tmp.unlink()
+    _aplicar_rotulo(seg, slot, voz_palabras, out, fps)
 
 
 def es_escena(seg: dict) -> bool:

@@ -1,0 +1,83 @@
+<!doctype html>
+<!--
+Escena "rotulo" (H6, HITO3.md): lower-third que se superpone a CUALQUIER tramo
+(pantalla grabada, diapositiva u otra escena). No es un segmento aparte: va en
+seg["rotulo"] y editar.py lo renderiza con alpha=True (canal alfa real, qtrle)
+y lo compone con `overlay` de ffmpeg encima del tramo ya armado del segmento
+(G1/G4: mismos cuadros que el tramo, mismo códec final; el rótulo no los toca).
+
+Idea (no código) de `lt-kicker-name`/`lt-accent-underline` de HyperFrames
+(heygen-com/hyperframes, Apache 2.0): nombre + rol/subtítulo con una barra de
+acento que se dibuja entre los dos.
+
+spec:
+  {"titulo": "Memoización", "subtitulo": "Unidad 10 · Programación I",
+   "cue": "...", "dura": 4}
+
+Entra con la barra de acento dibujándose (GSAP, scaleX) y el título subiendo con
+resorte; sale limpio antes de que termine "dura". Va ARRIBA de E.BANDA (la banda
+de subtítulos), alineado a la izquierda (x=140px, el mismo margen que .cabecera
+y la portada de "presentacion"), para no chocar nunca con los subtítulos.
+-->
+<meta charset="utf-8">
+<link rel="stylesheet" href="base.css">
+<style>
+  /* el motor captura esta página con alpha=True: sin esto el fondo de base.css
+     (var(--fondo), opaco) tapa el tramo que el rótulo tiene que superponer */
+  body { background: transparent; }
+  .rotulo { position: absolute; left: 140px; bottom: 260px; display: flex; flex-direction: column;
+            align-items: flex-start; gap: 16px; background: var(--superficie); padding: 28px 40px;
+            border-radius: 10px; }
+  .rotulo .titulo { font-family: var(--fuente-titulos); font-size: 56px; font-weight: 800;
+                     letter-spacing: -.02em; line-height: 1.05; color: var(--texto); white-space: nowrap; }
+  .rotulo .barra { height: 6px; width: 100%; background: var(--acento); border-radius: 3px;
+                    transform-origin: 0% 50%; }
+  .rotulo .subtitulo { font-family: var(--fuente-mono); font-size: 24px; font-weight: 500;
+                        color: var(--tenue); white-space: nowrap; }
+</style>
+<script src="vendor/gsap/gsap.min.js"></script>
+<script src="base.js"></script>
+<script>
+  const { S, crear, tiempo, BANDA } = E;
+  if (!S.titulo) throw new Error('la escena "rotulo" necesita "titulo"');
+  const t0 = tiempo(S, 0);
+  const IN = 0.5, OUT = 0.4;
+  const dura = Math.max(0.3, S.dura ?? 4);
+  // "dura" más corta que IN+OUT: se comprimen proporcionalmente (un rótulo que
+  // aparece y se va casi enseguida no se corta a mitad de la entrada)
+  const dilatar = dura < IN + OUT ? dura / (IN + OUT) : 1;
+  const inDur = IN * dilatar, outDur = OUT * dilatar;
+  const tSale = t0 + dura;
+
+  E.lineaDeTiempo(() => {
+    const caja = crear('div', 'rotulo');
+    const titulo = crear('div', 'titulo', caja, S.titulo);
+    titulo.dataset.caja = 'rotulo-titulo';
+    titulo.dataset.t = t0;
+    const barra = crear('div', 'barra', caja);
+    let sub;
+    if (S.subtitulo) {
+      sub = crear('div', 'subtitulo', caja, S.subtitulo);
+      sub.dataset.caja = 'rotulo-subtitulo';
+      sub.dataset.t = t0;
+    }
+    const abajo = caja.getBoundingClientRect().bottom;
+    if (abajo > BANDA)
+      throw new Error(`el rótulo ${JSON.stringify(S.titulo)} se mete en la banda de subtítulos ` +
+                      `(llega a y=${Math.round(abajo)}, la banda empieza en y=${BANDA})`);
+
+    const tl = gsap.timeline();
+    tl.fromTo(caja, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.001 }, t0);
+    tl.fromTo(titulo, { y: 26 }, { y: 0, duration: inDur, ease: 'back.out(1.6)' }, t0);
+    tl.fromTo(barra, { scaleX: 0 }, { scaleX: 1, duration: inDur, ease: 'power4.out' }, t0 + inDur * 0.25);
+    if (sub) tl.fromTo(sub, { y: 16, opacity: 0 }, { y: 0, opacity: 1, duration: inDur, ease: 'power2.out' },
+                       t0 + inDur * 0.4);
+
+    // sale limpio: termina exactamente en tSale
+    if (sub) tl.to(sub, { opacity: 0, duration: outDur * 0.6, ease: 'power2.in' }, tSale - outDur);
+    tl.to(barra, { scaleX: 0, duration: outDur * 0.7, ease: 'power2.in' }, tSale - outDur * 0.7);
+    tl.to(titulo, { y: -16, duration: outDur, ease: 'power2.in' }, tSale - outDur);
+    tl.to(caja, { autoAlpha: 0, duration: 0.001 }, tSale);
+    return tl;
+  });
+</script>
