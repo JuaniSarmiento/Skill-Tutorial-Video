@@ -55,10 +55,45 @@ tenue. Si no entran a 300 px la escena falla nombrando el número: acortalo ("1,
   .marca.subrayado { stroke: var(--acento); stroke-width: 6; }
   .marca.circulo { stroke: var(--acento); stroke-width: 5; }
   .marca.resaltado { stroke: var(--acento); stroke-width: 34; }
+  /* texto cinético (H6, HITO3.md): "entrada": "palabras" en el título, con SplitText */
+  .titulo .word { display: inline-block; }
 </style>
+<script src="vendor/gsap/gsap.min.js"></script>
+<script src="vendor/gsap/SplitText.min.js"></script>
 <script src="base.js"></script>
 <script>
   const { S, crear, tiempo, resorte, aparecer, salida, contrato, cabecera, M, BANDA } = E;
+  if (window.gsap) { gsap.registerPlugin(SplitText); gsap.globalTimeline.pause(); }
+
+  // "entrada": "palabras" (H6): mismo contrato que cabecera() de base.js (techo/dibujar),
+  // pero el título lo parte GSAP SplitText (no el split manual de cabecera()) y cada
+  // palabra sube con resorte (GSAP, back.out) en vez del resorte amortiguado de E.resorte.
+  // El reloj de GSAP no corre: se scrubea a mano en dibujar(t) (gsap.globalTimeline arriba).
+  function cabeceraCinetica(titulo, kicker) {
+    const t0 = tiempo(titulo, 0);
+    const caja = crear('header', 'cabecera');
+    const k = kicker ? crear('div', 'kicker', caja, kicker.texto || kicker) : null;
+    if (k) k.dataset.caja = 'kicker';
+    const h = crear('h1', 'titulo', caja, titulo.texto || titulo);
+    h.dataset.caja = 'titulo';
+    const split = new SplitText(h, { type: 'words', wordsClass: 'word' });
+    const tl = gsap.timeline({ paused: true });
+    tl.from(split.words, { y: 46, opacity: 0, duration: 0.5, ease: 'back.out(1.7)', stagger: 0.09 }, 0);
+    return {
+      techo(minimo, alto = 0, hasta = 1080) {
+        const abajo = caja.getBoundingClientRect().bottom;
+        const y = Math.max(minimo, abajo + 40);
+        if (y + alto > hasta)
+          throw new Error(`el título ocupa hasta y=${Math.round(abajo)} y no deja lugar para el contenido ` +
+                          `(hacen falta ${Math.round(alto)} px y quedan ${Math.round(hasta - y)}): acortá el título`);
+        return y;
+      },
+      dibujar(t) {
+        if (k) k.style.opacity = aparecer(t, t0);
+        tl.totalTime(Math.max(0, t - t0), false);
+      },
+    };
+  }
   const CUERPO = 42, PISO = 28;   // px del cuerpo: de 42 se achica hasta 28, menos no se lee en un celular
   // Una lista corta (hasta 4 puntos) no es cuerpo: es lo que se lee de la escena. Va de 68
   // a 44 px y sólo si ni así entra sigue achicándose como cuerpo.
@@ -197,8 +232,10 @@ tenue. Si no entran a 300 px la escena falla nombrando el número: acortalo ("1,
     montarMarcas();
   }
 
+  const cinetico = S.titulo && S.titulo.entrada === 'palabras';
+
   contrato([tTitulo, tSub ?? 0, ...puntos.map(p => p.t0), ...numeros.map(n => n.t0), ...marcas.map(m => m.t0)], () => {
-    const cab = cabecera(S.titulo, S.kicker);
+    const cab = cinetico ? cabeceraCinetica(S.titulo, S.kicker) : cabecera(S.titulo, S.kicker);
     dibujarCab = cab.dibujar;
     if (numeros.length) return montarNumeros(cab);
     const header = document.querySelector('.cabecera');
