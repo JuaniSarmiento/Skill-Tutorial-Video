@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>fixture grabar_web</title>
+<style>
+  body { font: 16px sans-serif; margin: 20px; }
+  #modal { display: none; height: 0; overflow: hidden; background: #eee; }
+  #modal.abierto { display: block; height: 145px; }
+  #modal.abierto { height: 145px; }
+  .cm-editor { border: 1px solid #999; padding: 8px; min-height: 40px; }
+  .cm-line { white-space: pre-wrap; min-height: 1.2em; }
+  #resultado { margin-top: 12px; font-weight: bold; }
+</style>
+</head>
+<body>
+  <h1>Fixture de pruebas</h1>
+
+  <form id="formulario">
+    <label for="nombre">Nombre</label>
+    <input id="nombre" name="nombre" type="text">
+  </form>
+
+  <button id="btn-alert" onclick="alert('aviso de prueba')">Avisar</button>
+  <button id="btn-confirm" onclick="document.getElementById('resultado').textContent = 'confirm:' + confirm('¿confirmás?')">Confirmar</button>
+  <button id="btn-prompt" onclick="document.getElementById('resultado').textContent = 'prompt:' + prompt('tu nombre?')">Preguntar</button>
+
+  <button id="btn-modal" onclick="document.getElementById('modal').classList.toggle('abierto')">Abrir modal</button>
+  <div id="modal">Soy un modal que crece 145px y empuja todo lo de abajo.</div>
+
+  <button id="objetivo" onclick="document.getElementById('resultado').textContent = 'objetivo-clickeado'">Objetivo</button>
+
+  <div id="editor" class="cm-editor" contenteditable="true" role="textbox">
+    <div class="cm-line"></div>
+  </div>
+
+  <div id="resultado"></div>
+
+  <div id="medida-escala" style="position:absolute; left:20px; top:300px; width:300px;
+       background:#ffffff; font:700 16px/16px monospace; color:#000000;">Hg medida 16px</div>
+
+  <div style="height: 1400px"></div>
+  <button id="al-fondo" onclick="document.getElementById('resultado').textContent = 'al-fondo-clickeado'">Al fondo</button>
+
+  <script>
+    // CodeMirror real mantiene el tipeo dentro de su propia .cm-line; este
+    // fixture imita sólo eso (no todo el editor) por si el navegador inserta
+    // algún caracter como hermano de .cm-line en vez de dentro.
+    (() => {
+      const editor = document.getElementById('editor');
+      const linea = () => editor.querySelector('.cm-line');
+      editor.addEventListener('input', () => {
+        const l = linea();
+        [...editor.childNodes].forEach((n) => { if (n !== l && n.nodeType === 3 && n.textContent.trim()) l.appendChild(n); });
+      });
+    })();
+  </script>
+</body>
+</html>

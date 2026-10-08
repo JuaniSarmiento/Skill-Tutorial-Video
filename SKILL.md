@@ -84,7 +84,7 @@ transversales, no un flujo propio (ver la tabla de abajo).
 
 | Si vas a... | Leé |
 |---|---|
-| Grabar bajo Wayland (Xephyr), manejar una app Electron por CDP, tipear en VS Code o una terminal, o portar a Windows | `references/grabacion.md` |
+| Grabar bajo Wayland (Xephyr), manejar una app Electron por CDP, tipear en VS Code o una terminal, portar a Windows, o grabar una app web real con `grabar_web.py` (cursor dibujado, diálogos nativos, CodeMirror) | `references/grabacion.md` |
 | Escribir o editar el guion, usar `editar.py imagen`/`voz`/`zonas`, slots, velocidad de voz, zoom, o elegir el encoder de video | `references/guion-y-edicion.md` |
 | Armar o tocar una escena animada (`presentacion`, `diagrama`, `datos`, `imagen`, `codigo`, `contador`), cues, o la plantilla HTML | `references/escenas.md` |
 | Música de fondo, voiceover carve, perfiles de loudness, o efectos de sonido (sfx) | `references/audio.md` |

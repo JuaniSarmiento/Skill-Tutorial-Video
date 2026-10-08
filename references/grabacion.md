@@ -154,6 +154,123 @@ Win32 pero **no se probo en una maquina Windows**. La rama Linux si esta probada
 de punta a punta. Antes de confiar en ella, correr `plataforma.py info` y despues
 una grabacion corta con `rec.py`.
 
+## Grabar una app web: `grabar_web.py`
+
+Para una app web real (ej. Plataforma N4, `tutor.active-ia.com`) que tiene que verse
+como un humano usándola: clicks suaves con curva, cursor dibujado (los clicks de CDP
+no mueven el puntero del SO), diálogos nativos (`alert`/`confirm`/`prompt`/`print`)
+neutralizados ANTES de que el navegador los abra, y tipeo con ritmo humano que
+funciona en editores CodeMirror-like. Corre **adentro** del Xephyr de `entorno.sh
+start` (DISPLAY `:2`): Chrome bajo Wayland ignora `DISPLAY` igual que en
+`entorno.sh chrome` (forzar `--ozone-platform=x11` y limpiar `WAYLAND_DISPLAY`).
+
+**Loguear una vez, a mano**
+
+```bash
+$S/entorno.sh start                                   # si no está arriba ya
+uv run --with playwright python $S/grabar_web.py login docente-n4 https://tutor.active-ia.com/login
+```
+
+Abre Chrome VISIBLE con un perfil persistente en
+`~/.config/tutorial-video/perfiles/docente-n4/`. El humano loguea a mano en esa
+ventana (el script **no toca ningún formulario**, nunca tipea ni lee una
+contraseña) y la cierra cuando termina: el comando vuelve recién ahí. La próxima
+vez que se abra ese mismo perfil (`Toma(perfil="docente-n4", ...)`), la sesión ya
+está.
+
+**Un script de toma**
+
+```python
+from grabar_web import Toma
+
+t = Toma("docente-n4", "https://tutor.active-ia.com/comisiones", display=":2")
+t.grabar_iniciar("v01-comisiones")
+t.click("Mis comisiones")                    # locator por texto visible; nunca coordenadas
+t.marca("abrio comisiones")
+t.escribir("#buscar", "sección 4")            # ritmo humano, seedeado
+t.entradas(["28"])                            # próxima respuesta de window.prompt()
+t.click("Calcular promedio")                  # usa el prompt encolado arriba
+t.pausa(1.5)
+t.grabar_detener()
+t.cerrar()
+```
+
+`Toma` lanza su propio Chrome (el instalado, nunca el de Playwright) con
+`--app=<url>` (sin pestañas ni barra), ventana 1920×1080 en el origen,
+`--force-device-scale-factor=1.5` por defecto (texto ≥24px en el cuadro, ver
+§4.2/§4.6 del CLAUDE.md del repo), `--kiosk` y `--hide-scrollbars` (ver gotcha
+de abajo), y `--remote-debugging-port`; Playwright se conecta por
+`connect_over_cdp`. `grabar_iniciar`/`grabar_detener` reusan `rec.py` (mismo
+`.mkv`, mismas marcas en `raw/<nombre>.marcas.json`, formato
+`{"t": seg, "nombre": "..."}` por línea).
+
+**Gotchas**
+
+- **`--app` sólo saca la UI de Chrome; la barra de título es del WINDOW
+  MANAGER.** Adentro de `entorno.sh start`, openbox dibuja una barra de
+  título ("Fixture grabar_web", etc.) sobre CUALQUIER ventana normal, `--app`
+  o no. `--kiosk` la saca pidiendo el estado fullscreen sin decoración.
+  **`--start-fullscreen` también la saca, pero de paso Chrome muestra 3-4s el
+  cartel "Para salir de pantalla completa, mantené presionado Esc" ENCIMA de
+  la página** (grabado en cámara si `grabar_iniciar` arranca mientras el
+  cartel sigue arriba): `--kiosk` no lo muestra. `--hide-scrollbars` saca la
+  scrollbar (ya usado en `escena.py` para los renders de escena).
+- **Probar el scale factor sobre un frame x11grab REAL, no sobre el DOM.**
+  `page.evaluate(() => window.devicePixelRatio)` confirma que Chrome aplicó el
+  flag, pero no prueba que la GRABACIÓN salga agrandada: x11grab captura el
+  framebuffer de Xephyr tal como lo compone el window manager, un paso que
+  Playwright no ve. La prueba real es medir en PÍXELES FÍSICOS del frame
+  capturado: un texto de `font-size: 16px` midió 25px de tinta (esperado
+  ≈16×1.5=24px) en una grabación de `tests/fixtures/web/pagina.html`
+  (`#medida-escala`), contra 16-17px sin el flag. Ver
+  `test_el_texto_mide_mas_grande_que_1_a_1_por_el_scale_factor` en
+  `tests/test_grabar_web_integracion.py`.
+- **`context.add_init_script` no corre sobre la página que Chrome YA cargó**: el
+  `--app=<url>` navega ANTES de que Playwright se conecte por CDP, así que el
+  script que neutraliza diálogos y dibuja el cursor sólo se aplica a
+  navegaciones futuras. `Toma.__init__` hace un `page.reload()` después de
+  registrarlo, a propósito: sin eso, el primer click revienta con
+  `window.__tomaCursor is undefined`.
+- **El click real nunca usa una coordenada capturada antes.** `click(objetivo)`
+  anima el cursor dibujado hacia el centro calculado al principio (para que se
+  vea bien en cámara), pero el click EN SÍ va por `Locator.click()`, que vuelve
+  a resolver el elemento y espera a que esté "estable" recién al momento de
+  clickear. Un modal que crece 145px entre el cálculo del centro y el click
+  real desalineó así todos los clicks siguientes en una toma anterior
+  (CLAUDE.md §4.10); con `page.mouse.click(x, y)` a la coordenada vieja, vuelve
+  a pasar.
+- **Tipear en un editor CodeMirror-like: clickear `.cm-line`, no el wrapper.**
+  Clickear el `<div contenteditable>` grande puede dejar el caret fuera de la
+  línea (en un hijo vacío, fuera del flujo de texto). `escribir()` busca
+  `.cm-line` adentro del objetivo y clickea ESE elemento antes de tipear, y
+  verifica el resultado leyendo ese mismo `.cm-line` (igual que
+  `references/guion-y-edicion.md` describe para la fuente de datos del zoom:
+  nunca a ojo).
+- **`grabar_iniciar` pisa `DISPLAY` del proceso, no sólo el de Chrome.**
+  `rec.py`/`plataforma.cmd_captura` arman el comando de `x11grab` leyendo
+  `os.environ["DISPLAY"]` AL MOMENTO de arrancar la captura — el display de la
+  Toma (`:2`, Xephyr) y el del proceso Python que corre el script pueden ser
+  distintos (p.ej. el script corre con el `:1` real del host bajo Wayland).
+  Sin pisarlo, `rec.py` graba la pantalla EQUIVOCADA: un `.mkv` que abre bien
+  pero sale **negro**, el mismo síntoma de "Wayland sin Xephyr" pero disparado
+  desde adentro de `Toma` en vez de por el entorno del shell. `grabar_iniciar`
+  lo pisa con el `display` de la Toma y lo restaura después de arrancar.
+- **Diálogos nativos: el override es la defensa real, `page.on("dialog")` es
+  la red de seguridad.** `alert()`/`confirm()`/`print()`/`prompt()` se
+  reemplazan en el `window` de la página ANTES de que el navegador pueda abrir
+  el cartel nativo (confirm devuelve `true`, prompt saca la próxima respuesta
+  de una cola). Si de todas formas se dispara un diálogo nativo (algo que
+  bypasee el override), `Toma` lo acepta para no colgar el proceso y la
+  PRÓXIMA acción (`click`/`escribir`/`ir`) revienta con `DialogoNativoError` en
+  vez de seguir grabando una página congelada — nunca se entrega una toma con
+  un diálogo nativo sin que algo lo haya marcado.
+- **`entradas(lista)` encola, no reemplaza.** Llamarlo varias veces ACUMULA
+  respuestas en la cola de `window.prompt()` (la Plataforma usa `prompt()`
+  nativo para el `input()` de Pyodide); si una toma hace más `prompt()` que
+  `entradas()` encoladas, la cola se vacía y el próximo `prompt()` devuelve
+  `null` — eso es session de guion, no bug de `grabar_web.py`: encolar antes
+  de cada paso que vaya a preguntar.
+
 ## Comandos de entorno, grabación y manejo del agente
 
 ```bash
