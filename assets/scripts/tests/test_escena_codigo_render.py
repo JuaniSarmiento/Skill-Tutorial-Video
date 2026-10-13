@@ -117,3 +117,28 @@ def test_con_numeros_de_dos_digitos_queda_hueco_entre_el_numero_y_el_codigo(tmp_
     assert len(huecos) == 15
     pegados = [h for h in huecos if h["hueco"] < 16]
     assert pegados == [], pegados
+
+
+# --- la terminal no aparece encima del editor mientras éste sube ----------------------
+# Con poco código el editor arranca centrado (más abajo) y sube cuando entra la salida;
+# la terminal empezaba a verse a los 0,2 s, con el editor todavía a mitad de camino:
+# se pisaban (puerta D6 en el piloto 7.1 de Prog IV, 12/10/2026).
+
+def test_la_terminal_no_pisa_al_editor_mientras_sube(tmp_path):
+    (tmp_path / "corto.py").write_text("print('uno')\nprint('dos')\n")
+    spec = codigo.resolver({"tipo": "codigo", "archivo": "corto.py", "duracion": 4.0,
+                            "pasos": [{"modo": "salida", "ejecutar": "corto.py", "cue": 1.0}]}, tmp_path)
+    with escena.navegador() as b:
+      with escena.pagina_de_escena(b, escena.ruta_plantilla("codigo"), spec, escena.cargar_brand(None)) as (page, dur):
+        pisadas = []
+        for i in range(0, 41):
+            t = 1.0 + i * 0.02
+            page.evaluate(f"window.seek({t})")
+            m = page.evaluate("""() => {
+                const [ed, te] = document.querySelectorAll('.panel');
+                return { abajoEditor: ed.getBoundingClientRect().bottom, arribaTerm: te.getBoundingClientRect().top,
+                         opacidad: +getComputedStyle(te).opacity };
+            }""")
+            if m["opacidad"] > 0.02 and m["arribaTerm"] < m["abajoEditor"] - 0.5:
+                pisadas.append((round(t, 2), m))
+    assert pisadas == [], pisadas[:3]

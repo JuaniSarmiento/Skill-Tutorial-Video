@@ -315,8 +315,13 @@ no entra a 28 px la escena falla nombrando la línea: mostrá menos (desde/hasta
         } else el.textContent = texto;
         return { el, texto, entra, m, cuenta };
       });
-      tl.to(editor, { y: 0, duration: 0.5, ease: 'power3.inOut' }, salida.t0)
-        .fromTo(term, { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.45, ease: 'power3.out' }, salida.t0 + 0.2);
+      // Si el editor tiene que subir (poco código, venía centrado más abajo), la terminal
+      // espera a que termine: entrando a los 0,2 s se le metía abajo a mitad de camino
+      // (puerta D6, piloto 7.1 de Prog IV). Si no sube, el tiempo de siempre.
+      const SUBE = 0.5;
+      tl.to(editor, { y: 0, duration: SUBE, ease: 'power3.inOut' }, salida.t0)
+        .fromTo(term, { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.45, ease: 'power3.out' },
+                salida.t0 + (solo > 0.5 ? SUBE : 0.2));
       Tm = { cmdTxt, orden, lineas, t0: salida.t0, k, CUENTA };
     }
 
