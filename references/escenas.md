@@ -109,8 +109,13 @@ pueden mezclar con segmentos de pantalla en el mismo guion. Ejemplo completo, si
     de la cue siguiente** (el ritmo se apura si hace falta). `resaltar`: recuadro en acento sobre
     las líneas (los números que se ven en ese momento), el resto en tenue. `diff`: lo que se va
     se pone rojo y se cierra, lo nuevo entra en verde (LCS por líneas). `salida`: terminal debajo
-    con la salida **real** (se ejecuta con `python3` al armar el spec, desde una carpeta neutra,
-    sin rutas del home); con `contar`, el último número de cada renglón cuenta hasta su valor.
+    con la salida **real** (se ejecuta al armar el spec, desde una carpeta neutra, sin rutas del
+    home); con `contar`, el último número de cada renglón cuenta hasta su valor. El intérprete
+    sale de la extensión y la terminal muestra ese comando: `.py` → `$ python3 x.py`, `.js`/
+    `.mjs`/`.cjs` → `$ node x.js`, `.ts`/`.mts` → `$ npx tsx x.ts` (usa el `tsx` del
+    `node_modules` del proyecto, nunca baja nada de la red: sin él, falla diciendo
+    `npm i -D tsx`). `node_modules` no se copia a la carpeta neutra, se enlaza. Otra extensión
+    falla nombrándola.
   - Se resuelve en Python antes de abrir Chrome (`codigo.py`: Pygments, diff, ejecución): los
     comandos de escenas llevan `--with pygments`. La paleta de tokens sale del acento del brand.
   - Letra tan grande como entre (46 a 28 px, IBM Plex Mono sin ligaduras). Si la línea más larga

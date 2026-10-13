@@ -3,6 +3,8 @@
 El código sale de un archivo real (nunca tipeado en el spec), se tokeniza acá (no en el
 navegador), el diff es por líneas (LCS) y la salida es la de ejecutar el programa de verdad.
 """
+import shutil
+
 import pytest
 
 import codigo
@@ -132,6 +134,67 @@ def test_un_programa_que_no_termina_falla_en_vez_de_colgar(tmp_path):
     p.write_text("while True:\n    pass\n")
     with pytest.raises(ValueError, match="p.py"):
         codigo.ejecutar(p, timeout=1)
+
+
+# --- la salida real de JavaScript y TypeScript ----------------------------------------
+# Programación IV es React + TypeScript: una salida de un .ts mostrada como
+# "$ python3 x.py" le miente al alumno. Cada lenguaje corre con su intérprete y la
+# terminal muestra el comando que el alumno escribiría.
+
+necesita_node = pytest.mark.skipif(shutil.which("node") is None, reason="node no está instalado")
+
+
+def _tsx_falso(proyecto):
+    """Un `node_modules/.bin/tsx` que corre el archivo con node: prueba que se encuentra y
+    se usa el tsx DEL PROYECTO (no uno global ni `npx` bajando de la red)."""
+    bin_ = proyecto / "node_modules" / ".bin"
+    bin_.mkdir(parents=True)
+    tsx = bin_ / "tsx"
+    tsx.write_text('#!/bin/sh\nexec node "$@"\n')
+    tsx.chmod(0o755)
+
+
+@necesita_node
+def test_un_js_corre_con_node_y_la_terminal_lo_dice(tmp_path):
+    p = tmp_path / "p.js"
+    p.write_text("for (const n of [5, 10]) console.log(`${n} -> ${n * n}`);\n")
+    assert codigo.ejecutar(p) == {"comando": "$ node p.js", "lineas": ["5 -> 25", "10 -> 100"]}
+
+
+@necesita_node
+def test_un_ts_corre_con_el_tsx_del_proyecto_y_la_terminal_dice_npx_tsx(tmp_path):
+    _tsx_falso(tmp_path)
+    codigo_dir = tmp_path / "src"
+    codigo_dir.mkdir()
+    p = codigo_dir / "cache.ts"
+    p.write_text("console.log('pedidos:', 1);\n")
+    assert codigo.ejecutar(p) == {"comando": "$ npx tsx cache.ts", "lineas": ["pedidos: 1"]}
+
+
+@necesita_node
+def test_node_modules_no_se_copia_pero_se_resuelve_y_no_quedan_rutas_personales(tmp_path):
+    _tsx_falso(tmp_path)
+    (tmp_path / "node_modules" / "libreria").mkdir()
+    (tmp_path / "node_modules" / "libreria" / "index.js").write_text("module.exports = 42;\n")
+    p = tmp_path / "p.js"
+    p.write_text("console.log(require('libreria'));\nconsole.log(process.cwd());\n")
+    lineas = codigo.ejecutar(p)["lineas"]
+    assert lineas[0] == "42"
+    assert str(tmp_path) not in "\n".join(lineas) and "/tmp" not in "\n".join(lineas)
+
+
+def test_un_ts_sin_tsx_instalado_falla_diciendo_como_instalarlo(tmp_path):
+    p = tmp_path / "p.ts"
+    p.write_text("console.log(1);\n")
+    with pytest.raises(ValueError, match="tsx"):
+        codigo.ejecutar(p)
+
+
+def test_un_lenguaje_que_no_sabe_correr_falla_nombrando_la_extension(tmp_path):
+    p = tmp_path / "p.rb"
+    p.write_text("puts 1\n")
+    with pytest.raises(ValueError, match=r"\.rb"):
+        codigo.ejecutar(p)
 
 
 # --- el spec de la escena --------------------------------------------------------------

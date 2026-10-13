@@ -119,13 +119,21 @@ def ejecutar(ruta, timeout: int = 60) -> dict:
     ruta = Path(ruta).resolve()
     if not ruta.is_file():
         raise ValueError(f"no existe el programa a ejecutar {str(ruta)!r}")
-    python = shutil.which("python3") or sys.executable
+    if ruta.suffix not in INTERPRETES:
+        raise ValueError(f"no sé ejecutar {ruta.name!r}: la salida real se arma para "
+                         f"{', '.join(sorted(INTERPRETES))}, no para {ruta.suffix!r}")
+    modulos = _node_modules(ruta.parent) if INTERPRETES[ruta.suffix] != "python3" else None
     with tempfile.TemporaryDirectory(prefix="tut-codigo-") as tmp:
         dest = Path(tmp) / NEUTRA
-        shutil.copytree(ruta.parent, dest, ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".venv", "venv"))
+        shutil.copytree(ruta.parent, dest, ignore=shutil.ignore_patterns(
+            "__pycache__", "*.pyc", ".venv", "venv", "node_modules"))
+        if modulos is not None:
+            # node_modules pesa cientos de MB: no se copia, se enlaza (node resuelve igual).
+            (Path(tmp) / "node_modules").symlink_to(modulos, target_is_directory=True)
+        orden, comando = _orden(ruta, modulos)
         env = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONDONTWRITEBYTECODE="1")
         try:
-            p = subprocess.run([python, ruta.name], cwd=dest, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+            p = subprocess.run(orden, cwd=dest, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                                stderr=subprocess.STDOUT, text=True, timeout=timeout, env=env)
         except subprocess.TimeoutExpired as e:
             raise ValueError(f"{ruta.name} no terminó en {timeout} s: la salida de la escena tiene que ser "
@@ -134,7 +142,37 @@ def ejecutar(ruta, timeout: int = 60) -> dict:
         for base in sorted({str(dest), str(dest.resolve()), tmp, str(Path(tmp).resolve())}, key=len, reverse=True):
             texto = texto.replace(base + os.sep, "").replace(base, NEUTRA)
         texto = texto.replace(str(Path.home()), "~")
-    return {"comando": f"$ python3 {ruta.name}", "lineas": texto.rstrip("\n").splitlines()}
+    return {"comando": comando, "lineas": texto.rstrip("\n").splitlines()}
+
+
+# Cada extensión corre con el intérprete que usaría el alumno, y la terminal muestra ESE
+# comando (una salida de un .ts presentada como "$ python3 x.py" le miente).
+INTERPRETES = {".py": "python3", ".js": "node", ".mjs": "node", ".cjs": "node",
+               ".ts": "tsx", ".mts": "tsx"}
+
+
+def _node_modules(desde: Path) -> Path | None:
+    """El node_modules del proyecto: el de la carpeta del archivo o el de un ancestro,
+    como lo resuelve node."""
+    for d in [desde, *desde.parents]:
+        if (d / "node_modules").is_dir():
+            return (d / "node_modules").resolve()
+    return None
+
+
+def _orden(ruta: Path, modulos: Path | None) -> tuple[list[str], str]:
+    """(argv a ejecutar, comando que se ve en la terminal)."""
+    interprete = INTERPRETES[ruta.suffix]
+    if interprete == "python3":
+        return [shutil.which("python3") or sys.executable, ruta.name], f"$ python3 {ruta.name}"
+    if interprete == "node":
+        return ["node", ruta.name], f"$ node {ruta.name}"
+    # TypeScript: el tsx DEL PROYECTO, nunca `npx` bajando de la red al armar un spec.
+    tsx = modulos / ".bin" / "tsx" if modulos else None
+    if tsx is None or not tsx.exists():
+        raise ValueError(f"{ruta.name}: para ejecutar TypeScript hace falta tsx en el proyecto "
+                         "(npm i -D tsx en la carpeta del código)")
+    return [str(tsx), ruta.name], f"$ npx tsx {ruta.name}"
 
 
 MODOS = ("tipeo", "resaltar", "diff", "salida")
