@@ -1216,15 +1216,22 @@ def _verificacion_de_escena(ruta: Path) -> list:
     import escena
     import verificar
     brand_ruta = ROOT / "brand.json"
+    # La paleta del guion (videos/<vNN>/escenas/NN.json → guion/<vNN>.json), la misma que usa
+    # el render: sin ella un guion "utn" se medía contra el fondo de "noche" (Prog IV, 12/10/2026).
+    guion = ROOT / "guion" / f"{ruta.parent.parent.name}.json"
+    try:
+        paleta = json.loads(guion.read_text()).get("paleta") if guion.exists() else None
+    except json.JSONDecodeError:
+        paleta = None
     clave = (str(ruta), ruta.stat().st_mtime_ns,
-             brand_ruta.stat().st_mtime_ns if brand_ruta.exists() else None, id(verificar.verificar_escena))
+             brand_ruta.stat().st_mtime_ns if brand_ruta.exists() else None, paleta, id(verificar.verificar_escena))
     if clave not in _VERIFICADAS:
         spec = escena.resolver_dibujos(json.loads(ruta.read_text()), ROOT)
         if not spec.get("tipo"):
             raise ValueError("el spec no dice su 'tipo'")
         plantilla = escena.ruta_plantilla(spec["tipo"])
         spec = escena.resolver_codigo(spec, plantilla, ROOT)
-        brand = escena.cargar_brand(brand_ruta if brand_ruta.exists() else None)
+        brand = escena.cargar_brand(brand_ruta if brand_ruta.exists() else None, paleta=paleta)
         _VERIFICADAS[clave] = verificar.verificar_escena(plantilla, spec, brand, ruta.name)
     return _VERIFICADAS[clave]
 

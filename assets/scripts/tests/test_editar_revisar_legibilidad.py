@@ -72,3 +72,14 @@ def test_con_el_brand_de_la_skill_la_escena_no_tiene_hallazgos_de_legibilidad(ra
     hallazgos, no_corrio = editar.revisar("v09", "argentina")
     assert not any(h.startswith(("contraste:", "desborde:")) for h in hallazgos), hallazgos
     assert not any("legibilidad" in c for c in no_corrio), no_corrio
+
+
+def test_d5_usa_la_paleta_que_eligio_el_guion(raiz, monkeypatch):
+    # revisar verificaba con cargar_brand SIN paleta: un guion "utn" (fondo blanco) se medía
+    # contra el fondo de "noche" y daba contrastes falsos (serie Prog IV, 12/10/2026).
+    _con_escena(raiz)
+    (raiz / "guion" / "v09.json").write_text(json.dumps({"paleta": "utn", "segmentos": [SEG]}))
+    vistos = []
+    monkeypatch.setattr(verificar, "verificar_escena", lambda plantilla, spec, brand, *a, **k: vistos.append(brand) or [])
+    editar.revisar("v09", "argentina")
+    assert vistos and vistos[0]["colores"]["fondo"] == "#FFFFFF"
