@@ -280,7 +280,17 @@ PRONUNCIACION = {
              ("JSON", "yeison"),          # se oye "Jason"
              ("FastAPI", "fast a pi ai"), # se oye "FASTP" / "fast a pie"
              ("SQLite", "esecuelait"),    # se oye "esquilite" / "esqueletes"
-             ("sqlite", "esecuelait")],
+             ("sqlite", "esecuelait"),
+             # React / TanStack Query (12/10/2026, Programación IV, mismo método).
+             # Las largas primero: replace() no respeta límites de palabra.
+             ("useQuery", "iús kueri"),           # se oye "Ease Query" / "News Query"
+             ("useMutation", "iús miutéishon"),
+             ("query client provider", "kueri klaient provaider"),  # "query claim provider"
+             ("query client", "kueri klaient"),   # "QR y Client"
+             ("query key", "kueri ki"),           # "QR key" / "query kits"
+             ("staleTime", "steil taim"), ("stale time", "steil taim"),  # "tail time" / "Still Time"
+             ("gcTime", "ge ce taim"), ("gc time", "ge ce taim"),        # "easy time" / "hit time"
+             ("isPending", "is pénding"), ("is pending", "is pénding")],  # "Ease pending" / "spending"
              # NO hay regla para "table". Aislada en una frase inventada se oia
              # "tabla" y "teibol" la arreglaba, pero en el texto REAL del guion las
              # dos versiones dicen "table" bien: la regla no aportaba y sumaba riesgo
