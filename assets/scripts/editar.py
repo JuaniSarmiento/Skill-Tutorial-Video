@@ -290,7 +290,8 @@ PRONUNCIACION = {
              ("query key", "kueri ki"),           # "QR key" / "query kits"
              ("staleTime", "steil taim"), ("stale time", "steil taim"),  # "tail time" / "Still Time"
              ("gcTime", "ge ce taim"), ("gc time", "ge ce taim"),        # "easy time" / "hit time"
-             ("isPending", "is pénding"), ("is pending", "is pénding")],  # "Ease pending" / "spending"
+             ("isPending", "is pénding"), ("is pending", "is pénding"),  # "Ease pending" / "spending"
+             ("Query", "kueri")],                 # sola (Query() de FastAPI): "te acuerí"; va DESPUÉS de useQuery
              # NO hay regla para "table". Aislada en una frase inventada se oia
              # "tabla" y "teibol" la arreglaba, pero en el texto REAL del guion las
              # dos versiones dicen "table" bien: la regla no aportaba y sumaba riesgo

@@ -89,3 +89,31 @@ def test_la_puerta_de_editar_revisar_resuelve_el_codigo(carpeta, monkeypatch):
     spec = carpeta / "00.json"
     spec.write_text(json.dumps({**CORTA, "archivo": str(carpeta / "fibonacci_memo.py")}))
     assert editar._desborde_escena(spec) == [] and editar._contraste_escena(spec) == []
+
+
+# --- los números de línea no se pegan al código ---------------------------------------
+# Con `box-sizing: border-box` (base.css) el padding de .num quedaba DENTRO de su ancho:
+# con 2 dígitos el número invadía el hueco y se leía "14await" (piloto de Prog IV,
+# 12/10/2026). Se mide en Chrome: entre el último dígito y el primer carácter del código
+# tiene que quedar el hueco entero.
+
+DOS_DIGITOS = "".join(f"x{i} = {i}\n" for i in range(1, 16))   # 15 líneas, sin sangría
+
+
+def test_con_numeros_de_dos_digitos_queda_hueco_entre_el_numero_y_el_codigo(tmp_path):
+    (tmp_path / "largo.py").write_text(DOS_DIGITOS)
+    spec = codigo.resolver({"tipo": "codigo", "archivo": "largo.py", "duracion": 3.0,
+                            "pasos": [{"modo": "resaltar", "lineas": "12", "cue": 0.5}]}, tmp_path)
+    with escena.navegador() as b:
+      with escena.pagina_de_escena(b, escena.ruta_plantilla("codigo"), spec, escena.cargar_brand(None)) as (page, dur):
+        page.evaluate(f"window.seek({dur - 0.1})")
+        huecos = page.evaluate("""() => [...document.querySelectorAll('.fila')].map(f => {
+            const num = f.querySelector('.num'), txt = f.querySelector('.txt');
+            const r = document.createRange(); r.selectNodeContents(num);
+            const fin = r.getBoundingClientRect().right;
+            const r2 = document.createRange(); r2.selectNodeContents(txt);
+            return { n: num.textContent.trim(), hueco: r2.getBoundingClientRect().left - fin };
+        }).filter(h => h.n)""")
+    assert len(huecos) == 15
+    pegados = [h for h in huecos if h["hueco"] < 16]
+    assert pegados == [], pegados

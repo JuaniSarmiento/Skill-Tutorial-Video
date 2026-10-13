@@ -28,3 +28,9 @@ def test_las_formas_con_espacio_tambien():
 def test_un_texto_sin_esos_terminos_no_cambia():
     texto = "Pensalo como una heladera: si está fresca, la usás."
     assert editar.adaptar(texto, "argentina") == texto
+
+
+def test_query_sola_se_dice_kueri_y_no_pisa_a_useQuery():
+    # "Para eso está Query" se oía "Para eso te acuerí" (piloto 7.1, 12/10/2026)
+    assert editar.adaptar("Para eso está Query.", "argentina") == "Para eso está kueri."
+    assert editar.adaptar("Con useQuery y Query", "argentina") == "Con iús kueri y kueri"

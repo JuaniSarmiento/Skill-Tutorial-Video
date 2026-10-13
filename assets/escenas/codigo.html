@@ -182,7 +182,10 @@ no entra a 28 px la escena falla nombrando la línea: mostrá menos (desde/hasta
     const pestana = crear('span', 'pestana', barra, C.archivo);
     pestana.dataset.caja = 'archivo';
     const cuerpo = crear('div', 'cuerpo codigo', editor);
-    Object.assign(cuerpo.style, { height: (2 * PAD_V + nFilas * lh) + 'px', fontSize: px + 'px', lineHeight: lh + 'px' });
+    // El padding sale de PAD_V/PAD_H, los mismos que usa la cuenta del ancho de arriba (el
+    // .cuerpo del CSS decía 20px 40px: 24 px de diferencia que el bug de .num escondía).
+    Object.assign(cuerpo.style, { padding: `${PAD_V}px ${PAD_H}px`, height: (2 * PAD_V + nFilas * lh) + 'px',
+                                  fontSize: px + 'px', lineHeight: lh + 'px' });
     const marca = crear('div', 'marca', cuerpo);
     const cursor = crear('div', 'cursor', cuerpo);
     Object.assign(cursor.style, { height: (px * 1.2) + 'px' });
@@ -190,9 +193,11 @@ no entra a 28 px la escena falla nombrando la línea: mostrá menos (desde/hasta
       const el = crear('div', 'fila', cuerpo);
       el.style.height = lh + 'px';
       const num = crear('span', 'num', el);
-      // el ancho de .num es sólo los dígitos: el hueco lo da el padding-right, una sola vez
-      // (gutter = digitos*cw + HUECO_NUM es el hueco TOTAL de la columna, no el ancho del span)
-      num.style.width = (digitos * cw) + 'px';
+      // gutter = digitos*cw + HUECO_NUM es el ancho TOTAL de la columna; el hueco lo da el
+      // padding-right. base.css pone `box-sizing: border-box`: el ancho INCLUYE el padding, así que va
+      // la columna entera (dígitos + hueco); con sólo los dígitos, el hueco se comía el
+      // número y con 2 dígitos se leía "14await" (piloto Prog IV, 12/10/2026).
+      num.style.width = (digitos * cw + HUECO_NUM) + 'px';
       num.style.paddingRight = HUECO_NUM + 'px';
       const txt = crear('span', 'txt', el);
       txt.dataset.caja = 'código ' + (i + 1);
