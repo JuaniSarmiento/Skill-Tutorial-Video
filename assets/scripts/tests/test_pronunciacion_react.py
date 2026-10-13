@@ -34,3 +34,16 @@ def test_query_sola_se_dice_kueri_y_no_pisa_a_useQuery():
     # "Para eso está Query" se oía "Para eso te acuerí" (piloto 7.1, 12/10/2026)
     assert editar.adaptar("Para eso está Query.", "argentina") == "Para eso está kueri."
     assert editar.adaptar("Con useQuery y Query", "argentina") == "Con iús kueri y kueri"
+
+
+def test_useParams_y_la_palabra_id_suelta():
+    # "useParams" se oía "Iverpans" / "Uber Pans" y "id vale" "y duale" (7.4, 12/10/2026)
+    assert editar.adaptar("Se lee con useParams: id vale siete.", "argentina") == (
+        "Se lee con iús párams: aidí vale siete.")
+    assert editar.adaptar("se guarda en id. Y el id, siempre", "argentina") == (
+        "se guarda en aidí. Y el aidí, siempre")
+
+
+def test_id_dentro_de_otra_palabra_no_cambia():
+    texto = "Un video ideal, decidido y rápido."
+    assert editar.adaptar(texto, "argentina") == texto
