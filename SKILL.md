@@ -94,6 +94,7 @@ transversales, no un flujo propio (ver la tabla de abajo).
 | Correr la puerta de escenas (`verificar.py`), `editar.py revisar`, censurar con OCR, o verificar la voz con Whisper | `references/verificacion.md` |
 | Armar diapositivas de cátedra UTN/TUPaD (`presentaciones/`) | `references/catedra.md` |
 | Publicar en YouTube o en una carpeta de Drive | `references/publicacion.md` |
+| Revisar (sin renderizar) un episodio de un canal de Shorts verticales que NO usa esta skill para armar el video (`revisar_short.py`: D1/D2/D8 adaptados, formato vertical, `escena.forma`) | `references/shorts.md` |
 
 ## Resources
 
