@@ -1,0 +1,22 @@
+{
+  "formato": "clase",
+  "titulo": "¿Qué es un condicional?",
+  "personaje": "profe",
+  "vestuario": "base",
+  "fondo": "aula-pizarra",
+  "voz_id": "e09c9a988aac403e8a6317ad188e347d",
+  "velocidad": 1.15,
+  "codigo": {"edad": "codigo/edad.py"},
+  "segmentos": [
+    {"texto": "¿Cómo decide un programa qué hacer? Con un condicional.", "pose": "pensar", "camara": "profe",
+     "escena": {"tipo": "pizarra", "texto": "¿Condicional?"}},
+    {"texto": "Pregunta algo: si la respuesta es sí, hace una cosa; si es no, hace otra.", "pose": "senalar", "camara": "normal",
+     "escena": {"tipo": "diagrama", "condicion": "edad >= 18", "si": "Puede votar", "no": "Todavía no"}},
+    {"texto": "En Python se escribe con if y else.", "pose": "tipear", "camara": "pizarra",
+     "escena": {"tipo": "codigo", "archivo": "edad"}},
+    {"texto": "Lo corres, y como la edad es veinte, puede votar. Por fin una buena noticia.", "pose": "festejar", "camara": "pizarra",
+     "escena": {"tipo": "terminal", "archivo": "edad"}},
+    {"texto": "Si cambias la edad, cambia el camino. Así de simple.", "pose": "parado", "camara": "profe",
+     "escena": {"tipo": "pizarra", "texto": "if → sí · else → no"}}
+  ]
+}
