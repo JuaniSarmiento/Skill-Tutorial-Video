@@ -35,6 +35,7 @@ dudas — cada referencia está pensada para leerse sola.
 - Publicar la serie en YouTube (playlist) o en una carpeta pública de Drive.
 - Explicar un tema que no es de pantalla (finanzas, biología, historia) con escenas animadas: ver Escenas.
 - Armar diapositivas y el video de una clase de UTN TUPaD.
+- Una clase vertical corta con un personaje ilustrado frente a una pizarra, sólo desde un guion JSON (`clase.py`, ver `references/clase.md`).
 
 ## Los cuatro flujos
 
@@ -94,6 +95,7 @@ transversales, no un flujo propio (ver la tabla de abajo).
 | Correr la puerta de escenas (`verificar.py`), `editar.py revisar`, censurar con OCR, o verificar la voz con Whisper | `references/verificacion.md` |
 | Armar diapositivas de cátedra UTN/TUPaD (`presentaciones/`) | `references/catedra.md` |
 | Publicar en YouTube o en una carpeta de Drive | `references/publicacion.md` |
+| Armar una **clase vertical con personaje** (1080×1920): un personaje frente a una pizarra, boca con la voz, poses, cámara, diagrama de flujo, código real y terminal, con Remotion y una biblioteca de personajes/vestuarios/fondos que genera lo que falta (`clase.py`) | `references/clase.md` |
 | Revisar (sin renderizar) un episodio de un canal de Shorts verticales que NO usa esta skill para armar el video (`revisar_short.py`: D1/D2/D8 adaptados, formato vertical, `escena.forma`) | `references/shorts.md` |
 
 ## Resources

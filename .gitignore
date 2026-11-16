@@ -19,3 +19,6 @@ __pycache__/
 
 # entorno de Python de presentaciones/
 .venv/
+
+# motor Remotion del formato clase: se instala con npm (clase.py lo hace solo)
+assets/remotion/node_modules/
